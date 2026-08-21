@@ -1,0 +1,34 @@
+# Nested app git metadata (must not be committed)
+.git/
+
+# Dependencies and build
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+ServiceAccountKey.json
+*ServiceAccountKey*.json
+
+# Logs and OS
+logs/
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+

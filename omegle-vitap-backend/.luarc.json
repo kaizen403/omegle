@@ -1,0 +1,30 @@
+{
+  "diagnostics": {
+    "globals": [
+      "redis",
+      "KEYS",
+      "ARGV",
+      "cjson"
+    ],
+    "disable": [
+      "undefined-global",
+      "lowercase-global"
+    ]
+  },
+  "runtime": {
+    "version": "Lua 5.1",
+    "special": {
+      "redis": "type"
+    }
+  },
+  "workspace": {
+    "library": [],
+    "checkThirdParty": false,
+    "ignoreDir": [
+      ".vscode",
+      "node_modules",
+      "dist",
+      "build"
+    ]
+  }
+}

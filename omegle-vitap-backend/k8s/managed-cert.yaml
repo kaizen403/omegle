@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: coturn-cert
+  namespace: turn
+spec:
+  domains:
+    - turn.example.com

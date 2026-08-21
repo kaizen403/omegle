@@ -1,0 +1,13 @@
+{
+  "diagnostics": {
+    "globals": ["redis", "KEYS", "ARGV", "cjson"],
+    "disable": ["undefined-global", "lowercase-global"]
+  },
+  "runtime": {
+    "version": "Lua 5.1"
+  },
+  "workspace": {
+    "library": [],
+    "checkThirdParty": false
+  }
+}

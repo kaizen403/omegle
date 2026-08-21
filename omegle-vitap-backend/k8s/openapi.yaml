@@ -1,0 +1,14 @@
+swagger: "2.0"
+info:
+  title: "coturn TURN"
+  description: "STUN/TURN for 1:1 P2P WebRTC"
+  version: "1.0.0"
+host: "turn.example.com"
+paths:
+  /:
+    get:
+      summary: "Not an HTTP health API — coturn speaks STUN/TURN on UDP/TCP 3478"
+      operationId: "info"
+      responses:
+        200:
+          description: "Placeholder"

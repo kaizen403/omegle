@@ -1,0 +1,99 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Manual trigger
+
+env:
+  SERVICE_NAME: omeagle-backend
+  PROJECT_ID: omgle-vitap-prod
+  REGION: asia-south1
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CRED }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Set image name
+        id: image
+        run: |
+          echo "name=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/omeagle-backend/omeagle-backend" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ steps.image.outputs.name }}:${{ github.sha }} \
+                       -t ${{ steps.image.outputs.name }}:latest .
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ steps.image.outputs.name }}:${{ github.sha }}
+          docker push ${{ steps.image.outputs.name }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ steps.image.outputs.name }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --concurrency 80 \
+            --timeout 3600 \
+            --execution-environment gen2 \
+            --cpu-boost \
+            --session-affinity \
+            --vpc-connector omegle-connector \
+            --vpc-egress private-ranges-only \
+            --set-env-vars="NODE_ENV=production,REDIS_TLS=true" \
+            --set-secrets="TURN_HOST=turn-host:latest,TURN_AUTH_SECRET=turn-auth-secret:latest,TURN_PORT=turn-port:latest,API_KEY=api-key:latest,REDIS_HOST=redis-host:latest,REDIS_PORT=redis-port:latest,DATABASE_URL=database-url:latest,BETTER_AUTH_SECRET=better-auth-secret:latest,BETTER_AUTH_URL=better-auth-url:latest,TURNSTILE_SECRET_KEY=turnstile-secret-key:latest,AWS_REGION=aws-region:latest,S3_BUCKET=s3-bucket:latest,S3_PUBLIC_BASE_URL=s3-public-base-url:latest,ALLOWED_ORIGINS=allowed-origins:latest,JWT_SECRET=jwt-secret:latest,BIGDATACLOUD_API_KEY_1=bigdatacloud-api-key-1:latest,BIGDATACLOUD_API_KEY_2=bigdatacloud-api-key-2:latest,BIGDATACLOUD_API_KEY_3=bigdatacloud-api-key-3:latest,BIGDATACLOUD_API_KEY_4=bigdatacloud-api-key-4:latest,BIGDATACLOUD_API_KEY_5=bigdatacloud-api-key-5:latest"
+
+      - name: Get Service URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')
+          echo "🚀 Deployed to: $SERVICE_URL"
+          echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
+
+      - name: Cleanup old revisions (keep last 5)
+        run: |
+          REVISIONS=$(gcloud run revisions list \
+            --service=${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format="value(metadata.name)" \
+            --sort-by="~metadata.creationTimestamp" 2>/dev/null || echo "")
+          
+          TOTAL=$(echo "$REVISIONS" | wc -l)
+          if [ "$TOTAL" -gt 5 ]; then
+            echo "$REVISIONS" | tail -n $((TOTAL - 5)) | while read -r rev; do
+              gcloud run revisions delete "$rev" --region=${{ env.REGION }} --quiet 2>/dev/null || true
+            done
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "### ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** ${{ env.SERVICE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ env.SERVICE_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

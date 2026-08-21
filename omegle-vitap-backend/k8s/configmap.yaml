@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coturn-config
+  namespace: turn
+data:
+  TURN_REALM: "omegle"
+  TURN_PORT: "3478"
+  # Public IP or DNS of the TURN node (ICE candidates advertise this)
+  TURN_HOST: "replace-with-public-ip"

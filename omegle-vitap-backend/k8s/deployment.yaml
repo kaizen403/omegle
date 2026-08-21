@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn
+  namespace: turn
+  labels:
+    app: coturn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+    spec:
+      containers:
+        - name: coturn
+          image: coturn/coturn:4.6
+          command:
+            - /bin/sh
+            - -c
+            - >
+              turnserver --log-file=stdout --listening-port=3478
+              --min-port=49160 --max-port=49259 --fingerprint --lt-cred-mech
+              --use-auth-secret --static-auth-secret="$TURN_AUTH_SECRET"
+              --realm="$TURN_REALM" --external-ip="$TURN_HOST"
+              --no-multicast-peers --denied-peer-ip=0.0.0.0-0.255.255.255
+              --denied-peer-ip=169.254.0.0-169.254.255.255 --no-cli
+          env:
+            - name: TURN_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: coturn-secrets
+                  key: TURN_AUTH_SECRET
+            - name: TURN_REALM
+              valueFrom:
+                configMapKeyRef:
+                  name: coturn-config
+                  key: TURN_REALM
+            - name: TURN_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: coturn-config
+                  key: TURN_HOST
+          ports:
+            - name: turn-tcp
+              containerPort: 3478
+              protocol: TCP
+            - name: turn-udp
+              containerPort: 3478
+              protocol: UDP
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coturn
+  namespace: turn
+  labels:
+    app: coturn
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: turn-tcp
+      port: 3478
+      targetPort: 3478
+      protocol: TCP
+    - name: turn-udp
+      port: 3478
+      targetPort: 3478
+      protocol: UDP
+  selector:
+    app: coturn
