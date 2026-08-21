@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/
 
 # dependencies
 /node_modules
@@ -48,8 +48,3 @@ next-env.d.ts
 
 # OS
 Thumbs.db
-.DS_Store
-# Sentry Config File
-.env.sentry-build-plugin
-
-omeagle-vitap-backend

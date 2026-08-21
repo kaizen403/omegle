@@ -141,7 +141,7 @@ gcloud compute networks vpc-access connectors create redis-connector \
 ### Build Docker Image
 
 ```bash
-cd omeagle-vitap-backend
+cd apps/api
 
 # Build with Cloud Build
 gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE_NAME
@@ -224,7 +224,7 @@ npm install -g frontend-hosting-cli
 
 ```bash
 # Main App
-cd omegle-vitap
+cd apps/web
 # configure frontend hosting
 
 # Select options:
@@ -241,7 +241,7 @@ npm run build
 ### Deploy Admin Panel
 
 ```bash
-cd ../admin-omegle-vitap
+cd apps/admin
 # configure frontend hosting
 
 # Use a different site for admin panel

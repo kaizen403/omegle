@@ -1,10 +1,13 @@
-name: Deploy to Google Cloud Run
+name: Deploy API
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch: # Manual trigger
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/api-deploy.yml'
+  workflow_dispatch:
 
 env:
   SERVICE_NAME: omeagle-backend
@@ -15,18 +18,14 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CRED }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
@@ -37,6 +36,7 @@ jobs:
           echo "name=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/omeagle-backend/omeagle-backend" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
+        working-directory: apps/api
         run: |
           docker build -t ${{ steps.image.outputs.name }}:${{ github.sha }} \
                        -t ${{ steps.image.outputs.name }}:latest .
@@ -73,7 +73,7 @@ jobs:
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region ${{ env.REGION }} \
             --format 'value(status.url)')
-          echo "🚀 Deployed to: $SERVICE_URL"
+          echo "Deployed to: $SERVICE_URL"
           echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
 
       - name: Cleanup old revisions (keep last 5)
@@ -83,17 +83,10 @@ jobs:
             --region=${{ env.REGION }} \
             --format="value(metadata.name)" \
             --sort-by="~metadata.creationTimestamp" 2>/dev/null || echo "")
-          
+
           TOTAL=$(echo "$REVISIONS" | wc -l)
           if [ "$TOTAL" -gt 5 ]; then
             echo "$REVISIONS" | tail -n $((TOTAL - 5)) | while read -r rev; do
               gcloud run revisions delete "$rev" --region=${{ env.REGION }} --quiet 2>/dev/null || true
             done
           fi
-
-      - name: Deployment Summary
-        run: |
-          echo "### ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
-          echo "**Service:** ${{ env.SERVICE_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** ${{ env.SERVICE_URL }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
