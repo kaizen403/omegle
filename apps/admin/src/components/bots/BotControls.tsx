@@ -30,7 +30,7 @@ export function BotControls({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-zinc-800/50 rounded-lg"
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-sky-50/50 rounded-lg"
       >
         <div className="space-y-0.5 sm:space-y-1">
           <Label
@@ -39,7 +39,7 @@ export function BotControls({
           >
             Bot System
           </Label>
-          <p className="text-xs sm:text-sm text-zinc-400">
+          <p className="text-xs sm:text-sm text-slate-500">
             {status?.enabled
               ? "Bots are currently active and matching with users"
               : "Bots are disabled and not matching"}
@@ -97,7 +97,7 @@ export function BotControls({
           step={1}
           className="w-full"
         />
-        <p className="text-xs sm:text-sm text-zinc-400">
+        <p className="text-xs sm:text-sm text-slate-500">
           Maximum number of bots that can be active at once (1-50)
         </p>
       </motion.div>

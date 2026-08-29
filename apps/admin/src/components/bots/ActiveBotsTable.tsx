@@ -50,7 +50,7 @@ export function ActiveBotsTable({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
     >
-      <Card className="bg-zinc-900/50 border-zinc-800">
+      <Card className="bg-white/50 border-sky-100">
         <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
             <div>
@@ -67,7 +67,7 @@ export function ActiveBotsTable({
               size="sm"
               onClick={onRefresh}
               disabled={loading}
-              className="border-zinc-700 self-end sm:self-auto"
+              className="border-sky-200 self-end sm:self-auto"
             >
               <RefreshCw
                 className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
@@ -84,7 +84,7 @@ export function ActiveBotsTable({
               ))}
             </div>
           ) : bots.length === 0 ? (
-            <div className="text-center py-8 text-zinc-400">
+            <div className="text-center py-8 text-slate-500">
               <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No bots are currently active</p>
               <p className="text-sm mt-1">Enable bots to spawn them</p>
@@ -94,7 +94,7 @@ export function ActiveBotsTable({
               <div className="min-w-[600px] sm:min-w-0 px-4 sm:px-0">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-zinc-800">
+                    <TableRow className="border-sky-100">
                       <TableHead className="text-xs sm:text-sm">Name</TableHead>
                       <TableHead className="text-xs sm:text-sm">Age</TableHead>
                       <TableHead className="text-xs sm:text-sm">
@@ -113,7 +113,7 @@ export function ActiveBotsTable({
                     {bots.map((bot) => (
                       <TableRow
                         key={bot.uid}
-                        className="border-zinc-800 hover:bg-zinc-800/50 transition-colors"
+                        className="border-sky-100 hover:bg-sky-50/50 transition-colors"
                       >
                         <TableCell className="font-medium text-xs sm:text-sm">
                           {bot.name}

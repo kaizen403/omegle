@@ -22,20 +22,20 @@ function GenderCard({ label, value, percentage, color }: GenderCardProps) {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+    <div className="bg-white border border-sky-100 rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
-        <span className="text-zinc-400">{label}</span>
+        <span className="text-slate-500">{label}</span>
         <span className={`text-2xl font-bold ${colorClasses[color].text}`}>
           {value}
         </span>
       </div>
-      <div className="w-full bg-zinc-800 rounded-full h-3">
+      <div className="w-full bg-sky-50 rounded-full h-3">
         <div
           style={{ width: `${percentage}%` }}
           className={`${colorClasses[color].bar} h-full rounded-full transition-all duration-300`}
         />
       </div>
-      <div className="mt-2 text-sm text-zinc-500">{percentage}% of total</div>
+      <div className="mt-2 text-sm text-slate-500">{percentage}% of total</div>
     </div>
   );
 }

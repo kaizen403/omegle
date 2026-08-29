@@ -57,7 +57,7 @@ export default function RoomMonitor({
       </MonitorHeader>
 
       <div className="flex-1 overflow-hidden">
-        <div className="h-full bg-gradient-to-b from-zinc-900 to-zinc-950 overflow-y-auto scrollbar-hide">
+        <div className="h-full bg-gradient-to-b from-white to-sky-50 overflow-y-auto scrollbar-hide">
           <div className="max-w-5xl mx-auto px-6 py-4">
             <MessageList messages={messages} currentRoom={currentRoom} />
           </div>

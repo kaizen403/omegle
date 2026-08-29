@@ -151,7 +151,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
                   size="lg"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-sm">
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-400 to-[#0084d1] text-white font-semibold text-sm">
                     {admin?.email?.charAt(0).toUpperCase() || "A"}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">

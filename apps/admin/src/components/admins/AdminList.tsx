@@ -50,7 +50,7 @@ export function AdminList({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <Card className="bg-zinc-900 border border-zinc-800 hover:shadow-xl hover:shadow-purple-500/10 transition-all duration-300">
+          <Card className="bg-white border border-sky-100 hover:shadow-xl hover:shadow-purple-500/10 transition-all duration-300">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -58,7 +58,7 @@ export function AdminList({
                     className={`p-4 rounded-full ${
                       admin.role === "super-admin"
                         ? "bg-gradient-to-br from-purple-600 to-purple-700 ring-2 ring-purple-400/50"
-                        : "bg-gradient-to-br from-blue-600 to-blue-700 ring-2 ring-blue-400/50"
+                        : "bg-gradient-to-br from-sky-500 to-[#0084d1] ring-2 ring-blue-400/50"
                     }`}
                   >
                     {admin.role === "super-admin" ? (

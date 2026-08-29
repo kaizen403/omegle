@@ -29,7 +29,7 @@ export default function UserFilters({
       <div className="flex gap-2">
         <div className="relative flex-1">
           <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -46,12 +46,12 @@ export default function UserFilters({
             placeholder="Search users..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600/50"
+            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-sky-100 rounded-md text-slate-900 placeholder-zinc-500 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600/50"
           />
         </div>
         <button
           onClick={onRefresh || (() => window.location.reload())}
-          className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md hover:bg-zinc-800 text-zinc-300 transition-colors"
+          className="px-3 py-2 bg-white border border-sky-100 rounded-md hover:bg-sky-50 text-slate-600 transition-colors"
           title="Refresh data from server"
         >
           <svg
@@ -73,43 +73,43 @@ export default function UserFilters({
       {/* Bottom Row: Filters + Actions */}
       <div className="flex flex-wrap gap-2">
         {/* Filters */}
-        <div className="flex flex-1 min-w-fit rounded-md overflow-hidden border border-zinc-800">
+        <div className="flex flex-1 min-w-fit rounded-md overflow-hidden border border-sky-100">
           <button
             onClick={() => onFilterChange("all")}
             className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium transition-colors ${
               filter === "all"
                 ? "bg-purple-600 text-white"
-                : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+                : "bg-white text-slate-500 hover:bg-sky-50"
             }`}
           >
             All
           </button>
           <button
             onClick={() => onFilterChange("idle")}
-            className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium border-l border-zinc-800 transition-colors ${
+            className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium border-l border-sky-100 transition-colors ${
               filter === "idle"
                 ? "bg-zinc-600 text-white"
-                : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+                : "bg-white text-slate-500 hover:bg-sky-50"
             }`}
           >
             Idle
           </button>
           <button
             onClick={() => onFilterChange("queue")}
-            className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium border-l border-zinc-800 transition-colors ${
+            className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium border-l border-sky-100 transition-colors ${
               filter === "queue"
                 ? "bg-yellow-600 text-white"
-                : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+                : "bg-white text-slate-500 hover:bg-sky-50"
             }`}
           >
             Queue
           </button>
           <button
             onClick={() => onFilterChange("active")}
-            className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium border-l border-zinc-800 transition-colors ${
+            className={`flex-1 px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-medium border-l border-sky-100 transition-colors ${
               filter === "active"
                 ? "bg-green-600 text-white"
-                : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+                : "bg-white text-slate-500 hover:bg-sky-50"
             }`}
           >
             Active
@@ -122,7 +122,7 @@ export default function UserFilters({
             <>
               <button
                 onClick={onDeselectAll}
-                className="px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-md hover:bg-zinc-800 transition-colors whitespace-nowrap"
+                className="px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-medium bg-white text-slate-500 border border-sky-100 rounded-md hover:bg-sky-50 transition-colors whitespace-nowrap"
               >
                 Deselect All
               </button>
@@ -137,7 +137,7 @@ export default function UserFilters({
           {!hasSelection && (
             <button
               onClick={onSelectAll}
-              className="px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-md hover:bg-zinc-800 transition-colors whitespace-nowrap"
+              className="px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-medium bg-white text-slate-500 border border-sky-100 rounded-md hover:bg-sky-50 transition-colors whitespace-nowrap"
             >
               Select All
             </button>

@@ -14,14 +14,14 @@ function ActivityCard({
   value,
   label,
   icon,
-  valueColor = "text-white",
+  valueColor = "text-slate-900",
   iconBgColor = "bg-blue-500/10",
 }: ActivityCardProps) {
   return (
-    <div className="flex items-center justify-between p-3 sm:p-4 bg-black rounded-lg border border-zinc-800">
+    <div className="flex items-center justify-between p-3 sm:p-4 bg-[#e8f4f8] rounded-lg border border-sky-100">
       <div>
         <div className={`text-2xl font-bold ${valueColor}`}>{value}</div>
-        <div className="text-sm text-zinc-400 mt-1">{label}</div>
+        <div className="text-sm text-slate-500 mt-1">{label}</div>
       </div>
       <div
         className={`w-16 h-16 rounded-full ${iconBgColor} flex items-center justify-center`}
@@ -48,7 +48,7 @@ export function ActivityOverview({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 sm:p-6"
+      className="bg-white border border-sky-100 rounded-lg p-4 sm:p-6"
     >
       <h3 className="text-base sm:text-lg font-semibold mb-4 sm:mb-6">
         Activity Overview

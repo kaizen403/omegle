@@ -15,14 +15,14 @@ export function ErrorTracking({ systemHealth }: ErrorTrackingProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.4 }}
-      className="bg-zinc-900 border border-zinc-800 rounded-lg p-6"
+      className="bg-white border border-sky-100 rounded-lg p-6"
     >
       <h2 className="text-xl font-semibold mb-4">Error Tracking</h2>
       {errors ? (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-black rounded-lg p-4 border border-zinc-800">
-              <div className="text-zinc-400 text-sm mb-2">Last 5 Minutes</div>
+            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
+              <div className="text-slate-500 text-sm mb-2">Last 5 Minutes</div>
               <div
                 className={`text-2xl font-bold ${errors.last5Minutes === 0 ? "text-green-400" : errors.last5Minutes < 10 ? "text-yellow-400" : "text-red-400"}`}
               >
@@ -30,15 +30,15 @@ export function ErrorTracking({ systemHealth }: ErrorTrackingProps) {
               </div>
             </div>
 
-            <div className="bg-black rounded-lg p-4 border border-zinc-800">
-              <div className="text-zinc-400 text-sm mb-2">Unique Errors</div>
+            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
+              <div className="text-slate-500 text-sm mb-2">Unique Errors</div>
               <div className="text-2xl font-bold text-blue-400">
                 {errors.topErrors.length}
               </div>
             </div>
 
-            <div className="bg-black rounded-lg p-4 border border-zinc-800">
-              <div className="text-zinc-400 text-sm mb-2">Total Tracked</div>
+            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
+              <div className="text-slate-500 text-sm mb-2">Total Tracked</div>
               <div className="text-2xl font-bold text-purple-400">
                 {errors.totalTracked}
               </div>
@@ -46,15 +46,15 @@ export function ErrorTracking({ systemHealth }: ErrorTrackingProps) {
           </div>
 
           {errors.topErrors.length > 0 && (
-            <div className="bg-black rounded-lg p-4 border border-zinc-800">
-              <div className="text-zinc-400 text-sm font-semibold mb-3">
+            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
+              <div className="text-slate-500 text-sm font-semibold mb-3">
                 Top Errors
               </div>
               <div className="space-y-2">
                 {errors.topErrors.map((error, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-2 bg-zinc-900 rounded border border-zinc-800"
+                    className="flex items-center justify-between p-2 bg-white rounded border border-sky-100"
                   >
                     <div className="text-xs font-mono text-red-300 truncate flex-1 mr-3">
                       {error.message}
@@ -77,7 +77,7 @@ export function ErrorTracking({ systemHealth }: ErrorTrackingProps) {
           )}
         </div>
       ) : (
-        <div className="text-zinc-500 text-center py-8">
+        <div className="text-slate-500 text-center py-8">
           Loading error metrics...
         </div>
       )}

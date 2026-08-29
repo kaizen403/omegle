@@ -25,7 +25,7 @@ export function UserHistoryPagination({
 
   return (
     <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-4 pb-3 sm:pb-4">
-      <div className="text-xs sm:text-sm text-zinc-400 text-center sm:text-left order-2 sm:order-1">
+      <div className="text-xs sm:text-sm text-slate-500 text-center sm:text-left order-2 sm:order-1">
         Showing {startIndex + 1} to {Math.min(endIndex, filteredCount)} of{" "}
         {filteredCount} users
         {searchName && (
@@ -36,14 +36,14 @@ export function UserHistoryPagination({
         <button
           onClick={() => onPageChange(1)}
           disabled={currentPage === 1}
-          className="px-2 sm:px-3 h-8 sm:h-10 bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+          className="px-2 sm:px-3 h-8 sm:h-10 bg-white border border-sky-100 text-slate-700 hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
         >
           ««
         </button>
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-2 sm:px-3 h-8 sm:h-10 bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+          className="px-2 sm:px-3 h-8 sm:h-10 bg-white border border-sky-100 text-slate-700 hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
         >
           ‹
         </button>
@@ -69,7 +69,7 @@ export function UserHistoryPagination({
                 className={`min-w-[32px] sm:min-w-[40px] h-8 sm:h-10 rounded text-xs sm:text-sm font-medium transition-colors ${
                   currentPage === pageNum
                     ? "bg-blue-600 text-white font-semibold"
-                    : "bg-zinc-800 text-white hover:bg-zinc-700"
+                    : "bg-white border border-sky-100 text-slate-700 hover:bg-sky-50"
                 }`}
               >
                 {pageNum}
@@ -81,14 +81,14 @@ export function UserHistoryPagination({
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-2 sm:px-3 h-8 sm:h-10 bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+          className="px-2 sm:px-3 h-8 sm:h-10 bg-white border border-sky-100 text-slate-700 hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
         >
           ›
         </button>
         <button
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage === totalPages}
-          className="px-2 sm:px-3 h-8 sm:h-10 bg-zinc-800 text-white hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+          className="px-2 sm:px-3 h-8 sm:h-10 bg-white border border-sky-100 text-slate-700 hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
         >
           »»
         </button>

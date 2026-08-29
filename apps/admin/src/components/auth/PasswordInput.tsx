@@ -63,7 +63,7 @@ export default function PasswordInput({
             onChange={(e) => handleChange(index, e.target.value)}
             onKeyDown={(e) => handleKeyDown(index, e)}
             disabled={disabled}
-            className="w-12 h-14 text-center text-2xl font-semibold bg-zinc-900 border-2 border-zinc-800 rounded-lg focus:border-zinc-600 focus:outline-none text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-12 h-14 text-center text-2xl font-semibold bg-white border-2 border-sky-100 rounded-lg focus:border-sky-400 focus:outline-none text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             autoFocus={index === 0}
           />
         ))}

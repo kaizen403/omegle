@@ -34,7 +34,7 @@ export function DateSelector({
       <div className="flex flex-col gap-2 sm:gap-3 w-full">
         <label
           htmlFor="date"
-          className="text-zinc-300 text-sm sm:text-base font-medium"
+          className="text-slate-600 text-sm sm:text-base font-medium"
         >
           📅 Select Date
         </label>
@@ -44,7 +44,7 @@ export function DateSelector({
               <Button
                 variant="outline"
                 className={cn(
-                  "w-full sm:w-64 justify-start text-left font-normal bg-zinc-800 border-zinc-600 hover:bg-zinc-700 text-white",
+                  "w-full sm:w-64 justify-start text-left font-normal bg-white border-sky-200 hover:bg-sky-50 text-slate-900",
                   !tempDate && "text-muted-foreground",
                 )}
                 disabled={loading}
@@ -53,7 +53,7 @@ export function DateSelector({
                 {tempDate ? format(tempDate, "PPP") : <span>Pick a date</span>}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-zinc-800 border-zinc-600">
+            <PopoverContent className="w-auto p-0 bg-white border-sky-200">
               <Calendar
                 mode="single"
                 selected={tempDate}
@@ -62,7 +62,7 @@ export function DateSelector({
                   date > new Date() || date < new Date("1900-01-01")
                 }
                 initialFocus
-                className="bg-zinc-800"
+                className="bg-sky-50"
               />
             </PopoverContent>
           </Popover>

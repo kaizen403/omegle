@@ -16,7 +16,7 @@ export function AdminSessions({
   onRevokeSession,
 }: AdminSessionsProps) {
   return (
-    <Card className="mb-6 bg-zinc-900 border border-zinc-800">
+    <Card className="mb-6 bg-white border border-sky-100">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Power className="h-5 w-5 text-green-600" />

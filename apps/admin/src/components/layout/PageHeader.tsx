@@ -31,12 +31,12 @@ export default function PageHeader({
   }, []);
 
   return (
-    <div className="border-b border-zinc-800 bg-black sticky top-0 z-30">
+    <div className="border-b border-sky-100 bg-white/90 backdrop-blur-md sticky top-0 z-30">
       <div className="p-3 sm:p-4">
         <div className="flex justify-between items-center gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <SidebarTrigger className="text-zinc-400 hover:text-white flex-shrink-0" />
-            <h1 className="text-lg sm:text-2xl font-bold truncate">{title}</h1>
+            <SidebarTrigger className="text-slate-500 hover:text-[#0084d1] flex-shrink-0" />
+            <h1 className="text-lg sm:text-2xl font-bold truncate text-slate-900">{title}</h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {showConnectionStatus && (
@@ -44,7 +44,7 @@ export default function PageHeader({
                 <div
                   className={`w-2 h-2 rounded-full ${isConnected && isAuthenticated ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
                 ></div>
-                <span className="text-xs text-zinc-400 whitespace-nowrap">
+                <span className="text-xs text-slate-500 whitespace-nowrap">
                   {isConnected && isAuthenticated
                     ? "Connected"
                     : "Disconnected"}
@@ -69,7 +69,7 @@ export default function PageHeader({
                 })}
               </div>
               <div
-                className="text-[10px] sm:text-xs text-zinc-400 whitespace-nowrap"
+                className="text-[10px] sm:text-xs text-slate-500 whitespace-nowrap"
                 suppressHydrationWarning
               >
                 {currentTime.toLocaleDateString("en-IN", {

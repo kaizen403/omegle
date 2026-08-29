@@ -175,7 +175,7 @@ export default function UserHistoryPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden"
+          className="bg-white border border-sky-100 rounded-lg overflow-hidden"
         >
           <UsersListHeader
             selectedDate={selectedDate}

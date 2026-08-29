@@ -74,7 +74,7 @@ export function TwoFactorVerification({
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-          className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mb-4"
+          className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-[#0084d1] mb-4"
         >
           <svg
             className="w-8 h-8 text-white"
@@ -90,13 +90,13 @@ export function TwoFactorVerification({
             />
           </svg>
         </motion.div>
-        <h3 className="text-2xl font-bold text-white mb-2">
+        <h3 className="text-2xl font-bold text-slate-900 mb-2">
           Two-Factor Authentication
         </h3>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-slate-500">
           Enter the 6-digit code from your
           <br />
-          <span className="text-white font-medium">authenticator app</span>
+          <span className="text-slate-800 font-medium">authenticator app</span>
         </p>
       </div>
 
@@ -111,27 +111,27 @@ export function TwoFactorVerification({
             <InputOTPGroup className="gap-2">
               <InputOTPSlot
                 index={0}
-                className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
               />
               <InputOTPSlot
                 index={1}
-                className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
               />
               <InputOTPSlot
                 index={2}
-                className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
               />
               <InputOTPSlot
                 index={3}
-                className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
               />
               <InputOTPSlot
                 index={4}
-                className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
               />
               <InputOTPSlot
                 index={5}
-                className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
               />
             </InputOTPGroup>
           </InputOTP>
@@ -165,14 +165,14 @@ export function TwoFactorVerification({
             <Button
               type="submit"
               disabled
-              className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base disabled:opacity-70"
+              className="w-full h-14 bg-gradient-to-r from-sky-500 to-[#0084d1] text-white font-bold text-base disabled:opacity-70"
             >
               <Loader2 className="w-5 h-5 animate-spin" />
             </Button>
           ) : (
             <InteractiveHoverButton
               type="submit"
-              className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base border-blue-600"
+              className="w-full h-14 bg-gradient-to-r from-sky-500 to-[#0084d1] hover:from-blue-700 hover:to-blue-800 text-white text-base border-blue-600"
             >
               Verify Code
             </InteractiveHoverButton>
@@ -183,7 +183,7 @@ export function TwoFactorVerification({
             variant="outline"
             onClick={handleCancel}
             disabled={isLoading}
-            className="w-full h-12 bg-zinc-800/90 border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800 text-white disabled:opacity-50"
+            className="w-full h-12 bg-white border-sky-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 disabled:opacity-50"
           >
             Cancel
           </Button>
@@ -191,7 +191,7 @@ export function TwoFactorVerification({
       </form>
 
       <div className="text-center">
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-slate-500">
           Open your authenticator app to get the current code.
         </p>
       </div>

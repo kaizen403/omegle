@@ -180,13 +180,13 @@ export function ExportMenu({
       </Button>
 
       {showMenu && (
-        <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50">
+        <div className="absolute top-full right-0 mt-2 w-48 bg-sky-50 border border-sky-200 rounded-lg shadow-2xl overflow-hidden z-50">
           <button
             onClick={() => {
               exportAsJSON();
               setShowMenu(false);
             }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-sky-50 transition-colors"
           >
             <svg
               className="w-4 h-4 text-blue-400 flex-shrink-0"
@@ -203,7 +203,7 @@ export function ExportMenu({
             </svg>
             <div className="text-left min-w-0">
               <div className="font-medium">Export as JSON</div>
-              <div className="text-xs text-zinc-400 truncate">
+              <div className="text-xs text-slate-500 truncate">
                 Structured data
               </div>
             </div>
@@ -213,7 +213,7 @@ export function ExportMenu({
               exportAsTXT();
               setShowMenu(false);
             }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-sky-50 transition-colors"
           >
             <svg
               className="w-4 h-4 text-green-400 flex-shrink-0"
@@ -230,7 +230,7 @@ export function ExportMenu({
             </svg>
             <div className="text-left min-w-0">
               <div className="font-medium">Export as TXT</div>
-              <div className="text-xs text-zinc-400 truncate">Plain text</div>
+              <div className="text-xs text-slate-500 truncate">Plain text</div>
             </div>
           </button>
           <button
@@ -238,7 +238,7 @@ export function ExportMenu({
               copyToClipboard();
               setShowMenu(false);
             }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors border-t border-zinc-700"
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-sky-50 transition-colors border-t border-sky-200"
           >
             <svg
               className="w-4 h-4 text-purple-400 flex-shrink-0"
@@ -255,7 +255,7 @@ export function ExportMenu({
             </svg>
             <div className="text-left min-w-0">
               <div className="font-medium">Copy to Clipboard</div>
-              <div className="text-xs text-zinc-400 truncate">Quick copy</div>
+              <div className="text-xs text-slate-500 truncate">Quick copy</div>
             </div>
           </button>
         </div>

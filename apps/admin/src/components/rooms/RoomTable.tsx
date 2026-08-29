@@ -23,13 +23,13 @@ export default function RoomTable({
   const isSuperAdmin = admin?.role === "super-admin";
   if (rooms.length === 0) {
     return (
-      <div className="relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-2xl p-8 sm:p-16 text-center overflow-hidden">
+      <div className="relative bg-gradient-to-br from-white via-sky-50 to-[#e8f4f8] border border-sky-100/50 rounded-2xl p-8 sm:p-16 text-center overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="relative z-10">
           <div className="relative inline-flex mb-6">
             <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full blur-2xl opacity-20 animate-pulse"></div>
             <svg
-              className="w-20 h-20 relative z-10 text-zinc-600"
+              className="w-20 h-20 relative z-10 text-slate-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -42,10 +42,10 @@ export default function RoomTable({
               />
             </svg>
           </div>
-          <h3 className="text-xl sm:text-2xl font-bold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+          <h3 className="text-xl sm:text-2xl font-bold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-[#0084d1]">
             No Active Rooms
           </h3>
-          <p className="text-zinc-400 text-sm sm:text-base">
+          <p className="text-slate-500 text-sm sm:text-base">
             {searchQuery
               ? "No rooms match your search criteria"
               : "Waiting for users to connect..."}
@@ -56,42 +56,42 @@ export default function RoomTable({
   }
 
   return (
-    <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-2xl overflow-hidden shadow-2xl">
+    <div className="bg-gradient-to-b from-white to-sky-50 border border-sky-100/50 rounded-2xl overflow-hidden shadow-2xl">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[800px]">
-          <thead className="bg-gradient-to-r from-zinc-900 via-zinc-950 to-zinc-900 border-b border-zinc-800/50">
+          <thead className="bg-gradient-to-r from-sky-50 via-white to-sky-50 border-b border-sky-100/50">
             <tr>
-              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   Status
                 </div>
               </th>
-              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Room ID
               </th>
-              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Duration
               </th>
-              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Messages
               </th>
-              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Participant 1
               </th>
-              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-left p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Participant 2
               </th>
-              <th className="text-right p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              <th className="text-right p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800/50">
+          <tbody className="divide-y divide-sky-100">
             {rooms.map((room, idx) => (
               <tr
                 key={room.roomId}
-                className="hover:bg-zinc-800/30 transition-all duration-200 group"
+                className="hover:bg-sky-50/30 transition-all duration-200 group"
                 style={{ animationDelay: `${idx * 50}ms` }}
               >
                 <td className="p-3 sm:p-4">
@@ -158,10 +158,10 @@ export default function RoomTable({
                       {room.user1.name.slice(0, 1).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-white text-sm truncate">
+                      <div className="font-semibold text-slate-900 text-sm truncate">
                         {room.user1.name}
                       </div>
-                      <div className="text-xs text-zinc-400 font-mono whitespace-nowrap">
+                      <div className="text-xs text-slate-500 font-mono whitespace-nowrap">
                         #{room.user1.uid.toString().slice(-6)}
                         <span
                           className={`ml-1.5 ${room.user1.gender === "male" ? "text-blue-400" : "text-pink-400"}`}
@@ -179,10 +179,10 @@ export default function RoomTable({
                       {room.user2.name.slice(0, 1).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-white text-sm truncate">
+                      <div className="font-semibold text-slate-900 text-sm truncate">
                         {room.user2.name}
                       </div>
-                      <div className="text-xs text-zinc-400 font-mono whitespace-nowrap">
+                      <div className="text-xs text-slate-500 font-mono whitespace-nowrap">
                         #{room.user2.uid.toString().slice(-6)}
                         <span
                           className={`ml-1.5 ${room.user2.gender === "male" ? "text-blue-400" : "text-pink-400"}`}

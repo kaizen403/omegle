@@ -113,7 +113,7 @@ export function TwoFactorEnroll({
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-[#0084d1] mb-4">
           <svg
             className="w-8 h-8 text-white"
             fill="none"
@@ -128,10 +128,10 @@ export function TwoFactorEnroll({
             />
           </svg>
         </div>
-        <h3 className="text-2xl font-bold text-white mb-2">
+        <h3 className="text-2xl font-bold text-slate-900 mb-2">
           Set up authenticator
         </h3>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-slate-500">
           {totpURI
             ? "Scan the QR code, then enter the 6-digit code to finish."
             : "Confirm your password to generate an authenticator key."}
@@ -146,13 +146,13 @@ export function TwoFactorEnroll({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
-            className="h-14 bg-zinc-800/90 border-zinc-700 text-white placeholder:text-zinc-400"
+            className="h-14 bg-white border-sky-200 text-slate-900 placeholder:text-slate-400"
           />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <Button
             type="submit"
             disabled={isStarting}
-            className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 text-white"
+            className="w-full h-14 bg-gradient-to-r from-sky-500 to-[#0084d1] text-white"
           >
             {isStarting ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -169,32 +169,32 @@ export function TwoFactorEnroll({
               <img
                 src={qrDataUrl}
                 alt="Authenticator QR code"
-                className="rounded-lg border border-zinc-700 bg-white p-2"
+                className="rounded-lg border border-sky-200 bg-white p-2"
                 width={220}
                 height={220}
               />
             ) : (
-              <div className="h-[220px] w-[220px] rounded-lg bg-zinc-800 animate-pulse" />
+              <div className="h-[220px] w-[220px] rounded-lg bg-sky-50 animate-pulse" />
             )}
           </div>
 
           {secret && (
             <div className="space-y-2">
-              <p className="text-xs text-zinc-500 text-center">
+              <p className="text-xs text-slate-500 text-center">
                 Or enter this key manually
               </p>
               <div className="flex gap-2">
                 <Input
                   readOnly
                   value={secret}
-                  className="font-mono text-xs bg-zinc-800 border-zinc-700 text-white"
+                  className="font-mono text-xs bg-sky-50 border-sky-200 text-slate-900"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
                   onClick={() => copy("secret", secret)}
-                  className="shrink-0 border-zinc-700"
+                  className="shrink-0 border-sky-200"
                 >
                   {copied === "secret" ? (
                     <Check className="w-4 h-4 text-green-400" />
@@ -207,9 +207,9 @@ export function TwoFactorEnroll({
           )}
 
           {backupCodes.length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 space-y-2">
+            <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-zinc-300">
+                <p className="text-xs font-medium text-slate-600">
                   Save these backup codes
                 </p>
                 <Button
@@ -217,7 +217,7 @@ export function TwoFactorEnroll({
                   variant="ghost"
                   size="sm"
                   onClick={() => copy("codes", backupCodes.join("\n"))}
-                  className="h-8 text-zinc-400"
+                  className="h-8 text-slate-500"
                 >
                   {copied === "codes" ? (
                     <Check className="w-4 h-4 text-green-400" />
@@ -226,7 +226,7 @@ export function TwoFactorEnroll({
                   )}
                 </Button>
               </div>
-              <p className="font-mono text-[11px] leading-5 text-zinc-400 break-all">
+              <p className="font-mono text-[11px] leading-5 text-slate-500 break-all">
                 {backupCodes.join("  ")}
               </p>
             </div>
@@ -244,7 +244,7 @@ export function TwoFactorEnroll({
                   <InputOTPSlot
                     key={index}
                     index={index}
-                    className="w-12 h-14 text-xl font-mono bg-zinc-800 border-zinc-700 text-white"
+                    className="w-12 h-14 text-xl font-mono bg-sky-50 border-sky-200 text-slate-900"
                   />
                 ))}
               </InputOTPGroup>
@@ -256,7 +256,7 @@ export function TwoFactorEnroll({
           <Button
             type="submit"
             disabled={isVerifying}
-            className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 text-white"
+            className="w-full h-14 bg-gradient-to-r from-sky-500 to-[#0084d1] text-white"
           >
             {isVerifying ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -272,7 +272,7 @@ export function TwoFactorEnroll({
         variant="outline"
         onClick={onCancel}
         disabled={isStarting || isVerifying}
-        className="w-full h-12 bg-zinc-800/90 border-zinc-700 text-white"
+        className="w-full h-12 bg-white border-sky-200 text-slate-700"
       >
         Cancel
       </Button>

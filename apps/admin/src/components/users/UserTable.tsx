@@ -60,7 +60,7 @@ const UserRow = memo(function UserRow({
 
   return (
     <div
-      className={`grid grid-cols-[48px_minmax(200px,1fr)_130px_110px_180px_180px_150px] gap-4 px-4 py-3 border-b border-zinc-800 hover:bg-zinc-800/50 group ${isSelected ? "bg-blue-900/20" : ""}`}
+      className={`grid grid-cols-[48px_minmax(200px,1fr)_130px_110px_180px_180px_150px] gap-4 px-4 py-3 border-b border-sky-100 hover:bg-sky-50/50 group ${isSelected ? "bg-sky-50" : ""}`}
     >
       {/* Checkbox */}
       <div className="flex items-center">
@@ -68,7 +68,7 @@ const UserRow = memo(function UserRow({
           type="checkbox"
           checked={isSelected}
           onChange={handleCheckbox}
-          className="w-4 h-4 rounded bg-zinc-800 border-zinc-700 text-blue-600 focus:ring-blue-500"
+          className="w-4 h-4 rounded bg-sky-50 border-sky-200 text-blue-600 focus:ring-blue-500"
         />
       </div>
 
@@ -84,7 +84,7 @@ const UserRow = memo(function UserRow({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-white group-hover:text-blue-400 transition-colors flex items-center gap-2">
+          <div className="font-semibold text-slate-900 group-hover:text-[#0084d1] transition-colors flex items-center gap-2">
             <span className="truncate">{user.name}</span>
             {user.roomId && partnerInList && (
               <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full whitespace-nowrap flex-shrink-0">
@@ -92,7 +92,7 @@ const UserRow = memo(function UserRow({
               </span>
             )}
           </div>
-          <div className="text-xs text-zinc-500 font-mono">ID: {user.uid}</div>
+          <div className="text-xs text-slate-500 font-mono">ID: {user.uid}</div>
         </div>
       </div>
 
@@ -104,7 +104,7 @@ const UserRow = memo(function UserRow({
               ? "bg-green-500/20 text-green-400 border border-green-500/30"
               : user.state === "queue"
                 ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-                : "bg-zinc-700/50 text-zinc-400 border border-zinc-700"
+                : "bg-slate-100 text-slate-600 border border-sky-200"
           }`}
         >
           {user.state === "active" && (
@@ -129,7 +129,7 @@ const UserRow = memo(function UserRow({
 
       {/* IP Address */}
       <div className="flex items-center">
-        <span className="text-sm font-mono text-zinc-300">
+        <span className="text-sm font-mono text-slate-600">
           {user.clientIP || "N/A"}
         </span>
       </div>
@@ -138,18 +138,18 @@ const UserRow = memo(function UserRow({
       <div className="flex items-center">
         {user.roomId ? (
           <div className="space-y-1">
-            <div className="text-xs text-zinc-400">
+            <div className="text-xs text-slate-500">
               Room:{" "}
               <span className="text-purple-400 font-mono">
                 {user.roomId.slice(0, 8)}...
               </span>
             </div>
-            <div className="text-xs text-zinc-400">
-              Partner: <span className="text-white">#{user.partnerId}</span>
+            <div className="text-xs text-slate-500">
+              Partner: <span className="text-slate-800">#{user.partnerId}</span>
             </div>
           </div>
         ) : (
-          <span className="text-xs text-zinc-500">-</span>
+          <span className="text-xs text-slate-500">-</span>
         )}
       </div>
 
@@ -247,44 +247,44 @@ export default function UserTable({
 
   if (users.length === 0) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-12 text-center">
+      <div className="bg-white border border-sky-100 rounded-lg p-12 text-center">
         <div className="text-6xl mb-4">👥</div>
         <h3 className="text-xl font-semibold mb-2">No Users Found</h3>
-        <p className="text-zinc-400">No users are currently connected</p>
+        <p className="text-slate-500">No users are currently connected</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+    <div className="bg-white border border-sky-100 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <div className="min-w-[1100px]">
           {/* Header */}
-          <div className="grid grid-cols-[48px_minmax(200px,1fr)_130px_110px_180px_180px_150px] gap-4 px-4 py-3 bg-zinc-950 border-b border-zinc-800">
+          <div className="grid grid-cols-[48px_minmax(200px,1fr)_130px_110px_180px_180px_150px] gap-4 px-4 py-3 bg-[#e8f4f8] border-b border-sky-100">
             <div className="flex items-center">
               <input
                 type="checkbox"
                 checked={allCurrentUsersSelected}
                 onChange={(e) => handleSelectAllOnPage(e.target.checked)}
-                className="w-4 h-4 rounded bg-zinc-800 border-zinc-700 text-blue-600 focus:ring-blue-500"
+                className="w-4 h-4 rounded bg-sky-50 border-sky-200 text-blue-600 focus:ring-blue-500"
               />
             </div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase">
+            <div className="text-xs font-semibold text-slate-500 uppercase">
               USER
             </div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase">
+            <div className="text-xs font-semibold text-slate-500 uppercase">
               STATUS
             </div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase">
+            <div className="text-xs font-semibold text-slate-500 uppercase">
               GENDER
             </div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase">
+            <div className="text-xs font-semibold text-slate-500 uppercase">
               IP ADDRESS
             </div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase">
+            <div className="text-xs font-semibold text-slate-500 uppercase">
               ROOM INFO
             </div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase text-right">
+            <div className="text-xs font-semibold text-slate-500 uppercase text-right">
               ACTIONS
             </div>
           </div>
@@ -318,7 +318,7 @@ export default function UserTable({
       {/* Pagination Controls */}
       {totalPages > 1 && (
         <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-4 pb-3 sm:pb-4">
-          <div className="text-xs sm:text-sm text-zinc-400">
+          <div className="text-xs sm:text-sm text-slate-500">
             Showing {startIndex + 1} to {Math.min(endIndex, users.length)} of{" "}
             {users.length} users
           </div>

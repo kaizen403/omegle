@@ -122,7 +122,7 @@ export default function BotsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Toggle & Settings */}
           <div>
-            <Card className="bg-zinc-900/50 border-zinc-800 h-full">
+            <Card className="bg-white/50 border-sky-100 h-full">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Power className="h-5 w-5" />

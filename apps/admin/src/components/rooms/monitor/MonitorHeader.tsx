@@ -16,14 +16,14 @@ export function MonitorHeader({
   children,
 }: MonitorHeaderProps) {
   return (
-    <div className="border-b border-zinc-800 bg-zinc-950 p-4">
+    <div className="border-b border-sky-100 bg-[#e8f4f8] p-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <Button
             onClick={onBack}
             variant="ghost"
             size="sm"
-            className="text-zinc-400 hover:text-white"
+            className="text-slate-500 hover:text-[#0084d1]"
           >
             ← Back
           </Button>
@@ -36,7 +36,7 @@ export function MonitorHeader({
                 {isRoomActive ? "Live Monitoring" : "Chat Ended"}
               </h2>
             </div>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-slate-500">
               Room: <span className="font-mono text-purple-400">{roomId}</span>
               {!isRoomActive && (
                 <span className="ml-2 text-amber-500/70">

@@ -31,10 +31,10 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
 
   if (messages.length === 0) {
     return (
-      <div className="h-[calc(100vh-200px)] flex items-center justify-center text-zinc-500">
+      <div className="h-[calc(100vh-200px)] flex items-center justify-center text-slate-500">
         <div className="text-center">
           <svg
-            className="w-16 h-16 mx-auto mb-4 text-zinc-600"
+            className="w-16 h-16 mx-auto mb-4 text-slate-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -47,7 +47,7 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
             />
           </svg>
           <p className="text-lg font-medium mb-1">Waiting for messages...</p>
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-slate-500">
             Messages will appear here in real-time
           </p>
         </div>
@@ -96,7 +96,7 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                 >
                   {senderName}
                 </span>
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-slate-500">
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
@@ -122,7 +122,7 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                         />
                       </div>
                     ) : msg.message.mimeType.startsWith("video/") ? (
-                      <div className="relative rounded-lg overflow-hidden max-w-xs bg-black">
+                      <div className="relative rounded-lg overflow-hidden max-w-xs bg-[#e8f4f8]">
                         <video
                           src={msg.message.fileUrl}
                           controls
@@ -133,7 +133,7 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                         </video>
                       </div>
                     ) : msg.message.mimeType.startsWith("audio/") ? (
-                      <div className="bg-zinc-800/50 rounded-lg p-3">
+                      <div className="bg-sky-50/50 rounded-lg p-3">
                         <audio
                           src={msg.message.fileUrl}
                           controls
@@ -144,7 +144,7 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                         </audio>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center p-3 bg-zinc-800/50 rounded-lg">
+                      <div className="flex items-center justify-center p-3 bg-sky-50/50 rounded-lg">
                         <a
                           href={msg.message.fileUrl}
                           download={msg.message.fileName}
@@ -159,13 +159,13 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                     )}
                     {/* Caption if present */}
                     {msg.message.content && (
-                      <p className="text-sm text-zinc-100 leading-relaxed break-words px-4 pb-3">
+                      <p className="text-sm text-slate-800 leading-relaxed break-words px-4 pb-3">
                         {msg.message.content}
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-100 leading-relaxed break-words px-4 py-3">
+                  <p className="text-sm text-slate-800 leading-relaxed break-words px-4 py-3">
                     {msg.message?.content || "No content"}
                   </p>
                 )}

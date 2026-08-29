@@ -20,7 +20,7 @@ export default function BulkKickModal({
 }: BulkKickModalProps) {
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="bg-zinc-900 border border-zinc-800 text-white">
+      <DialogContent className="bg-white border border-sky-100 text-slate-900">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <svg
@@ -40,14 +40,14 @@ export default function BulkKickModal({
           </DialogTitle>
         </DialogHeader>
         <div className="py-4">
-          <p className="text-zinc-300 text-sm sm:text-base">
+          <p className="text-slate-600 text-sm sm:text-base">
             Are you sure you want to kick{" "}
             <span className="text-red-400 font-bold">{selectedCount}</span>{" "}
             {selectedCount === 1 ? "user" : "users"} from{" "}
             {selectedCount === 1 ? "their" : "their"} room
             {selectedCount === 1 ? "" : "s"}?
           </p>
-          <p className="text-zinc-500 text-xs sm:text-sm mt-2">
+          <p className="text-slate-500 text-xs sm:text-sm mt-2">
             This action cannot be undone.
           </p>
         </div>
@@ -55,7 +55,7 @@ export default function BulkKickModal({
           <Button
             variant="outline"
             onClick={onCancel}
-            className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+            className="bg-sky-50 hover:bg-sky-100 text-slate-700 border-sky-200"
           >
             Cancel
           </Button>

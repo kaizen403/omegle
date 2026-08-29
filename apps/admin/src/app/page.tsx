@@ -100,19 +100,21 @@ export default function LoginPage() {
   const busy = isLoading || isSubmitting;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 relative overflow-hidden">
-      {/* Simple static background - removed FlickeringGrid for performance */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"></div>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-sky-500/40">
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-400 via-blue-400 to-cyan-400 animate-gradient-xy" />
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_50%)] opacity-70" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,_rgba(14,165,233,0.45),_transparent_55%)] opacity-70" />
       </div>
+      <div className="absolute top-20 left-10 sm:left-20 w-60 sm:w-72 h-60 sm:h-72 bg-sky-300/40 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob" />
+      <div className="absolute top-44 right-4 sm:right-20 w-56 sm:w-72 h-56 sm:h-72 bg-blue-300/40 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-2000" />
+      <div className="absolute -bottom-10 left-20 sm:left-40 w-64 sm:w-72 h-64 sm:h-72 bg-cyan-300/40 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-4000" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative z-10 w-full max-w-md mx-4 space-y-6 sm:space-y-8 bg-zinc-900/95 p-6 sm:p-10 backdrop-blur-xl rounded-2xl border border-zinc-800"
+        className="relative z-10 w-full max-w-md mx-4 space-y-6 sm:space-y-8 bg-white/95 p-6 sm:p-10 backdrop-blur-xl rounded-2xl border border-white/70 shadow-xl"
       >
         {needsMfaEnroll ? (
           <TwoFactorEnroll
@@ -144,7 +146,7 @@ export default function LoginPage() {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mb-4"
+                className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-[#0084d1] mb-4"
               >
                 <svg
                   className="w-8 h-8 text-white"
@@ -164,7 +166,7 @@ export default function LoginPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.3 }}
-                className="text-3xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent"
+                className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent"
               >
                 Welcome Back
               </motion.h2>
@@ -172,7 +174,7 @@ export default function LoginPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
-                className="mt-2 text-sm text-zinc-400"
+                className="mt-2 text-sm text-slate-500"
               >
                 Sign in to access the admin dashboard
               </motion.p>
@@ -187,7 +189,7 @@ export default function LoginPage() {
             >
               <div className="space-y-4 sm:space-y-5">
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <Input
                     type="email"
                     placeholder="Email Address"
@@ -195,12 +197,12 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     aria-label="Email Address"
                     autoComplete="email"
-                    className="h-14 pl-11 bg-zinc-800/90 border-zinc-700 hover:border-zinc-600 focus:border-zinc-600 text-white placeholder:text-zinc-400 text-base"
+                    className="h-14 pl-11 bg-sky-50 border-sky-200 hover:border-sky-300 focus:border-[#0084d1] text-slate-900 placeholder:text-slate-400 text-base"
                   />
                 </div>
 
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <Input
                     type="password"
                     placeholder="Password"
@@ -208,7 +210,7 @@ export default function LoginPage() {
                     onChange={(e) => setPasswordInput(e.target.value)}
                     aria-label="Password"
                     autoComplete="current-password"
-                    className="h-14 pl-11 bg-zinc-800/90 border-zinc-700 hover:border-zinc-600 focus:border-zinc-600 text-white placeholder:text-zinc-400 text-base"
+                    className="h-14 pl-11 bg-sky-50 border-sky-200 hover:border-sky-300 focus:border-[#0084d1] text-slate-900 placeholder:text-slate-400 text-base"
                   />
                 </div>
 
@@ -217,7 +219,7 @@ export default function LoginPage() {
                     <Turnstile
                       ref={turnstileRef}
                       siteKey={TURNSTILE_SITE_KEY}
-                      options={{ theme: "dark" }}
+                      options={{ theme: "light" }}
                       onSuccess={(token) => setTurnstileToken(token)}
                       onError={() => setTurnstileToken(null)}
                       onExpire={() => setTurnstileToken(null)}
@@ -254,7 +256,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled
-                  className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-14 bg-gradient-to-r from-sky-500 to-[#0084d1] text-white font-bold text-base disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   <Loader2 className="w-5 h-5 animate-spin" />
                 </Button>
@@ -262,7 +264,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={busy}
-                  className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-semibold"
+                  className="w-full h-14 bg-gradient-to-r from-sky-500 to-[#0084d1] hover:from-[#0084d1] hover:to-sky-700 text-white text-base font-semibold"
                 >
                   Sign In
                 </Button>
@@ -275,7 +277,7 @@ export default function LoginPage() {
               transition={{ delay: 0.6 }}
               className="text-center space-y-2"
             >
-              <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
                 <svg
                   className="w-4 h-4"
                   fill="none"
@@ -291,7 +293,7 @@ export default function LoginPage() {
                 </svg>
                 <span>Authorized personnel only</span>
               </div>
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-slate-400">
                 Protected by enterprise security
               </p>
             </motion.div>

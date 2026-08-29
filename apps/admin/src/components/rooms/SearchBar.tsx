@@ -15,7 +15,7 @@ export default function SearchBar({
     <div className="mb-4 sm:mb-6 flex gap-2">
       <div className="relative flex-1">
         <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -32,12 +32,12 @@ export default function SearchBar({
           placeholder="Search rooms..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600/50"
+          className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-sky-100 rounded-md text-slate-900 placeholder-zinc-500 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600/50"
         />
       </div>
       <button
         onClick={onRefresh}
-        className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md hover:bg-zinc-800 text-zinc-300 transition-colors"
+        className="px-3 py-2 bg-white border border-sky-100 rounded-md hover:bg-sky-50 text-slate-600 transition-colors"
         title="Refresh"
       >
         <svg

@@ -22,7 +22,7 @@ export function SessionRevokedOverlay({
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="max-w-md w-full mx-4 p-8 bg-zinc-900 border border-red-500/50 rounded-2xl shadow-2xl"
+        className="max-w-md w-full mx-4 p-8 bg-white border border-red-500/50 rounded-2xl shadow-2xl"
       >
         <div className="text-center">
           <motion.div
@@ -38,7 +38,7 @@ export function SessionRevokedOverlay({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="text-2xl font-bold text-white mb-3"
+            className="text-2xl font-bold text-slate-900 mb-3"
           >
             Session Revoked
           </motion.h2>
@@ -47,7 +47,7 @@ export function SessionRevokedOverlay({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="text-zinc-400 mb-8 leading-relaxed"
+            className="text-slate-500 mb-8 leading-relaxed"
           >
             Your session has been revoked by a super administrator. You have
             been logged out and must sign in again to continue.
@@ -71,7 +71,7 @@ export function SessionRevokedOverlay({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="text-xs text-zinc-500 mt-6"
+            className="text-xs text-slate-500 mt-6"
           >
             This action was taken for security purposes
           </motion.p>

@@ -17,10 +17,10 @@ export function SystemStatusModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg max-w-md w-full overflow-hidden">
+      <div className="bg-white border border-sky-100 rounded-lg max-w-md w-full overflow-hidden">
         <div
-          className={`p-6 border-b border-zinc-800 ${
-            pendingStatus ? "bg-green-900/20" : "bg-red-900/20"
+          className={`p-6 border-b border-sky-100 ${
+            pendingStatus ? "bg-green-50" : "bg-red-50"
           }`}
         >
           <div className="flex items-center gap-3">
@@ -32,16 +32,16 @@ export function SystemStatusModal({
               <span className="text-2xl">{pendingStatus ? "🟢" : "🔴"}</span>
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">
+              <h3 className="text-lg font-bold text-slate-900">
                 {pendingStatus ? "Turn System ON" : "Turn System OFF"}
               </h3>
-              <p className="text-sm text-zinc-400">Confirm your action</p>
+              <p className="text-sm text-slate-500">Confirm your action</p>
             </div>
           </div>
         </div>
 
         <div className="p-6">
-          <p className="text-zinc-300 mb-4">
+          <p className="text-slate-600 mb-4">
             {pendingStatus
               ? "Users will be able to connect and use the service normally."
               : "The service will stop accepting new user connections. Existing users will be disconnected."}
@@ -50,7 +50,7 @@ export function SystemStatusModal({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+              className="flex-1 px-4 py-2 bg-sky-50 hover:bg-sky-100 text-slate-700 rounded-lg transition-colors"
             >
               Cancel
             </button>

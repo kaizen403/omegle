@@ -15,7 +15,7 @@ export function ConnectionBanner({ isConnected }: ConnectionBannerProps) {
           <div className="font-semibold text-red-400 text-sm sm:text-base">
             Connection Lost
           </div>
-          <div className="text-xs sm:text-sm text-zinc-400">
+          <div className="text-xs sm:text-sm text-slate-500">
             Attempting to reconnect...
           </div>
         </div>

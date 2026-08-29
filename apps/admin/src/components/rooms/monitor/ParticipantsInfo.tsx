@@ -8,9 +8,9 @@ interface ParticipantsInfoProps {
 
 export function ParticipantsInfo({ currentRoom }: ParticipantsInfoProps) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-lg border border-zinc-800">
+    <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-lg border border-sky-100">
       <div className="text-right">
-        <div className="text-xs text-zinc-500">Participants</div>
+        <div className="text-xs text-slate-500">Participants</div>
         <div className="flex items-center gap-2 mt-1">
           <span
             className={`text-sm font-medium ${
@@ -21,7 +21,7 @@ export function ParticipantsInfo({ currentRoom }: ParticipantsInfoProps) {
           >
             {currentRoom.user1.name}
           </span>
-          <span className="text-zinc-600">↔</span>
+          <span className="text-slate-500">↔</span>
           <span
             className={`text-sm font-medium ${
               currentRoom.user2.gender === "male"

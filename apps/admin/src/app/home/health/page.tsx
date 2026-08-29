@@ -46,7 +46,7 @@ export default function HealthPage() {
   }, [isAuthenticated, getSystemHealth, getRedisMetrics]);
 
   const getHealthStatus = useCallback(() => {
-    if (!systemHealth) return { status: "unknown", color: "text-zinc-500" };
+    if (!systemHealth) return { status: "unknown", color: "text-slate-500" };
     if (!systemHealth.redisHealthy)
       return { status: "degraded", color: "text-yellow-500" };
     return { status: "healthy", color: "text-green-500" };
@@ -83,8 +83,8 @@ export default function HealthPage() {
             cpu={systemHealth.cpu}
           />
         ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-            <div className="text-zinc-500 text-center py-8">
+          <div className="bg-white border border-sky-100 rounded-lg p-6">
+            <div className="text-slate-500 text-center py-8">
               Loading system metrics...
             </div>
           </div>

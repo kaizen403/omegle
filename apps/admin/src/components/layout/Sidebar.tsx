@@ -27,8 +27,8 @@ function NavItem({
       className={cn(
         "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
         isActive
-          ? "bg-zinc-800 text-white"
-          : "text-zinc-400 hover:bg-zinc-900 hover:text-white",
+          ? "bg-[#0084d1] text-white"
+          : "text-slate-500 hover:bg-white hover:text-[#0084d1]",
         isCollapsed && "justify-center",
       )}
     >
@@ -75,7 +75,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="fixed top-5 left-4 z-50 lg:hidden bg-zinc-800 border border-zinc-700 rounded-lg p-2.5 hover:bg-zinc-700 transition-colors"
+        className="fixed top-5 left-4 z-50 lg:hidden bg-white border border-sky-200 rounded-lg p-2.5 hover:bg-sky-50 transition-colors"
         aria-label="Toggle menu"
       >
         {isMobileOpen ? (
@@ -111,7 +111,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
       <div
         className={cn(
-          "bg-zinc-950 border-r border-zinc-800 flex flex-col relative transition-all duration-300",
+          "bg-[#e8f4f8] border-r border-sky-100 flex flex-col relative transition-all duration-300",
           "fixed lg:static inset-y-0 left-0 z-40",
           isCollapsed ? "w-20" : "w-64",
           isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
@@ -123,11 +123,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             <>
               <div>
                 <h1 className="text-xl font-bold">Admin Portal</h1>
-                <p className="text-xs text-zinc-500 mt-1">Omegle</p>
+                <p className="text-xs text-slate-500 mt-1">Omegle</p>
               </div>
               <button
                 onClick={handleToggle}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                className="p-2 hover:bg-sky-50 rounded-lg transition-colors"
                 title="Collapse sidebar"
               >
                 <svg
@@ -148,7 +148,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
           ) : (
             <button
               onClick={handleToggle}
-              className="mx-auto p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="mx-auto p-2 hover:bg-sky-50 rounded-lg transition-colors"
               title="Expand sidebar"
             >
               <svg
@@ -215,23 +215,23 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         </nav>
 
         {/* Footer - Admin Profile */}
-        <div className="p-4 border-t border-zinc-800 relative">
+        <div className="p-4 border-t border-sky-100 relative">
           <button
             onClick={() => setShowLogoutPopup(!showLogoutPopup)}
             className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-zinc-400 hover:bg-zinc-800 transition-colors",
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-sky-50 transition-colors",
               isCollapsed && "justify-center",
             )}
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-[#0084d1] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
               {admin?.email?.charAt(0).toUpperCase() || "A"}
             </div>
             {!isCollapsed && (
               <div className="flex-1 text-left min-w-0">
-                <div className="font-medium text-white text-sm truncate">
+                <div className="font-medium text-slate-900 text-sm truncate">
                   {admin?.name || "Admin"}
                 </div>
-                <div className="text-xs text-zinc-500 truncate">
+                <div className="text-xs text-slate-500 truncate">
                   {admin?.email || "admin@example.com"}
                 </div>
               </div>
@@ -242,7 +242,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
           {showLogoutPopup && (
             <div
               className={cn(
-                "absolute bottom-full mb-2 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden",
+                "absolute bottom-full mb-2 bg-sky-50 border border-sky-200 rounded-lg overflow-hidden",
                 isCollapsed ? "left-4 w-48" : "left-4 right-4",
               )}
             >
@@ -252,7 +252,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                   setIsMobileOpen(false);
                   onLogout();
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-zinc-900 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-white transition-colors"
               >
                 <svg
                   className="w-5 h-5"

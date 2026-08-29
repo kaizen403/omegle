@@ -97,18 +97,18 @@ export function MonitorModal({
       onClick={onClose}
     >
       <div
-        className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-gradient-to-b from-white to-sky-50 border border-sky-100/50 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header with gradient and status */}
-        <div className="relative flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800/50 bg-gradient-to-r from-purple-900/20 via-zinc-900/50 to-blue-900/20">
+        <div className="relative flex items-center justify-between p-4 sm:p-5 border-b border-sky-100/50 bg-gradient-to-r from-sky-50 via-white to-[#e8f4f8]">
           <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
           <div className="min-w-0 flex-1 pr-2 relative z-10">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
               <div
                 className={`w-2 h-2 rounded-full shadow-lg ${isRoomActive ? "bg-green-500 animate-pulse shadow-green-500/50" : "bg-gray-500 shadow-gray-500/50"}`}
               ></div>
-              <h2 className="text-lg sm:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400">
+              <h2 className="text-lg sm:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-[#0084d1]">
                 Room Monitor
               </h2>
               {/* Status Badge */}
@@ -123,10 +123,10 @@ export function MonitorModal({
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] sm:text-xs text-zinc-500">
+              <span className="text-[10px] sm:text-xs text-slate-500">
                 Room ID:
               </span>
-              <code className="text-[10px] sm:text-xs text-zinc-400 font-mono bg-zinc-800/50 px-2 py-0.5 rounded border border-zinc-700/50">
+              <code className="text-[10px] sm:text-xs text-slate-500 font-mono bg-sky-50/50 px-2 py-0.5 rounded border border-sky-200/50">
                 {monitoringRoomId.slice(0, 8)}...{monitoringRoomId.slice(-4)}
               </code>
               {!isRoomActive && messages.length > 0 && (
@@ -178,7 +178,7 @@ export function MonitorModal({
 
                 {/* Export dropdown menu */}
                 {showExportMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 animate-in slide-in-from-top-2 duration-200">
+                  <div className="absolute top-full right-0 mt-2 w-48 bg-sky-50 border border-sky-200 rounded-lg shadow-2xl overflow-hidden z-50 animate-in slide-in-from-top-2 duration-200">
                     <button
                       onClick={() => {
                         handleExportJSON();
@@ -201,7 +201,7 @@ export function MonitorModal({
                       </svg>
                       <div className="text-left min-w-0">
                         <div className="font-medium">Export as JSON</div>
-                        <div className="text-xs text-zinc-400 truncate">
+                        <div className="text-xs text-slate-500 truncate">
                           Structured data
                         </div>
                       </div>
@@ -228,7 +228,7 @@ export function MonitorModal({
                       </svg>
                       <div className="text-left min-w-0">
                         <div className="font-medium">Export as TXT</div>
-                        <div className="text-xs text-zinc-400 truncate">
+                        <div className="text-xs text-slate-500 truncate">
                           Plain text
                         </div>
                       </div>
@@ -238,7 +238,7 @@ export function MonitorModal({
                         handleCopyToClipboard();
                         setShowExportMenu(false);
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors border-t border-zinc-700"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors border-t border-sky-200"
                     >
                       <svg
                         className="w-4 h-4 text-purple-400 flex-shrink-0"
@@ -255,7 +255,7 @@ export function MonitorModal({
                       </svg>
                       <div className="text-left min-w-0">
                         <div className="font-medium">Copy to Clipboard</div>
-                        <div className="text-xs text-zinc-400 truncate">
+                        <div className="text-xs text-slate-500 truncate">
                           Quick copy
                         </div>
                       </div>
@@ -290,7 +290,7 @@ export function MonitorModal({
             <Button
               variant="ghost"
               size="sm"
-              className="text-zinc-400 hover:text-white hover:bg-zinc-800/50 text-xs px-3 py-2 h-9 transition-all duration-200 border border-transparent hover:border-zinc-700"
+              className="text-slate-500 hover:text-[#0084d1] hover:bg-sky-50/50 text-xs px-3 py-2 h-9 transition-all duration-200 border border-transparent hover:border-sky-200"
               onClick={onClose}
             >
               <svg
@@ -312,13 +312,13 @@ export function MonitorModal({
         </div>
 
         {/* Chat Messages with enhanced styling */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 bg-gradient-to-b from-zinc-900/50 to-zinc-950">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 bg-gradient-to-b from-white to-[#e8f4f8]">
           {messages.length === 0 ? (
             <div className="text-center py-16 animate-in fade-in duration-500">
               <div className="relative inline-flex mb-6">
                 <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full blur-xl opacity-20 animate-pulse"></div>
                 <svg
-                  className="w-20 h-20 relative z-10 text-zinc-600"
+                  className="w-20 h-20 relative z-10 text-slate-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -331,10 +331,10 @@ export function MonitorModal({
                   />
                 </svg>
               </div>
-              <p className="text-zinc-400 text-sm sm:text-base font-medium">
+              <p className="text-slate-500 text-sm sm:text-base font-medium">
                 Waiting for messages...
               </p>
-              <p className="text-zinc-600 text-xs sm:text-sm mt-2">
+              <p className="text-slate-500 text-xs sm:text-sm mt-2">
                 Messages will appear here in real-time
               </p>
             </div>
@@ -350,7 +350,7 @@ export function MonitorModal({
                     className="group animate-in slide-in-from-bottom-4 duration-300"
                     style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
                   >
-                    <div className="relative bg-zinc-800/40 backdrop-blur-sm rounded-2xl p-3 sm:p-4 border border-zinc-700/50 hover:border-zinc-600/50 transition-all duration-200 hover:shadow-lg hover:shadow-zinc-900/50">
+                    <div className="relative bg-sky-50/40 backdrop-blur-sm rounded-2xl p-3 sm:p-4 border border-sky-200/50 hover:border-sky-300/50 transition-all duration-200 hover:shadow-lg hover:shadow-zinc-900/50">
                       {/* Message header with user info */}
                       <div className="flex items-center justify-between mb-3 gap-2">
                         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -368,7 +368,7 @@ export function MonitorModal({
                               >
                                 User {sender.slice(-4)}
                               </span>
-                              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-zinc-500 bg-zinc-800/50 px-2 py-0.5 rounded-full border border-zinc-700/30">
+                              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-slate-500 bg-sky-50/50 px-2 py-0.5 rounded-full border border-sky-200/30">
                                 <svg
                                   className="w-3 h-3"
                                   fill="none"
@@ -385,14 +385,14 @@ export function MonitorModal({
                                 UID: {sender}
                               </span>
                             </div>
-                            <span className="sm:hidden text-[9px] text-zinc-600 font-mono">
+                            <span className="sm:hidden text-[9px] text-slate-500 font-mono">
                               ID: {sender}
                             </span>
                           </div>
                         </div>
 
                         {/* Timestamp with icon */}
-                        <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-zinc-500 whitespace-nowrap flex-shrink-0 bg-zinc-800/30 px-2 py-1 rounded-lg">
+                        <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-500 whitespace-nowrap flex-shrink-0 bg-sky-50/30 px-2 py-1 rounded-lg">
                           <svg
                             className="w-3 h-3"
                             fill="none"
@@ -416,9 +416,9 @@ export function MonitorModal({
                       {/* Message content with better styling */}
                       <div className="relative">
                         <div className="absolute -left-2 top-0 bottom-0 w-1 bg-gradient-to-b from-purple-500/50 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
-                        <p className="text-white text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words pl-3 sm:pl-4">
+                        <p className="text-slate-800 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words pl-3 sm:pl-4">
                           {msg.message?.content || (
-                            <span className="text-zinc-500 italic">
+                            <span className="text-slate-500 italic">
                               No content
                             </span>
                           )}
@@ -439,11 +439,11 @@ export function MonitorModal({
         </div>
 
         {/* Modal Footer with enhanced design and export */}
-        <div className="p-4 sm:p-5 border-t border-zinc-800/50 bg-gradient-to-r from-zinc-900/80 via-zinc-900 to-zinc-900/80 backdrop-blur-sm">
+        <div className="p-4 sm:p-5 border-t border-sky-100/50 bg-gradient-to-r from-white via-sky-50 to-white backdrop-blur-sm">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               {/* Message count badge */}
-              <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-700/50">
+              <div className="flex items-center gap-2 bg-sky-50/50 px-3 py-1.5 rounded-lg border border-sky-200/50">
                 <svg
                   className="w-4 h-4 text-purple-400"
                   fill="none"
@@ -457,10 +457,10 @@ export function MonitorModal({
                     d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                   />
                 </svg>
-                <span className="text-xs sm:text-sm font-semibold text-white">
+                <span className="text-xs sm:text-sm font-semibold text-slate-900">
                   {messages.length}
                 </span>
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-slate-500">
                   {messages.length === 1 ? "message" : "messages"}
                 </span>
               </div>
@@ -548,7 +548,7 @@ export function MonitorModal({
 
                   {/* Export menu */}
                   {showExportMenu && (
-                    <div className="absolute bottom-full right-0 mb-2 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
+                    <div className="absolute bottom-full right-0 mb-2 w-48 bg-sky-50 border border-sky-200 rounded-lg shadow-xl overflow-hidden z-50 animate-in slide-in-from-bottom-2 duration-200">
                       <button
                         onClick={() => {
                           handleExportJSON();
@@ -571,7 +571,7 @@ export function MonitorModal({
                         </svg>
                         <div className="text-left">
                           <div className="font-medium">Export as JSON</div>
-                          <div className="text-xs text-zinc-400">
+                          <div className="text-xs text-slate-500">
                             Structured data format
                           </div>
                         </div>
@@ -598,7 +598,7 @@ export function MonitorModal({
                         </svg>
                         <div className="text-left">
                           <div className="font-medium">Export as TXT</div>
-                          <div className="text-xs text-zinc-400">
+                          <div className="text-xs text-slate-500">
                             Plain text format
                           </div>
                         </div>
@@ -608,7 +608,7 @@ export function MonitorModal({
                           handleCopyToClipboard();
                           setShowExportMenu(false);
                         }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors border-t border-zinc-700"
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-zinc-700 transition-colors border-t border-sky-200"
                       >
                         <svg
                           className="w-4 h-4 text-purple-400"
@@ -625,7 +625,7 @@ export function MonitorModal({
                         </svg>
                         <div className="text-left">
                           <div className="font-medium">Copy to Clipboard</div>
-                          <div className="text-xs text-zinc-400">
+                          <div className="text-xs text-slate-500">
                             Quick copy
                           </div>
                         </div>

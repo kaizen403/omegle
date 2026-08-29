@@ -15,7 +15,7 @@ export function SystemStatusToggle({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mb-4 p-3 sm:p-4 bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 rounded-lg"
+      className="mb-4 p-3 sm:p-4 bg-gradient-to-r from-white to-sky-50 border border-sky-100 rounded-lg"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -25,10 +25,10 @@ export function SystemStatusToggle({
             }`}
           />
           <div className="min-w-0">
-            <div className="font-semibold text-white text-sm sm:text-base">
+            <div className="font-semibold text-slate-900 text-sm sm:text-base">
               System Status
             </div>
-            <div className="text-xs sm:text-sm text-zinc-400 truncate">
+            <div className="text-xs sm:text-sm text-slate-500 truncate">
               {systemStatus
                 ? "Service is active and accepting users"
                 : "Service is currently disabled"}
@@ -40,7 +40,7 @@ export function SystemStatusToggle({
           className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
             systemStatus
               ? "bg-green-500 focus:ring-green-500"
-              : "bg-zinc-700 focus:ring-zinc-500"
+              : "bg-slate-300 focus:ring-slate-400"
           }`}
         >
           <span

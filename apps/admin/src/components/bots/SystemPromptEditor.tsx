@@ -44,7 +44,7 @@ export function SystemPromptEditor({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
       >
-        <Card className="bg-zinc-900/50 border-zinc-800 h-full">
+        <Card className="bg-white/50 border-sky-100 h-full">
           <CardHeader className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
               <div>
@@ -65,7 +65,7 @@ export function SystemPromptEditor({
                   variant="outline"
                   size="sm"
                   onClick={() => onResetDialogChange(true)}
-                  className="border-zinc-700"
+                  className="border-sky-200"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Reset
@@ -77,14 +77,14 @@ export function SystemPromptEditor({
             <Textarea
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              className="min-h-[200px] sm:min-h-[300px] bg-zinc-800 border-zinc-700 font-mono text-xs sm:text-sm transition-all focus:border-purple-500/50"
+              className="min-h-[200px] sm:min-h-[300px] bg-sky-50 border-sky-200 font-mono text-xs sm:text-sm transition-all focus:border-purple-500/50"
               placeholder="Enter the system prompt for the AI bots..."
             />
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
-              className="text-[10px] sm:text-xs text-zinc-400 space-y-1"
+              className="text-[10px] sm:text-xs text-slate-500 space-y-1"
             >
               <p>
                 <strong>Available placeholders:</strong>

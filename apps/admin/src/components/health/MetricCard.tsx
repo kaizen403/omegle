@@ -17,10 +17,10 @@ export default function MetricCard({
 }: MetricCardProps) {
   const statusColors = {
     healthy:
-      "border-green-900/30 bg-gradient-to-br from-green-900/10 to-zinc-950",
+      "border-green-200 bg-gradient-to-br from-green-50 to-white",
     warning:
-      "border-yellow-900/30 bg-gradient-to-br from-yellow-900/10 to-zinc-950",
-    error: "border-red-900/30 bg-gradient-to-br from-red-900/10 to-zinc-950",
+      "border-amber-200 bg-gradient-to-br from-amber-50 to-white",
+    error: "border-red-200 bg-gradient-to-br from-red-50 to-white",
   };
 
   const statusDotColors = {
@@ -33,7 +33,7 @@ export default function MetricCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`border rounded-lg p-4 ${status ? statusColors[status] : "border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950"}`}
+      className={`border rounded-lg p-4 ${status ? statusColors[status] : "border-sky-100 bg-gradient-to-br from-white to-sky-50"}`}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -42,14 +42,14 @@ export default function MetricCard({
               className={`w-2 h-2 rounded-full ${statusDotColors[status]} animate-pulse`}
             />
           )}
-          <div className="text-zinc-400 text-xs uppercase tracking-wide">
+          <div className="text-slate-500 text-xs uppercase tracking-wide">
             {title}
           </div>
         </div>
         {icon && <span className="text-xl">{icon}</span>}
       </div>
-      <div className="text-xl font-bold text-white mb-1">{value}</div>
-      {subtitle && <div className="text-xs text-zinc-500">{subtitle}</div>}
+      <div className="text-xl font-bold text-slate-900 mb-1">{value}</div>
+      {subtitle && <div className="text-xs text-slate-500">{subtitle}</div>}
     </motion.div>
   );
 }

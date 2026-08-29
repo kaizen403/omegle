@@ -20,7 +20,7 @@ export default function RoomStats({
         <div className="text-2xl sm:text-3xl font-bold text-purple-400">
           {totalRooms}
         </div>
-        <div className="text-[10px] sm:text-xs text-zinc-500 mt-1">
+        <div className="text-[10px] sm:text-xs text-slate-500 mt-1">
           Live connections
         </div>
       </div>
@@ -31,7 +31,7 @@ export default function RoomStats({
         <div className="text-2xl sm:text-3xl font-bold text-green-400">
           {totalParticipants}
         </div>
-        <div className="text-[10px] sm:text-xs text-zinc-500 mt-1">
+        <div className="text-[10px] sm:text-xs text-slate-500 mt-1">
           Users in active chats
         </div>
       </div>
@@ -42,7 +42,7 @@ export default function RoomStats({
         <div className="text-2xl sm:text-3xl font-bold text-blue-400">
           {averageDuration}m
         </div>
-        <div className="text-[10px] sm:text-xs text-zinc-500 mt-1">
+        <div className="text-[10px] sm:text-xs text-slate-500 mt-1">
           Per conversation
         </div>
       </div>

@@ -129,7 +129,7 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 }}
     >
-      <Card className="bg-zinc-900/50 border-zinc-800">
+      <Card className="bg-white/50 border-sky-100">
         <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div>
@@ -160,7 +160,7 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
                   size="sm"
                   onClick={clearChat}
                   disabled={messages.length === 0}
-                  className="border-zinc-700"
+                  className="border-sky-200"
                 >
                   <Trash2 className="h-4 w-4 sm:mr-1" />
                   <span className="hidden sm:inline">Clear</span>
@@ -172,14 +172,14 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
         <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0 sm:pt-0">
           {/* Chat Messages */}
           <ScrollArea
-            className="h-[200px] sm:h-[300px] rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:p-4"
+            className="h-[200px] sm:h-[300px] rounded-lg border border-sky-100 bg-[#e8f4f8]/50 p-3 sm:p-4"
             ref={scrollRef}
           >
             {messages.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-full text-zinc-500"
+                className="flex flex-col items-center justify-center h-full text-slate-500"
               >
                 <motion.div
                   animate={{ y: [0, -10, 0] }}
@@ -214,7 +214,7 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
                         className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 ${
                           message.role === "user"
                             ? "bg-blue-600 text-white"
-                            : "bg-zinc-800 text-zinc-100"
+                            : "bg-sky-50 text-slate-800"
                         }`}
                       >
                         <p className="text-xs sm:text-sm whitespace-pre-wrap">
@@ -241,8 +241,8 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
                     <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-purple-900/50 flex items-center justify-center">
                       <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
                     </div>
-                    <div className="bg-zinc-800 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 text-zinc-400">
+                    <div className="bg-sky-50 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2">
+                      <div className="flex items-center gap-2 text-slate-500">
                         <RefreshCw className="h-3 w-3 animate-spin" />
                         <span className="text-xs sm:text-sm">Thinking...</span>
                       </div>
@@ -279,7 +279,7 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
                   : "Enable bots first to test..."
               }
               disabled={!isEnabled || sending}
-              className="bg-zinc-800 border-zinc-700"
+              className="bg-sky-50 border-sky-200"
             />
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button

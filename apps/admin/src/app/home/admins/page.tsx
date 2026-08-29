@@ -166,7 +166,7 @@ export default function AdminsPage() {
             variant="outline"
             onClick={fetchSessions}
             disabled={sessionsLoading}
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            className="border-sky-200 text-slate-600 hover:bg-sky-50"
           >
             <RefreshCw
               className={`mr-2 h-4 w-4 ${sessionsLoading ? "animate-spin" : ""}`}
@@ -245,7 +245,7 @@ export default function AdminsPage() {
             <AlertDialogDescription className="space-y-2">
               <span className="block">
                 Are you sure you want to revoke all active sessions for{" "}
-                <strong className="text-zinc-200">
+                <strong className="text-slate-900">
                   {pendingRevokeAdmin?.name}
                 </strong>
                 ?

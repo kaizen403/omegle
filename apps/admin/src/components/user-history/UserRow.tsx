@@ -19,9 +19,9 @@ export function UserRow({
   onUserClick,
 }: UserRowProps) {
   return (
-    <div className="grid grid-cols-[50px_minmax(180px,1fr)_130px_90px_220px_180px_140px] gap-2 py-3 border-b border-zinc-800 hover:bg-zinc-800/50">
+    <div className="grid grid-cols-[50px_minmax(180px,1fr)_130px_90px_220px_180px_140px] gap-2 py-3 border-b border-sky-100 hover:bg-sky-50/50">
       {/* # */}
-      <div className="flex items-center text-zinc-400">
+      <div className="flex items-center text-slate-500">
         {startIndex + index + 1}
       </div>
 
@@ -42,13 +42,13 @@ export function UserRow({
               ? "👩"
               : "🧑"}
         </div>
-        <span className="font-semibold text-zinc-100 truncate">
+        <span className="font-semibold text-slate-900 truncate">
           {user.name}
         </span>
       </div>
 
       {/* UID */}
-      <div className="flex items-center font-mono text-sm text-zinc-400">
+      <div className="flex items-center font-mono text-sm text-slate-500">
         {user.uid}
       </div>
 
@@ -68,7 +68,7 @@ export function UserRow({
       </div>
 
       {/* TIME */}
-      <div className="flex items-center text-sm text-zinc-400">
+      <div className="flex items-center text-sm text-slate-500">
         {new Date(user.timestamp).toLocaleString("en-US", {
           month: "short",
           day: "numeric",
@@ -78,7 +78,7 @@ export function UserRow({
       </div>
 
       {/* LOCATION */}
-      <div className="flex items-center text-sm text-zinc-400 min-w-0">
+      <div className="flex items-center text-sm text-slate-500 min-w-0">
         <span className="truncate">
           {user.city && user.country
             ? `${user.city}, ${user.country}`

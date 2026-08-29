@@ -44,10 +44,10 @@ export default function UserDetailsModal({
     >
       <SheetContent
         side="bottom"
-        className="h-[85vh] bg-zinc-900 border-t border-zinc-700 overflow-y-auto"
+        className="h-[85vh] bg-white border-t border-sky-200 overflow-y-auto"
       >
         {user && (
-          <SheetHeader className="border-b border-zinc-700 pb-6 mb-6">
+          <SheetHeader className="border-b border-sky-200 pb-6 mb-6">
             <div className="flex items-center gap-4 w-full">
               <div
                 className={`w-16 h-16 rounded-full flex items-center justify-center text-4xl ${
@@ -65,10 +65,10 @@ export default function UserDetailsModal({
                     : "🧑"}
               </div>
               <div>
-                <SheetTitle className="text-2xl font-bold text-white">
+                <SheetTitle className="text-2xl font-bold text-slate-900">
                   {user.name}
                 </SheetTitle>
-                <p className="text-zinc-400">UID: {user.uid}</p>
+                <p className="text-slate-500">UID: {user.uid}</p>
               </div>
             </div>
           </SheetHeader>
@@ -77,8 +77,8 @@ export default function UserDetailsModal({
         <div className="px-6">
           {loading ? (
             <div className="py-16 text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-zinc-700 border-t-blue-500"></div>
-              <p className="text-zinc-400 mt-4">Loading details...</p>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-sky-200 border-t-blue-500"></div>
+              <p className="text-slate-500 mt-4">Loading details...</p>
             </div>
           ) : user ? (
             <div className="space-y-6">
@@ -125,14 +125,14 @@ function BasicInfoSection({
   formatTimestamp: (timestamp: number) => string;
 }) {
   return (
-    <div className="bg-zinc-800 rounded-lg p-5">
+    <div className="bg-sky-50 rounded-lg p-5">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <span className="text-xl">📋</span>
         Basic Information
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <div className="text-zinc-500 text-sm mb-1">Gender</div>
+          <div className="text-slate-500 text-sm mb-1">Gender</div>
           <span
             className={`inline-block px-3 py-1 rounded font-semibold ${
               user.gender.toLowerCase() === "male"
@@ -146,14 +146,14 @@ function BasicInfoSection({
           </span>
         </div>
         <div>
-          <div className="text-zinc-500 text-sm mb-1">Timestamp</div>
-          <div className="text-zinc-200 font-mono text-sm">
+          <div className="text-slate-500 text-sm mb-1">Timestamp</div>
+          <div className="text-slate-800 font-mono text-sm">
             {formatTimestamp(user.timestamp)}
           </div>
         </div>
         <div>
-          <div className="text-zinc-500 text-sm mb-1">IP Address</div>
-          <div className="text-zinc-200 font-mono text-sm break-all">
+          <div className="text-slate-500 text-sm mb-1">IP Address</div>
+          <div className="text-slate-800 font-mono text-sm break-all">
             {user.ipAddress || "N/A"}
           </div>
         </div>
@@ -164,7 +164,7 @@ function BasicInfoSection({
 
 function LocationSummarySection({ location }: { location: LocationData }) {
   return (
-    <div className="bg-zinc-800 rounded-lg p-5">
+    <div className="bg-sky-50 rounded-lg p-5">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <span className="text-xl">🌍</span>
         Location Summary
@@ -198,14 +198,14 @@ function LocationSummarySection({ location }: { location: LocationData }) {
           <InfoCard title="Plus Code" value={location.plusCode} />
         )}
         {location.timeZone?.displayName && (
-          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-700 md:col-span-2 lg:col-span-3">
-            <div className="text-zinc-500 text-xs uppercase mb-1">
+          <div className="bg-white rounded-lg p-4 border border-sky-200 md:col-span-2 lg:col-span-3">
+            <div className="text-slate-500 text-xs uppercase mb-1">
               Time Zone
             </div>
-            <div className="text-zinc-100 text-sm">
+            <div className="text-slate-900 text-sm">
               {location.timeZone.displayName}
               {location.timeZone.localTime && (
-                <span className="text-zinc-400 ml-2">
+                <span className="text-slate-500 ml-2">
                   (Local:{" "}
                   {new Date(location.timeZone.localTime).toLocaleString()})
                 </span>
@@ -226,29 +226,29 @@ function NetworkInfoSection({
   if (!network) return null;
 
   return (
-    <div className="bg-zinc-800 rounded-lg p-5">
+    <div className="bg-sky-50 rounded-lg p-5">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <span className="text-xl">🌐</span>
         Network Information
       </h3>
       <div className="space-y-3">
         {network.organisation && (
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-700">
-            <div className="text-zinc-500 text-xs uppercase mb-1">
+          <div className="bg-white rounded-lg p-3 border border-sky-200">
+            <div className="text-slate-500 text-xs uppercase mb-1">
               ISP/Organization
             </div>
-            <div className="text-zinc-100 font-medium">
+            <div className="text-slate-900 font-medium">
               {network.organisation}
             </div>
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {network.bgpPrefix && (
-            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-700">
-              <div className="text-zinc-500 text-xs uppercase mb-1">
+            <div className="bg-white rounded-lg p-3 border border-sky-200">
+              <div className="text-slate-500 text-xs uppercase mb-1">
                 BGP Prefix
               </div>
-              <div className="text-zinc-100 font-mono text-xs break-all">
+              <div className="text-slate-900 font-mono text-xs break-all">
                 {network.bgpPrefix}
               </div>
             </div>
@@ -264,15 +264,15 @@ function NetworkInfoSection({
           )}
         </div>
         {network.carriers && network.carriers.length > 0 && (
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-700">
-            <div className="text-zinc-500 text-xs uppercase mb-2">Carriers</div>
+          <div className="bg-white rounded-lg p-3 border border-sky-200">
+            <div className="text-slate-500 text-xs uppercase mb-2">Carriers</div>
             <div className="space-y-2">
               {network.carriers.map((carrier, idx: number) => (
-                <div key={idx} className="text-sm text-zinc-200">
+                <div key={idx} className="text-sm text-slate-800">
                   <span className="font-semibold">{carrier.name}</span>
-                  <span className="text-zinc-400 ml-2">({carrier.asn})</span>
+                  <span className="text-slate-500 ml-2">({carrier.asn})</span>
                   {carrier.rankText && (
-                    <span className="text-zinc-500 ml-2 text-xs">
+                    <span className="text-slate-500 ml-2 text-xs">
                       {carrier.rankText}
                     </span>
                   )}
@@ -294,7 +294,7 @@ function AdministrativeHierarchySection({
   if (!administrative || administrative.length === 0) return null;
 
   return (
-    <div className="bg-zinc-800 rounded-lg p-5">
+    <div className="bg-sky-50 rounded-lg p-5">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <span className="text-xl">🏛️</span>
         Administrative Hierarchy
@@ -303,20 +303,20 @@ function AdministrativeHierarchySection({
         {administrative.map((admin, idx: number) => (
           <div
             key={idx}
-            className="bg-zinc-900 rounded-lg p-3 border border-zinc-700 flex items-start gap-3"
+            className="bg-white rounded-lg p-3 border border-sky-200 flex items-start gap-3"
           >
             <div className="bg-blue-600/20 text-blue-400 px-2 py-1 rounded text-xs font-semibold shrink-0">
               Level {admin.adminLevel}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-zinc-100 font-semibold">{admin.name}</div>
+              <div className="text-slate-900 font-semibold">{admin.name}</div>
               {admin.description && (
-                <div className="text-zinc-400 text-xs mt-1">
+                <div className="text-slate-500 text-xs mt-1">
                   {admin.description}
                 </div>
               )}
               {admin.isoCode && (
-                <div className="text-zinc-500 text-xs mt-1">
+                <div className="text-slate-500 text-xs mt-1">
                   Code: {admin.isoCode}
                 </div>
               )}
@@ -336,18 +336,18 @@ function CountryDetailsSection({
   if (!country) return null;
 
   return (
-    <div className="bg-zinc-800 rounded-lg p-5">
+    <div className="bg-sky-50 rounded-lg p-5">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <span className="text-xl">{country.countryFlagEmoji || "🏴"}</span>
         Country Details
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {country.isoNameFull && (
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-700 md:col-span-2">
-            <div className="text-zinc-500 text-xs uppercase mb-1">
+          <div className="bg-white rounded-lg p-3 border border-sky-200 md:col-span-2">
+            <div className="text-slate-500 text-xs uppercase mb-1">
               Full Name
             </div>
-            <div className="text-zinc-100 text-sm">{country.isoNameFull}</div>
+            <div className="text-slate-900 text-sm">{country.isoNameFull}</div>
           </div>
         )}
         {country.isoAlpha2 && (
@@ -374,11 +374,11 @@ function CountryDetailsSection({
           <InfoCard title="Income Level" value={country.wbIncomeLevel.value} />
         )}
         {country.isoAdminLanguages && country.isoAdminLanguages.length > 0 && (
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-700 md:col-span-2">
-            <div className="text-zinc-500 text-xs uppercase mb-1">
+          <div className="bg-white rounded-lg p-3 border border-sky-200 md:col-span-2">
+            <div className="text-slate-500 text-xs uppercase mb-1">
               Official Languages
             </div>
-            <div className="text-zinc-100 text-sm">
+            <div className="text-slate-900 text-sm">
               {country.isoAdminLanguages.map((lang) => lang.isoName).join(", ")}
             </div>
           </div>
@@ -390,16 +390,16 @@ function CountryDetailsSection({
 
 function RawDataSection({ location }: { location: LocationData }) {
   return (
-    <div className="bg-zinc-800 rounded-lg p-5">
+    <div className="bg-sky-50 rounded-lg p-5">
       <details className="group">
         <summary className="text-lg font-semibold mb-2 flex items-center gap-2 cursor-pointer hover:text-blue-400 transition-colors">
           <span className="text-xl">🔍</span>
           Raw Location Data
-          <span className="text-xs text-zinc-500 ml-auto group-open:rotate-180 transition-transform">
+          <span className="text-xs text-slate-500 ml-auto group-open:rotate-180 transition-transform">
             ▼
           </span>
         </summary>
-        <pre className="mt-4 text-xs overflow-x-auto bg-zinc-950 p-4 rounded border border-zinc-700 text-zinc-300 max-h-96 overflow-y-auto">
+        <pre className="mt-4 text-xs overflow-x-auto bg-[#e8f4f8] p-4 rounded border border-sky-200 text-slate-600 max-h-96 overflow-y-auto">
           {JSON.stringify(location, null, 2)}
         </pre>
       </details>
@@ -418,10 +418,10 @@ function InfoCard({
   mono?: boolean;
 }) {
   return (
-    <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-700">
-      <div className="text-zinc-500 text-xs uppercase mb-1">{title}</div>
+    <div className="bg-white rounded-lg p-4 border border-sky-200">
+      <div className="text-slate-500 text-xs uppercase mb-1">{title}</div>
       <div
-        className={`text-zinc-100 text-sm ${mono ? "font-mono" : "font-medium"}`}
+        className={`text-slate-900 text-sm ${mono ? "font-mono" : "font-medium"}`}
       >
         {value}
       </div>

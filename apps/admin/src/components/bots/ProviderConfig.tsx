@@ -91,9 +91,9 @@ function ApiKeyField({
 
       {hasExistingKey && !showInput && isCurrentProvider ? (
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 p-2 bg-zinc-800 border border-zinc-700 rounded-md">
+          <div className="flex-1 flex items-center gap-2 p-2 bg-sky-50 border border-sky-200 rounded-md">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span className="text-sm text-zinc-300">API key configured</span>
+            <span className="text-sm text-slate-600">API key configured</span>
             <Badge
               variant="outline"
               className="ml-auto text-xs border-emerald-600 text-emerald-500"
@@ -105,7 +105,7 @@ function ApiKeyField({
             variant="ghost"
             size="sm"
             onClick={() => setIsEditing(true)}
-            className="text-zinc-400 hover:text-white"
+            className="text-slate-500 hover:text-[#0084d1]"
           >
             <Edit2 className="h-4 w-4" />
           </Button>
@@ -121,10 +121,10 @@ function ApiKeyField({
                 ? "Enter new API key to replace existing"
                 : placeholder
             }
-            className="bg-zinc-800 border-zinc-700"
+            className="bg-sky-50 border-sky-200"
           />
           {hasExistingKey && isCurrentProvider && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-slate-500">
               Leave empty to keep existing key, or enter a new key to replace it
             </p>
           )}
@@ -173,7 +173,7 @@ export function ProviderConfig({
       </Label>
 
       {status?.provider && (
-        <div className="p-2 bg-zinc-800/50 rounded text-xs sm:text-sm text-zinc-300 flex items-center gap-2">
+        <div className="p-2 bg-sky-50/50 rounded text-xs sm:text-sm text-slate-600 flex items-center gap-2">
           {getProviderIcon(status.provider)}
           <span>
             Current:{" "}
@@ -194,7 +194,7 @@ export function ProviderConfig({
         value={selectedProvider}
         onValueChange={(v) => onProviderChange(v as AIProvider)}
       >
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-zinc-800 h-auto gap-1 p-1">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-sky-50 h-auto gap-1 p-1">
           <TabsTrigger
             value="bedrock"
             className="text-xs px-2 py-2 data-[state=active]:bg-zinc-700"
@@ -244,7 +244,7 @@ export function ProviderConfig({
             <div className="space-y-2">
               <Label className="text-sm">Region</Label>
               <Select value={region} onValueChange={onRegionChange}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                <SelectTrigger className="bg-sky-50 border-sky-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -262,7 +262,7 @@ export function ProviderConfig({
             <div className="space-y-2">
               <Label className="text-sm">Model</Label>
               <Select value={modelId} onValueChange={onModelIdChange}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                <SelectTrigger className="bg-sky-50 border-sky-200">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -299,7 +299,7 @@ export function ProviderConfig({
             <div className="space-y-2">
               <Label className="text-sm">Model</Label>
               <Select value={modelId} onValueChange={onModelIdChange}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                <SelectTrigger className="bg-sky-50 border-sky-200">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -320,7 +320,7 @@ export function ProviderConfig({
                 value={baseUrl}
                 onChange={(e) => onBaseUrlChange(e.target.value)}
                 placeholder="https://api.openai.com/v1"
-                className="bg-zinc-800 border-zinc-700"
+                className="bg-sky-50 border-sky-200"
               />
             </div>
           </motion.div>
@@ -348,7 +348,7 @@ export function ProviderConfig({
                 value={endpoint}
                 onChange={(e) => onEndpointChange(e.target.value)}
                 placeholder="https://your-resource.openai.azure.com"
-                className="bg-zinc-800 border-zinc-700"
+                className="bg-sky-50 border-sky-200"
               />
             </div>
             <div className="space-y-2">
@@ -357,7 +357,7 @@ export function ProviderConfig({
                 value={deploymentName}
                 onChange={(e) => onDeploymentNameChange(e.target.value)}
                 placeholder="gpt-4o-deployment"
-                className="bg-zinc-800 border-zinc-700"
+                className="bg-sky-50 border-sky-200"
               />
             </div>
             <div className="space-y-2">
@@ -366,7 +366,7 @@ export function ProviderConfig({
                 value={apiVersion}
                 onChange={(e) => onApiVersionChange(e.target.value)}
                 placeholder="2024-02-15-preview"
-                className="bg-zinc-800 border-zinc-700"
+                className="bg-sky-50 border-sky-200"
               />
             </div>
           </motion.div>
@@ -391,7 +391,7 @@ export function ProviderConfig({
             <div className="space-y-2">
               <Label className="text-sm">Model</Label>
               <Select value={modelId} onValueChange={onModelIdChange}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                <SelectTrigger className="bg-sky-50 border-sky-200">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -415,7 +415,7 @@ export function ProviderConfig({
         variant="outline"
         onClick={onTestConnection}
         disabled={testing || (!apiKey && !hasExistingKey)}
-        className="w-full border-zinc-700"
+        className="w-full border-sky-200"
       >
         {testing ? (
           <RefreshCw className="h-4 w-4 animate-spin mr-2" />
