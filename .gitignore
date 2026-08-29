@@ -5,21 +5,26 @@ Thumbs.db
 *.swo
 *~
 
-# Env and secrets
+# Env and secrets — keep only *.example
 .env
 .env.*
 !.env.example
 *.pem
 *.key
+*.crt
+*.p12
+*.secret
 ServiceAccountKey.json
 *ServiceAccountKey*.json
 aws-config.json
+credentials.json
 
 # Dependencies and build
 node_modules/
 .pnp
 .pnp.js
 .yarn/install-state.gz
+.pnpm-store/
 .next/
 out/
 dist/
@@ -27,6 +32,7 @@ build/
 coverage/
 .nyc_output/
 *.tsbuildinfo
+next-env.d.ts
 
 # Logs and process
 logs/
@@ -41,11 +47,26 @@ pids/
 *.seed
 *.pid.lock
 
+# Caches
+.cache/
+.eslintcache
+.prettiercache
+.turbo/
+.drizzle/
+
 # Test artifacts
 playwright-report/
 test-results/
 blob-report/
 test-results.json
+
+# Local scratch
+tmp/
+temp/
+uploads/
+
+# Husky generated internals (keep hook scripts)
+.husky/_/
 
 # IDE / editor
 .idea/
@@ -54,7 +75,6 @@ test-results.json
 
 # Hosting / local tooling
 .vercel
-.turbo
 .cursor/
 
 # Agent notes — keep local, never commit

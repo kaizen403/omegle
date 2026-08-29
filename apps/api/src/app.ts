@@ -35,7 +35,8 @@ export class App {
   private turnService!: TurnService;
   private socketIOManager!: SocketIOManager;
   private statusScheduler!: StatusScheduler;
-  private systemStatus: boolean = false; // System status controlled by admin, starts OFF by default
+  // Production starts OFF (admin toggle / 11 PM IST scheduler). Local starts ON so matching works.
+  private systemStatus: boolean = config.nodeEnv !== 'production';
 
   constructor() {
     this.app = express();
@@ -133,9 +134,9 @@ export class App {
     });
 
     // Simple status check - returns admin-controlled status
-    this.app.get('/status', (req, res) => {
+    this.app.get('/status', async (req, res) => {
       try {
-        const isRedisHealthy = this.redis.checkHealth();
+        const isRedisHealthy = await this.redis.checkHealth();
         res.json({
           status: this.systemStatus && isRedisHealthy,
           adminStatus: this.systemStatus,

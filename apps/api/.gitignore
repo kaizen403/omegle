@@ -3,15 +3,16 @@ dist/
 coverage/
 .nyc_output/
 *.tsbuildinfo
+.drizzle/
 
 .env
-.env.local
-.env.development
-.env.*.local
+.env.*
+!.env.example
 
 *.log
 logs/
 *.pem
+*.key
 ServiceAccountKey.json
 *ServiceAccountKey*.json
 aws-config.json
@@ -21,6 +22,7 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+.husky/_/
 
 .vscode/
 .idea/
