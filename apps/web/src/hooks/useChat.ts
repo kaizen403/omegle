@@ -112,6 +112,11 @@ export function useChat(options: UseChatOptions) {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingMessages = useRef<Set<string>>(new Set());
   const messageIdCounter = useRef<number>(0);
+  const isInSessionRef = useRef(isInSession);
+  const pendingIncomingRef = useRef<Array<{ type: 'message' | 'typing'; data: Record<string, unknown> }>>(
+    []
+  );
+  isInSessionRef.current = isInSession;
 
   // File upload limits: max 10MB per file, max 50MB total per session
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
@@ -125,39 +130,33 @@ export function useChat(options: UseChatOptions) {
     notificationSound.initialize();
   }, []);
 
-  useEffect(() => {
-    if (!ws || !isInSession) {
-      // Clear timeout when session ends
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
-      }
-      return;
-    }
-
-    const unsubscribe = ws.onMessage((msg) => {
+  const ingestIncoming = useCallback(
+    (msg: { type: string; data: Record<string, unknown> }) => {
       if (msg.type === 'message') {
+        const data = msg.data;
         const messageData: MessageData = {
-          id: `${msg.data.from}-${msg.data.timestamp}-${Math.random()}`,
-          text: msg.data.text,
-          senderId: msg.data.from.toString(),
+          id: `${data.from}-${data.timestamp}-${Math.random()}`,
+          text: String(data.text ?? ''),
+          senderId: String(data.from),
           senderName: 'Stranger',
-          timestamp: msg.data.timestamp,
-          fileUrl: msg.data.fileUrl,
-          fileName: msg.data.fileName,
-          mimeType: msg.data.mimeType,
-          fileSize: msg.data.fileSize,
+          timestamp: Number(data.timestamp) || Date.now(),
+          fileUrl: typeof data.fileUrl === 'string' ? data.fileUrl : undefined,
+          fileName: typeof data.fileName === 'string' ? data.fileName : undefined,
+          mimeType: typeof data.mimeType === 'string' ? data.mimeType : undefined,
+          fileSize: typeof data.fileSize === 'number' ? data.fileSize : undefined,
         };
 
         setMessages((prev) => [...prev, messageData]);
         onMessageReceived?.(messageData);
 
-        // Play notification sound for incoming messages (not own messages)
-        if (msg.data.from.toString() !== 'self') {
+        if (String(data.from) !== 'self') {
           notificationSound.play(isChatOpen);
         }
-      } else if (msg.type === 'typing') {
-        const isTyping = msg.data.isTyping;
+        return;
+      }
+
+      if (msg.type === 'typing') {
+        const isTyping = Boolean(msg.data.isTyping);
         setIsPartnerTypingInternal(isTyping);
         onTypingIndicator?.(isTyping);
 
@@ -170,6 +169,26 @@ export function useChat(options: UseChatOptions) {
           }, TYPING_INDICATOR_TIMEOUT);
         }
       }
+    },
+    [onMessageReceived, onTypingIndicator, isChatOpen]
+  );
+
+  useEffect(() => {
+    if (!ws) {
+      return;
+    }
+
+    const unsubscribe = ws.onMessage((msg) => {
+      if (msg.type !== 'message' && msg.type !== 'typing') {
+        return;
+      }
+
+      if (!isInSessionRef.current) {
+        pendingIncomingRef.current.push(msg as { type: 'message' | 'typing'; data: Record<string, unknown> });
+        return;
+      }
+
+      ingestIncoming(msg as { type: string; data: Record<string, unknown> });
     });
 
     return () => {
@@ -178,7 +197,17 @@ export function useChat(options: UseChatOptions) {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [ws, isInSession, onMessageReceived, onTypingIndicator, isChatOpen]);
+  }, [ws, ingestIncoming]);
+
+  useEffect(() => {
+    if (!isInSession) {
+      return;
+    }
+    const queued = pendingIncomingRef.current.splice(0);
+    for (const msg of queued) {
+      ingestIncoming(msg);
+    }
+  }, [isInSession, ingestIncoming]);
 
   const sendMessage = useCallback(
     (text: string) => {
@@ -334,6 +363,7 @@ export function useChat(options: UseChatOptions) {
     }
     lastTypingStateRef.current = false;
     pendingMessages.current.clear();
+    pendingIncomingRef.current = [];
     messageIdCounter.current = 0;
   }, []);
 
