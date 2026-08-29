@@ -4,7 +4,7 @@
  */
 
 import { getSocketIOService } from '@/services/socket';
-import type { ClientMessage, ServerMessage, RTCSignal } from '@/types/matchmaking';
+import type { ClientMessage } from '@/types/matchmaking';
 import type { RtcJoinConfig, DeviceIds, NetworkQualityLevel, RtcParticipant } from './types';
 import {
   TrackManager,
@@ -14,21 +14,7 @@ import {
   type RtcState,
   type RtcCallbacks,
 } from './managers';
-
-function toRtcSignal(signal: RTCSignal): import('./types').RtcSignal | null {
-  if (signal.type === 'offer' || signal.type === 'answer') {
-    return { type: signal.type, sdp: signal.sdp };
-  }
-  if (signal.type === 'candidate') {
-    return {
-      type: 'candidate',
-      candidate: signal.candidate,
-      sdpMid: signal.sdpMid ?? null,
-      sdpMLineIndex: signal.sdpMLineIndex ?? null,
-    };
-  }
-  return null;
-}
+import { attachRtcSignalConsumer, detachRtcSignalConsumer } from './signal-inbox';
 
 export class RtcService {
   private state: RtcState;
@@ -71,10 +57,14 @@ export class RtcService {
     cameraOn: boolean = true,
     micOn: boolean = true
   ): Promise<void> {
-    if (cameraOn && !this.state.localVideoTrack) {
-      await this.trackManager.createPreview(true, micOn && !this.state.localAudioTrack);
-    } else if (micOn && !this.state.localAudioTrack) {
-      await this.trackManager.createPreview(false, true);
+    try {
+      if (cameraOn && !this.state.localVideoTrack) {
+        await this.trackManager.createPreview(true, micOn && !this.state.localAudioTrack);
+      } else if (micOn && !this.state.localAudioTrack) {
+        await this.trackManager.createPreview(false, true);
+      }
+    } catch {
+      // Still join so we can receive the peer (same machine / camera in use).
     }
 
     const socket = getSocketIOService();
@@ -83,13 +73,9 @@ export class RtcService {
       socket.send(message);
     };
 
-    this.unsubscribeSignal = socket.onMessage((message: ServerMessage) => {
-      if (message.type !== 'signal') return;
-      const parsed = toRtcSignal(message.data as RTCSignal);
-      if (parsed) {
-        void this.peerManager.handleSignal(parsed);
-      }
-    });
+    this.unsubscribeSignal = () => {
+      detachRtcSignalConsumer();
+    };
 
     await this.peerManager.join(
       config,
@@ -97,6 +83,11 @@ export class RtcService {
       cameraOn ? this.state.localVideoTrack : null,
       micOn ? this.state.localAudioTrack : null
     );
+
+    // After the PC exists so a queued offer is not dropped by handleSignal.
+    attachRtcSignalConsumer((signal) => {
+      void this.peerManager.handleSignal(signal);
+    });
 
     this.trackManager.updateDeviceIdsFromTracks();
   }
@@ -148,6 +139,10 @@ export class RtcService {
 
   playLocalVideo(elementId: string): void {
     attachLocalVideo(this.state.localVideoTrack, elementId);
+  }
+
+  resumeRemoteAudio(): void {
+    this.peerManager.resumeRemoteAudio();
   }
 
   playRemoteVideo(_participant: RtcParticipant, elementId: string): void {

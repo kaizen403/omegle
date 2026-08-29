@@ -136,6 +136,13 @@ export class PeerManager {
     await this.audioTransceiver?.sender.replaceTrack(track);
   }
 
+  resumeRemoteAudio(): void {
+    if (!this.audioElement) return;
+    void this.audioElement.play().catch(() => {
+      // Still waiting for a user gesture
+    });
+  }
+
   async applyBitrate(quality: NetworkQuality): Promise<void> {
     const video = getVideoSettingsForNetwork(quality);
     const audio = getAudioSettingsForNetwork(quality);
@@ -209,16 +216,29 @@ export class PeerManager {
     pc.ontrack = (event) => {
       const track = event.track;
       const participant: RtcParticipant = { identity: this.state.partnerIdentity };
-      if (track.kind === 'video') {
+      const kind = track.kind === 'video' ? 'video' : 'audio';
+
+      if (kind === 'video') {
         attachRemoteVideo(track, this.remoteVideoElementId);
-        this.callbacks.onTrackSubscribed?.(participant, 'video');
-      } else if (track.kind === 'audio') {
+      } else {
         this.attachRemoteAudio(track);
-        this.callbacks.onTrackSubscribed?.(participant, 'audio');
       }
 
+      const publishIfLive = () => {
+        if (track.readyState === 'ended' || track.muted) {
+          this.callbacks.onTrackUnsubscribed?.(participant, kind);
+          return;
+        }
+        this.callbacks.onTrackSubscribed?.(participant, kind);
+      };
+
+      publishIfLive();
+      track.addEventListener('unmute', () => {
+        if (kind === 'audio') this.resumeRemoteAudio();
+        publishIfLive();
+      });
+      track.addEventListener('mute', publishIfLive);
       track.addEventListener('ended', () => {
-        const kind = track.kind === 'video' ? 'video' : 'audio';
         this.callbacks.onTrackUnsubscribed?.(participant, kind);
       });
     };

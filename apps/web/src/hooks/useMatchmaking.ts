@@ -44,6 +44,7 @@ import {
 import { showError, ErrorCode } from '@/lib/toast';
 import { analytics } from '@/services/analytics';
 import { SEARCH_TIMEOUT, ERROR_DEDUPE_WINDOW, LEAVE_DEBOUNCE_DELAY } from '@/constants';
+import { clearRtcSignalInbox, enqueueRtcSignal } from '@/services/rtc/signal-inbox';
 import type {
   ConnectionState,
   MatchDataMatched,
@@ -145,6 +146,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
             }
 
             analytics.trackMatchFound();
+            clearRtcSignalInbox();
 
             setConnectionState('matched');
             setMatchData(message.data);
@@ -232,6 +234,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
 
         case 'message':
         case 'signal':
+          enqueueRtcSignal(message.data);
           break;
 
         default:

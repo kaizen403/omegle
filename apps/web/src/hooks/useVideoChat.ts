@@ -106,12 +106,12 @@ export function useVideoChat(options: UseVideoChatOptions) {
     switchMicrophone,
     getCurrentDevices,
     reattachLocalVideo,
+    resumeRemoteAudio,
     leaveRTC,
   } = useRtc({
     onRemoteVideoReady: () => {},
-    onRemoteUserLeft: () => {
-      handlePartnerLeftRef.current?.();
-    },
+    // ICE/PC close is not the partner leaving. Chat stays on Socket.IO.
+    onRemoteUserLeft: () => {},
   });
 
   const handleMatched = useCallback(
@@ -472,7 +472,10 @@ export function useVideoChat(options: UseVideoChatOptions) {
     switchMicrophone,
     getCurrentDevices,
     reattachLocalVideo,
-    sendMessage,
+    sendMessage: (text: string) => {
+      resumeRemoteAudio();
+      sendMessage(text);
+    },
     sendFileMessage,
     sendTypingIndicator,
     totalUploadedSize,

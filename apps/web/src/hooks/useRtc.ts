@@ -213,6 +213,7 @@ export function useRtc(options: UseRtcOptions = {}) {
         await rtcServiceRef.current.toggleCamera(newState);
         const devices = rtcServiceRef.current.getCurrentDevices();
         if (devices.cameraId) setCurrentCameraId(devices.cameraId);
+        rtcServiceRef.current.resumeRemoteAudio();
         analytics.trackCameraToggle(newState, 'call');
         showSuccess(newState ? 'Camera on' : 'Camera off');
       } catch (error) {
@@ -276,6 +277,7 @@ export function useRtc(options: UseRtcOptions = {}) {
         await rtcServiceRef.current.toggleMicrophone(newState);
         const devices = rtcServiceRef.current.getCurrentDevices();
         if (devices.micId) setCurrentMicId(devices.micId);
+        rtcServiceRef.current.resumeRemoteAudio();
         analytics.trackMicrophoneToggle(newState, 'call');
         showSuccess(newState ? 'Microphone on' : 'Microphone off');
       } catch (error) {
@@ -451,6 +453,9 @@ export function useRtc(options: UseRtcOptions = {}) {
     switchMicrophone,
     getCurrentDevices,
     reattachLocalVideo,
+    resumeRemoteAudio: () => {
+      rtcServiceRef.current?.resumeRemoteAudio();
+    },
     leaveRTC,
   };
 }

@@ -43,6 +43,7 @@ import {
 import { showError, ErrorCode } from '@/lib/toast';
 import { analytics } from '@/services/analytics';
 import { SEARCH_TIMEOUT, ERROR_DEDUPE_WINDOW, LEAVE_DEBOUNCE_DELAY } from '@/constants';
+import { clearRtcSignalInbox, enqueueRtcSignal } from '@/services/rtc/signal-inbox';
 import type { MatchDataMatched, UserData, ServerMessage } from '@/types/matchmaking';
 
 // ============================================
@@ -141,6 +142,7 @@ export function useMatchmakingMachine(
 
             // Track match in analytics
             analytics.trackMatchFound();
+            clearRtcSignalInbox();
 
             // Transition to matched state
             send({ type: 'MATCHED', matchData: message.data });
@@ -215,8 +217,10 @@ export function useMatchmakingMachine(
 
         case 'pong':
         case 'message':
+          break;
+
         case 'signal':
-          // Handled elsewhere or ignored
+          enqueueRtcSignal(message.data);
           break;
       }
     },
