@@ -381,7 +381,10 @@ export class PeerManager {
     }
   }
 
-  private async setSenderBitrate(sender: RTCRtpSender | undefined, maxBitrate: number): Promise<void> {
+  private async setSenderBitrate(
+    sender: RTCRtpSender | undefined,
+    maxBitrate: number
+  ): Promise<void> {
     if (!sender) return;
     try {
       const params = sender.getParameters();

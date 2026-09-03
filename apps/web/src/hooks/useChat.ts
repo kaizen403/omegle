@@ -113,9 +113,9 @@ export function useChat(options: UseChatOptions) {
   const pendingMessages = useRef<Set<string>>(new Set());
   const messageIdCounter = useRef<number>(0);
   const isInSessionRef = useRef(isInSession);
-  const pendingIncomingRef = useRef<Array<{ type: 'message' | 'typing'; data: Record<string, unknown> }>>(
-    []
-  );
+  const pendingIncomingRef = useRef<
+    Array<{ type: 'message' | 'typing'; data: Record<string, unknown> }>
+  >([]);
 
   useEffect(() => {
     isInSessionRef.current = isInSession;
@@ -187,7 +187,9 @@ export function useChat(options: UseChatOptions) {
       }
 
       if (!isInSessionRef.current) {
-        pendingIncomingRef.current.push(msg as { type: 'message' | 'typing'; data: Record<string, unknown> });
+        pendingIncomingRef.current.push(
+          msg as { type: 'message' | 'typing'; data: Record<string, unknown> }
+        );
         return;
       }
 

@@ -80,11 +80,29 @@ describe('PeerManager', () => {
     const offererMock = createMockPc();
     const answererMock = createMockPc();
 
-    const offerer = new PeerManager(createState(), {}, () => offererMock.pc as unknown as RTCPeerConnection);
-    const answerer = new PeerManager(createState(), {}, () => answererMock.pc as unknown as RTCPeerConnection);
+    const offerer = new PeerManager(
+      createState(),
+      {},
+      () => offererMock.pc as unknown as RTCPeerConnection
+    );
+    const answerer = new PeerManager(
+      createState(),
+      {},
+      () => answererMock.pc as unknown as RTCPeerConnection
+    );
 
-    await offerer.join({ ...joinConfig, isOfferer: true }, (s) => offererSignals.push(s), null, null);
-    await answerer.join({ ...joinConfig, isOfferer: false }, (s) => answererSignals.push(s), null, null);
+    await offerer.join(
+      { ...joinConfig, isOfferer: true },
+      (s) => offererSignals.push(s),
+      null,
+      null
+    );
+    await answerer.join(
+      { ...joinConfig, isOfferer: false },
+      (s) => answererSignals.push(s),
+      null,
+      null
+    );
 
     expect(offerer.getOffersCreated()).toBe(1);
     expect(offererSignals).toContainEqual({ type: 'offer', sdp: 'offer-sdp' });

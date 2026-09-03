@@ -9,7 +9,9 @@ import type { RtcSignal } from './types';
 const pending: RtcSignal[] = [];
 let consumer: ((signal: RtcSignal) => void) | null = null;
 
-export function toRtcSignal(signal: RTCSignal | RtcSignal | Record<string, unknown>): RtcSignal | null {
+export function toRtcSignal(
+  signal: RTCSignal | RtcSignal | Record<string, unknown>
+): RtcSignal | null {
   if (!signal || typeof signal !== 'object') return null;
   const raw = signal as Record<string, unknown>;
 
@@ -33,7 +35,8 @@ export function toRtcSignal(signal: RTCSignal | RtcSignal | Record<string, unkno
 
 export function enqueueRtcSignal(raw: unknown): void {
   const envelope = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-  const payload = envelope && envelope.signal && typeof envelope.signal === 'object' ? envelope.signal : raw;
+  const payload =
+    envelope && envelope.signal && typeof envelope.signal === 'object' ? envelope.signal : raw;
   const parsed = toRtcSignal(payload as RTCSignal);
   if (!parsed) return;
 
