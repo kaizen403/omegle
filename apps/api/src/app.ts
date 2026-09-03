@@ -35,8 +35,8 @@ export class App {
   private turnService!: TurnService;
   private socketIOManager!: SocketIOManager;
   private statusScheduler!: StatusScheduler;
-  // Production starts OFF (admin toggle / 11 PM IST scheduler). Local starts ON so matching works.
-  private systemStatus: boolean = config.nodeEnv !== 'production';
+  // Peak-hours EC2 is the operating window. Start ON; admin can still toggle.
+  private systemStatus: boolean = true;
 
   constructor() {
     this.app = express();
@@ -87,15 +87,7 @@ export class App {
   }
 
   private setupRoutes(): void {
-    // HTTPS enforcement in production
-    if (config.nodeEnv === 'production') {
-      this.app.use((req, res, next) => {
-        if (req.header('x-forwarded-proto') !== 'https') {
-          return res.redirect(301, `https://${req.header('host')}${req.url}`);
-        }
-        next();
-      });
-    }
+    // TLS terminates at Cloudflare. Origin stays HTTP behind Caddy — do not 301 to https.
 
     // Additional security headers
     this.app.use((req, res, next) => {

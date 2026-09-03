@@ -82,3 +82,5 @@ AGENTS.md
 ARCHITECTURE.md
 CLAUDE.md
 .claude/
+.omo/
+.wrangler/

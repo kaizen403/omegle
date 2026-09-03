@@ -1,0 +1,27 @@
+name: Deploy API proxy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/api-proxy/**'
+      - '.github/workflows/api-proxy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api-proxy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Cloudflare Worker
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: infra/api-proxy
+          command: deploy

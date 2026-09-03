@@ -291,7 +291,7 @@ export class MatchHandler {
         const partnerIsBot = botManager.isBot(partnerUid);
         const rtcEnabled = !partnerIsBot;
         const ice = rtcEnabled
-          ? this.turnService.mintIceConfig(uid, 3600)
+          ? await this.turnService.mintIceConfig(uid, 3600)
           : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 
         socket.emit('reconnected', {
@@ -549,10 +549,10 @@ export class MatchHandler {
       const user2RtcEnabled = !user1IsBot;
 
       const ice1 = user1RtcEnabled
-        ? this.turnService.mintIceConfig(user1.uid, 3600)
+        ? await this.turnService.mintIceConfig(user1.uid, 3600)
         : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
       const ice2 = user2RtcEnabled
-        ? this.turnService.mintIceConfig(user2.uid, 3600)
+        ? await this.turnService.mintIceConfig(user2.uid, 3600)
         : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 
       const expiresAt = ice1.expiresAt || ice2.expiresAt;

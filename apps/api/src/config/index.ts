@@ -81,7 +81,7 @@ export const config: Config = {
   stunUrls: parseStunUrls(process.env.STUN_URLS),
   allowedOrigins: parseOrigins(process.env.ALLOWED_ORIGINS, isProduction),
   apiKey: process.env.API_KEY || '',
-  redisHost: process.env.REDIS_HOST || (isProduction ? '10.122.145.19' : 'localhost'),
+  redisHost: process.env.REDIS_HOST || 'localhost',
   redisPort: parseInt(process.env.REDIS_PORT || '6379', 10),
   redisTls: parseBool(process.env.REDIS_TLS),
   databaseUrl: process.env.DATABASE_URL || '',

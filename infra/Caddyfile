@@ -1,0 +1,7 @@
+:80 {
+	encode gzip
+	reverse_proxy api:8080 {
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+		header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+	}
+}

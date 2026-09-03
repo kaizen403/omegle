@@ -1,5 +1,5 @@
 import { mintTurnCredential } from './credentials';
-import { buildIceConfig, isTurnConfigured } from './ice';
+import { buildIceConfig, isCloudflareTurnHost, isTurnConfigured } from './ice';
 
 describe('mintTurnCredential', () => {
   it('matches coturn REST HMAC-SHA1 for a known fixture', () => {
@@ -46,5 +46,18 @@ describe('buildIceConfig', () => {
   it('reports configured only when host and secret are set', () => {
     expect(isTurnConfigured(base)).toBe(true);
     expect(isTurnConfigured({ turnHost: '', turnAuthSecret: 'x' })).toBe(false);
+  });
+
+  it('does not mint coturn HMAC for Cloudflare Realtime TURN', () => {
+    expect(isCloudflareTurnHost('turn.cloudflare.com')).toBe(true);
+    const { iceServers } = buildIceConfig(
+      { ...base, turnHost: 'turn.cloudflare.com', turnAuthSecret: 'key-id:api-token' },
+      42,
+      3600
+    );
+    expect(iceServers.every((server) => !server.credential)).toBe(true);
+    expect(iceServers.some((server) => JSON.stringify(server.urls).includes('turn.cloudflare.com'))).toBe(
+      false
+    );
   });
 });

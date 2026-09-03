@@ -2,91 +2,117 @@ name: Deploy API
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'apps/api/**'
+      - 'infra/**'
       - '.github/workflows/api-deploy.yml'
   workflow_dispatch:
 
+concurrency:
+  group: deploy-api-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
 env:
-  SERVICE_NAME: omeagle-backend
-  PROJECT_ID: omgle-vitap-prod
-  REGION: asia-south1
+  AWS_REGION: ap-south-1
+  NODE_VERSION: '20'
 
 jobs:
-  deploy:
-    name: Build & Deploy
+  test:
+    name: Lint, typecheck, test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm test
+
+  deploy:
+    name: ECR + EC2
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
-      - uses: google-github-actions/auth@v2
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          credentials_json: ${{ secrets.GCP_CRED }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-
-      - name: Set image name
-        id: image
-        run: |
-          echo "name=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/omeagle-backend/omeagle-backend" >> $GITHUB_OUTPUT
-
-      - name: Build Docker image
+      - name: Build and push image
         working-directory: apps/api
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
         run: |
-          docker build -t ${{ steps.image.outputs.name }}:${{ github.sha }} \
-                       -t ${{ steps.image.outputs.name }}:latest .
+          IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          docker build --platform linux/amd64 -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          docker push "${IMAGE}:latest"
+          echo "IMAGE_URI=${IMAGE}:${GITHUB_SHA}" >> "$GITHUB_ENV"
 
-      - name: Push Docker image
+      - name: Upload compose files
         run: |
-          docker push ${{ steps.image.outputs.name }}:${{ github.sha }}
-          docker push ${{ steps.image.outputs.name }}:latest
+          aws s3 cp infra/compose.yml "s3://${{ vars.OPS_BUCKET }}/compose.yml"
+          aws s3 cp infra/Caddyfile "s3://${{ vars.OPS_BUCKET }}/Caddyfile"
+          aws s3 cp infra/deploy.sh "s3://${{ vars.OPS_BUCKET }}/deploy.sh"
 
-      - name: Deploy to Cloud Run
+      - name: Record image and start instance
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ steps.image.outputs.name }}:${{ github.sha }} \
-            --region ${{ env.REGION }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 8080 \
-            --memory 512Mi \
-            --cpu 1 \
-            --min-instances 0 \
-            --max-instances 10 \
-            --concurrency 80 \
-            --timeout 3600 \
-            --execution-environment gen2 \
-            --cpu-boost \
-            --session-affinity \
-            --vpc-connector omegle-connector \
-            --vpc-egress private-ranges-only \
-            --set-env-vars="NODE_ENV=production,REDIS_TLS=true" \
-            --set-secrets="TURN_HOST=turn-host:latest,TURN_AUTH_SECRET=turn-auth-secret:latest,TURN_PORT=turn-port:latest,API_KEY=api-key:latest,REDIS_HOST=redis-host:latest,REDIS_PORT=redis-port:latest,DATABASE_URL=database-url:latest,BETTER_AUTH_SECRET=better-auth-secret:latest,BETTER_AUTH_URL=better-auth-url:latest,TURNSTILE_SECRET_KEY=turnstile-secret-key:latest,AWS_REGION=aws-region:latest,S3_BUCKET=s3-bucket:latest,S3_PUBLIC_BASE_URL=s3-public-base-url:latest,ALLOWED_ORIGINS=allowed-origins:latest,JWT_SECRET=jwt-secret:latest,BIGDATACLOUD_API_KEY_1=bigdatacloud-api-key-1:latest,BIGDATACLOUD_API_KEY_2=bigdatacloud-api-key-2:latest,BIGDATACLOUD_API_KEY_3=bigdatacloud-api-key-3:latest,BIGDATACLOUD_API_KEY_4=bigdatacloud-api-key-4:latest,BIGDATACLOUD_API_KEY_5=bigdatacloud-api-key-5:latest"
+          aws ssm put-parameter \
+            --name /omegle/prod/IMAGE_URI \
+            --type String \
+            --value "${IMAGE_URI}" \
+            --overwrite
+          STATE="$(aws ec2 describe-instances \
+            --instance-ids "${{ vars.EC2_INSTANCE_ID }}" \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)"
+          if [[ "$STATE" == "stopped" ]]; then
+            aws ec2 start-instances --instance-ids "${{ vars.EC2_INSTANCE_ID }}"
+          fi
+          aws ec2 wait instance-running --instance-ids "${{ vars.EC2_INSTANCE_ID }}"
+          aws ec2 wait instance-status-ok --instance-ids "${{ vars.EC2_INSTANCE_ID }}"
 
-      - name: Get Service URL
+      - name: Deploy with SSM
         run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
-            --region ${{ env.REGION }} \
-            --format 'value(status.url)')
-          echo "Deployed to: $SERVICE_URL"
-          echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
-
-      - name: Cleanup old revisions (keep last 5)
-        run: |
-          REVISIONS=$(gcloud run revisions list \
-            --service=${{ env.SERVICE_NAME }} \
-            --region=${{ env.REGION }} \
-            --format="value(metadata.name)" \
-            --sort-by="~metadata.creationTimestamp" 2>/dev/null || echo "")
-
-          TOTAL=$(echo "$REVISIONS" | wc -l)
-          if [ "$TOTAL" -gt 5 ]; then
-            echo "$REVISIONS" | tail -n $((TOTAL - 5)) | while read -r rev; do
-              gcloud run revisions delete "$rev" --region=${{ env.REGION }} --quiet 2>/dev/null || true
-            done
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "${{ vars.EC2_INSTANCE_ID }}" \
+            --document-name AWS-RunShellScript \
+            --comment "omegle-api ${GITHUB_SHA}" \
+            --timeout-seconds 600 \
+            --parameters 'commands=["set -euo pipefail","aws s3 cp s3://'"${{ vars.OPS_BUCKET }}"'/deploy.sh /opt/omegle/deploy.sh","chmod +x /opt/omegle/deploy.sh","AWS_REGION='"${AWS_REGION}"' OPS_BUCKET='"${{ vars.OPS_BUCKET }}"' /opt/omegle/deploy.sh"]' \
+            --query 'Command.CommandId' \
+            --output text)"
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ vars.EC2_INSTANCE_ID }}"
+          STATUS="$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ vars.EC2_INSTANCE_ID }}" \
+            --query 'Status' \
+            --output text)"
+          if [[ "$STATUS" != "Success" ]]; then
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "${{ vars.EC2_INSTANCE_ID }}" \
+              --query 'StandardErrorContent' \
+              --output text
+            exit 1
           fi

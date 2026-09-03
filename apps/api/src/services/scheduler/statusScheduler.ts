@@ -1,6 +1,6 @@
 /**
  * Status Scheduler Service
- * Automatically turns system ON at 11 PM IST and OFF at 3 AM IST every day
+ * Peak window: ON at 3 PM IST, OFF at 11 PM IST (matches EventBridge EC2 hours).
  */
 
 import { logger } from '../../utils/logger';
@@ -18,7 +18,7 @@ export class StatusScheduler {
   constructor(statusSetter: (status: boolean) => void, broadcastStatus: (status: boolean) => void) {
     this.statusSetter = statusSetter;
     this.broadcastStatus = broadcastStatus;
-    logger.info('[SCHEDULER] Initialized - Auto ON at 11 PM IST, OFF at 3 AM IST');
+    logger.info('[SCHEDULER] Initialized - Auto ON at 3 PM IST, OFF at 11 PM IST');
   }
 
   private getCurrentISTHour(): number {
@@ -35,17 +35,15 @@ export class StatusScheduler {
       return;
     }
 
-    // 11 PM IST (23:00) - Turn ON
-    if (hour === 23) {
-      logger.info('[SCHEDULER] 11 PM IST - Turning system ON');
+    if (hour === 15) {
+      logger.info('[SCHEDULER] 3 PM IST - Turning system ON');
       this.statusSetter(true);
       this.broadcastStatus(true);
       this.lastTriggeredHour = hour;
     }
 
-    // 3 AM IST (03:00) - Turn OFF
-    if (hour === 3) {
-      logger.info('[SCHEDULER] 3 AM IST - Turning system OFF');
+    if (hour === 23) {
+      logger.info('[SCHEDULER] 11 PM IST - Turning system OFF');
       this.statusSetter(false);
       this.broadcastStatus(false);
       this.lastTriggeredHour = hour;

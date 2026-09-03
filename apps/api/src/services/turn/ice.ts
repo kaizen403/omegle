@@ -13,9 +13,15 @@ function parseStunList(stunUrls: string[]): string[] {
   return stunUrls.map((url) => url.trim()).filter((url) => url.length > 0);
 }
 
+export function isCloudflareTurnHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === 'turn.cloudflare.com' || normalized.endsWith('.turn.cloudflare.com');
+}
+
 /**
  * Build RTCIceServer list: public STUN, optional coturn STUN, time-limited TURN.
  * STUN-only when host or secret is missing (local without coturn).
+ * Cloudflare Realtime TURN is minted separately — coturn HMAC is invalid there.
  */
 export function buildIceConfig(options: TurnIceOptions, uid: number, ttlSeconds?: number): IceConfig {
   const expiresAt = turnExpiryUnix(ttlSeconds ?? DEFAULT_TURN_TTL_SECONDS);
@@ -28,8 +34,9 @@ export function buildIceConfig(options: TurnIceOptions, uid: number, ttlSeconds?
 
   const host = options.turnHost.trim();
   const port = options.turnPort || 3478;
+  const cloudflareTurn = isCloudflareTurnHost(host);
 
-  if (host) {
+  if (host && !cloudflareTurn) {
     const coturnStun = `stun:${host}:${port}`;
     const alreadyListed = stunUrls.includes(coturnStun);
     if (!alreadyListed) {
@@ -37,7 +44,7 @@ export function buildIceConfig(options: TurnIceOptions, uid: number, ttlSeconds?
     }
   }
 
-  if (host && options.turnAuthSecret) {
+  if (host && options.turnAuthSecret && !cloudflareTurn) {
     const { username, credential } = mintTurnCredential(options.turnAuthSecret, uid, expiresAt);
     const turnUrls = [
       `turn:${host}:${port}?transport=udp`,
