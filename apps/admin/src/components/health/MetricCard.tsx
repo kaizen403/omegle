@@ -16,10 +16,8 @@ export default function MetricCard({
   icon,
 }: MetricCardProps) {
   const statusColors = {
-    healthy:
-      "border-green-200 bg-gradient-to-br from-green-50 to-white",
-    warning:
-      "border-amber-200 bg-gradient-to-br from-amber-50 to-white",
+    healthy: "border-green-200 bg-gradient-to-br from-green-50 to-white",
+    warning: "border-amber-200 bg-gradient-to-br from-amber-50 to-white",
     error: "border-red-200 bg-gradient-to-br from-red-50 to-white",
   };
 

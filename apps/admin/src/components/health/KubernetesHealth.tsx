@@ -62,7 +62,9 @@ export function KubernetesHealth({ systemHealth }: KubernetesHealthProps) {
 
             <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
               <div className="text-slate-500 text-sm mb-2">Pod IP</div>
-              <div className="text-sm font-mono text-slate-600">{k8s.podIP}</div>
+              <div className="text-sm font-mono text-slate-600">
+                {k8s.podIP}
+              </div>
             </div>
           </div>
         </div>

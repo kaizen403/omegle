@@ -116,7 +116,10 @@ export function useChat(options: UseChatOptions) {
   const pendingIncomingRef = useRef<Array<{ type: 'message' | 'typing'; data: Record<string, unknown> }>>(
     []
   );
-  isInSessionRef.current = isInSession;
+
+  useEffect(() => {
+    isInSessionRef.current = isInSession;
+  }, [isInSession]);
 
   // File upload limits: max 10MB per file, max 50MB total per session
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file

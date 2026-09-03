@@ -36,7 +36,9 @@ export default function PageHeader({
         <div className="flex justify-between items-center gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <SidebarTrigger className="text-slate-500 hover:text-[#0084d1] flex-shrink-0" />
-            <h1 className="text-lg sm:text-2xl font-bold truncate text-slate-900">{title}</h1>
+            <h1 className="text-lg sm:text-2xl font-bold truncate text-slate-900">
+              {title}
+            </h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {showConnectionStatus && (

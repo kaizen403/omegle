@@ -32,7 +32,9 @@ export default function HomeLayout({
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#e8f4f8]">
         <div className="text-center">
           <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-solid border-[#0084d1] border-r-transparent"></div>
-          <p className="mt-4 text-slate-500 text-lg">Verifying credentials...</p>
+          <p className="mt-4 text-slate-500 text-lg">
+            Verifying credentials...
+          </p>
         </div>
       </div>
     );

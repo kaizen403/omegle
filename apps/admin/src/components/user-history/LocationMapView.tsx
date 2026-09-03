@@ -75,7 +75,9 @@ export default function LocationMapView({
             <div className="text-slate-500 text-xs uppercase mb-1">
               📍 Coordinates
             </div>
-            <div className="text-slate-900 font-mono text-sm">{coordinates}</div>
+            <div className="text-slate-900 font-mono text-sm">
+              {coordinates}
+            </div>
           </div>
           <div>
             <div className="text-slate-500 text-xs uppercase mb-1">

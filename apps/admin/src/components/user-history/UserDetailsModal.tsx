@@ -265,7 +265,9 @@ function NetworkInfoSection({
         </div>
         {network.carriers && network.carriers.length > 0 && (
           <div className="bg-white rounded-lg p-3 border border-sky-200">
-            <div className="text-slate-500 text-xs uppercase mb-2">Carriers</div>
+            <div className="text-slate-500 text-xs uppercase mb-2">
+              Carriers
+            </div>
             <div className="space-y-2">
               {network.carriers.map((carrier, idx: number) => (
                 <div key={idx} className="text-sm text-slate-800">
