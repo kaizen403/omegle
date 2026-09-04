@@ -7,7 +7,7 @@ import { RoomService } from './services/room';
 import { TurnService } from './services/turn';
 import { SocketIOManager } from './handlers/socketio';
 import { StatusScheduler } from './services/scheduler/statusScheduler';
-import { config } from './config';
+import { config, configWarnings } from './config';
 import { logger } from './utils/logger';
 import { register, collectDefaultMetrics } from 'prom-client';
 import { corsMiddleware } from './middleware/cors';
@@ -300,6 +300,9 @@ export class App {
             current: this.socketIOManager ? this.socketIOManager.getConnectionCount() : 0,
           },
           queue: { size: queueSize, activeRooms },
+          // Degraded-but-running misconfigurations, so an operator can see them without
+          // trawling boot logs.
+          configWarnings,
           node: { version: process.version, platform: process.platform },
         });
       } catch (error) {

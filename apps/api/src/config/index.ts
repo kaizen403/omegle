@@ -184,7 +184,7 @@ export const config: Config = {
 const requiredFields = ['apiKey', 'redisHost', 'jwt.secret', 'databaseUrl', 'betterAuthSecret'];
 
 if (isProduction) {
-  requiredFields.push('turnHost', 'turnAuthSecret');
+  requiredFields.push('turnHost');
 }
 
 const missingFields: string[] = [];
@@ -215,14 +215,24 @@ const WEAK_SECRETS = new Set([
   'changeme',
 ]);
 
+/**
+ * Startup problems that must NOT stop the service.
+ *
+ * Refusing to boot is right when a misconfiguration makes the service unsafe, and wrong when
+ * it merely degrades it — deploy.sh replaces the running container before health-checking it,
+ * so a fatal config error takes the whole site down instead of leaving the previous build
+ * serving. These are loud and repeated, but they do not stop the process.
+ */
+export const configWarnings: string[] = [];
+
 if (isProduction) {
-  const secretChecks: Array<{ field: string; value: string; minLength: number }> = [
-    { field: 'API_KEY', value: config.apiKey, minLength: 24 },
+  // Session integrity. Forging either of these compromises admin auth outright: stays fatal.
+  const fatalSecrets: Array<{ field: string; value: string; minLength: number }> = [
     { field: 'JWT_SECRET', value: config.jwt.secret, minLength: 32 },
     { field: 'BETTER_AUTH_SECRET', value: config.betterAuthSecret, minLength: 32 },
   ];
 
-  for (const { field, value, minLength } of secretChecks) {
+  for (const { field, value, minLength } of fatalSecrets) {
     if (WEAK_SECRETS.has(value)) {
       missingFields.push(`${field} (still set to a placeholder value)`);
     } else if (value.length < minLength) {
@@ -230,9 +240,19 @@ if (isProduction) {
     }
   }
 
+  // API_KEY ships to browsers as NEXT_PUBLIC_API_KEY, so it identifies nobody and a length
+  // rule on it is theatre. Worth flagging; never worth refusing to start.
+  if (WEAK_SECRETS.has(config.apiKey)) {
+    configWarnings.push('API_KEY is still a placeholder value.');
+  } else if (config.apiKey.length < 24) {
+    configWarnings.push(`API_KEY is only ${config.apiKey.length} characters (recommend 24+).`);
+  }
+
+  // Admin sign-in still requires a password and TOTP without this. Losing the captcha weakens
+  // brute-force resistance; it does not open the door.
   if (!config.turnstileSecretKey) {
-    missingFields.push(
-      'TURNSTILE_SECRET_KEY (admin sign-in captcha cannot be disabled in production)'
+    configWarnings.push(
+      'TURNSTILE_SECRET_KEY is unset: admin sign-in has no captcha. Password + TOTP still apply.'
     );
   }
 
@@ -249,13 +269,13 @@ if (isProduction) {
   if (isCloudflareTurn) {
     const separator = turnSecret.indexOf(':');
     if (separator <= 0 || separator === turnSecret.length - 1) {
-      missingFields.push(
-        'TURN_AUTH_SECRET (Cloudflare TURN requires "{keyId}:{apiToken}"; the current value ' +
-          'would silently disable TURN and break video for users behind NAT)'
+      configWarnings.push(
+        'TURN_AUTH_SECRET is not "{keyId}:{apiToken}" — TURN is DISABLED and video will not ' +
+          'work for users behind CGNAT (most mobile networks).'
       );
     }
   } else if (turnSecret.length < 16) {
-    missingFields.push('TURN_AUTH_SECRET (coturn shared secret must be at least 16 characters)');
+    configWarnings.push('TURN_AUTH_SECRET looks too short for a coturn shared secret.');
   }
 
   if (!process.env.TRUSTED_PROXIES) {
@@ -290,4 +310,10 @@ if (missingFields.length > 0) {
   console.error('Shutting down...\n');
 
   process.exit(1);
+}
+
+if (configWarnings.length > 0) {
+  console.error('\n=== CONFIGURATION WARNINGS (service is starting anyway) ===');
+  configWarnings.forEach((warning) => console.error(`  ! ${warning}`));
+  console.error('==========================================================\n');
 }
