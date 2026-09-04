@@ -82,9 +82,10 @@ const VideoDisplayComponent = ({
     [partnerGender, userGender, isConnected, isLocalVideo]
   );
 
-  // For local video: show placeholder only when camera is off
-  // For remote video: show placeholder when not connected OR when partner's camera is off
-  const showPlaceholder = id === 'local-video' ? !isCameraOn : !isConnected || !isCameraOn;
+  // Local: hide the preview when this user turned the camera off.
+  // Remote: keep the <video> visible after match. WebRTC tracks start muted,
+  // so a "camera off" flag must not cover a live feed with the avatar overlay.
+  const showPlaceholder = isLocalVideo ? !isCameraOn : !isConnected;
 
   return (
     <div

@@ -11,7 +11,6 @@ interface ChatWindowProps {
   isConnected: boolean;
   isStrangerTyping?: boolean;
   onSendMessage?: (message: string) => void;
-  onFileUpload?: (file: File, caption?: string) => Promise<void>;
   onTyping?: (isTyping: boolean) => void;
   connectionState?: ConnectionState;
   messages?: MessageData[];
@@ -22,7 +21,6 @@ const ChatWindowComponent = ({
   isConnected,
   isStrangerTyping = false,
   onSendMessage,
-  onFileUpload,
   onTyping,
   messages = [],
   partnerName,
@@ -41,7 +39,6 @@ const ChatWindowComponent = ({
       <ChatInput
         isConnected={isConnected}
         onSend={onSendMessage}
-        onFileUpload={onFileUpload}
         onTyping={onTyping}
       />
     </div>

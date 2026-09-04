@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@heroui/button';
 import { JoinButton } from './JoinButton';
 import { useUser } from '@/hooks';
-import { ONLINE_STATUS_CHECK_INTERVAL } from '@/constants';
+import { BACKEND_CHECK_TIMEOUT, ONLINE_STATUS_CHECK_INTERVAL } from '@/constants';
 
 export const WelcomeForm = () => {
   const { name, setName, gender, setGender } = useUser();
@@ -15,7 +15,6 @@ export const WelcomeForm = () => {
   const [serviceAvailable, setServiceAvailable] = useState(true);
   const [serviceMessage, setServiceMessage] = useState('');
   const [isCheckingService, setIsCheckingService] = useState(false);
-  const [isCheckingOnlineStatus, setIsCheckingOnlineStatus] = useState(true);
   const [nameError, setNameError] = useState('');
   const router = useRouter();
 
@@ -39,19 +38,20 @@ export const WelcomeForm = () => {
 
   useEffect(() => {
     const checkOnlineStatus = async () => {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+      if (!backendUrl) {
+        setIsOnline(true);
+        return;
+      }
+
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-        if (backendUrl) {
-          const res = await fetch(`${backendUrl}/status`);
-          const data = await res.json();
-          setIsOnline(data.status);
-        } else {
-          setIsOnline(true);
-        }
+        const res = await fetch(`${backendUrl}/status`, {
+          signal: AbortSignal.timeout(BACKEND_CHECK_TIMEOUT),
+        });
+        const data = (await res.json()) as { status?: boolean };
+        setIsOnline(data.status === true);
       } catch {
         setIsOnline(false);
-      } finally {
-        setIsCheckingOnlineStatus(false);
       }
     };
 
@@ -187,7 +187,6 @@ export const WelcomeForm = () => {
               onClick={handleJoin}
               disabled={!isNameValid || isLoading}
               isChecking={isCheckingService}
-              isCheckingOnlineStatus={isCheckingOnlineStatus}
             />
           </div>
           <p className="text-center text-xs text-white/80 pt-1 leading-relaxed">

@@ -45,7 +45,6 @@ import {
 } from '@/constants';
 import type { SocketIOService } from '@/services/socket';
 import { notificationSound } from '@/services/notification';
-import { FileUploadService } from '@/services/fileUpload';
 
 /**
  * Structure of a chat message
@@ -62,10 +61,6 @@ export interface MessageData {
   senderId: string;
   senderName: string;
   timestamp: number;
-  fileUrl?: string;
-  fileName?: string;
-  mimeType?: string;
-  fileSize?: number;
 }
 
 /**
@@ -79,8 +74,6 @@ export interface MessageData {
 interface UseChatOptions {
   ws: SocketIOService | null;
   isInSession: boolean;
-  roomId?: string; // Current room ID for file uploads
-  uid?: number; // Current user ID for file uploads
   onMessageReceived?: (message: MessageData) => void;
   onTypingIndicator?: (isTyping: boolean) => void;
   isChatOpen?: boolean; // For mobile: whether chat section is currently visible
@@ -99,8 +92,6 @@ export function useChat(options: UseChatOptions) {
   const {
     ws,
     isInSession,
-    roomId,
-    uid,
     onMessageReceived,
     onTypingIndicator,
     isChatOpen = true,
@@ -108,7 +99,6 @@ export function useChat(options: UseChatOptions) {
 
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [isPartnerTypingInternal, setIsPartnerTypingInternal] = useState(false);
-  const [totalUploadedSize, setTotalUploadedSize] = useState(0);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingMessages = useRef<Set<string>>(new Set());
   const messageIdCounter = useRef<number>(0);
@@ -120,10 +110,6 @@ export function useChat(options: UseChatOptions) {
   useEffect(() => {
     isInSessionRef.current = isInSession;
   }, [isInSession]);
-
-  // File upload limits: max 10MB per file, max 50MB total per session
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
-  const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total per session
 
   // Derive actual typing state - only true if in session AND partner is typing
   const isPartnerTyping = isInSession && ws && isPartnerTypingInternal;
@@ -143,10 +129,6 @@ export function useChat(options: UseChatOptions) {
           senderId: String(data.from),
           senderName: 'Stranger',
           timestamp: Number(data.timestamp) || Date.now(),
-          fileUrl: typeof data.fileUrl === 'string' ? data.fileUrl : undefined,
-          fileName: typeof data.fileName === 'string' ? data.fileName : undefined,
-          mimeType: typeof data.mimeType === 'string' ? data.mimeType : undefined,
-          fileSize: typeof data.fileSize === 'number' ? data.fileSize : undefined,
         };
 
         setMessages((prev) => [...prev, messageData]);
@@ -289,75 +271,9 @@ export function useChat(options: UseChatOptions) {
     [ws, isInSession]
   );
 
-  const sendFileMessage = useCallback(
-    async (file: File, caption?: string) => {
-      if (!ws || !isInSession || !roomId || !uid) {
-        throw new Error('Cannot send file: not in active session');
-      }
-
-      // Validate file size - max 10MB per file
-      if (file.size > MAX_FILE_SIZE) {
-        throw new Error('File size exceeds 10MB limit');
-      }
-
-      // Validate total uploaded size - max 50MB per session
-      if (totalUploadedSize + file.size > MAX_TOTAL_SIZE) {
-        const remainingMB = ((MAX_TOTAL_SIZE - totalUploadedSize) / (1024 * 1024)).toFixed(1);
-        throw new Error(
-          `Upload limit reached. You can upload ${remainingMB}MB more in this session`
-        );
-      }
-
-      try {
-        // Upload file to backend
-        const uploadResponse = await FileUploadService.uploadFile(file, roomId, uid);
-
-        const messageId = `msg-${Date.now()}-${messageIdCounter.current++}`;
-
-        // Create optimistic message for UI
-        const timestamp = Date.now();
-        const messageData: MessageData = {
-          id: messageId,
-          text: caption || '',
-          senderId: 'self',
-          senderName: 'You',
-          timestamp,
-          fileUrl: uploadResponse.fileUrl,
-          fileName: uploadResponse.fileName,
-          mimeType: uploadResponse.mimeType,
-          fileSize: uploadResponse.fileSize,
-        };
-
-        // Add to UI immediately
-        setMessages((prev) => [...prev, messageData]);
-
-        // Update total uploaded size
-        setTotalUploadedSize((prev) => prev + file.size);
-
-        // Send via WebSocket with file metadata
-        ws.send({
-          type: 'file_message',
-          data: {
-            text: caption || '',
-            fileUrl: uploadResponse.fileUrl,
-            fileName: uploadResponse.fileName,
-            mimeType: uploadResponse.mimeType,
-            fileSize: uploadResponse.fileSize,
-            filePath: uploadResponse.filePath, // For backend cleanup
-          },
-        });
-      } catch (error) {
-        console.error('File upload failed:', error);
-        throw error;
-      }
-    },
-    [ws, isInSession, roomId, uid, totalUploadedSize, MAX_FILE_SIZE, MAX_TOTAL_SIZE]
-  );
-
   const clearMessages = useCallback(() => {
     setMessages([]);
     setIsPartnerTypingInternal(false);
-    setTotalUploadedSize(0);
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
@@ -376,10 +292,7 @@ export function useChat(options: UseChatOptions) {
     messages,
     isPartnerTyping,
     sendMessage,
-    sendFileMessage,
     sendTypingIndicator,
     clearMessages,
-    totalUploadedSize,
-    maxTotalSize: MAX_TOTAL_SIZE,
   };
 }

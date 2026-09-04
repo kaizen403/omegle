@@ -129,11 +129,19 @@ export class PeerManager {
   }
 
   async replaceVideoTrack(track: MediaStreamTrack | null): Promise<void> {
+    const hadTrack = Boolean(this.videoTransceiver?.sender.track);
     await this.videoTransceiver?.sender.replaceTrack(track);
+    if (track && !hadTrack) {
+      await this.renegotiateAfterAddingTrack();
+    }
   }
 
   async replaceAudioTrack(track: MediaStreamTrack | null): Promise<void> {
+    const hadTrack = Boolean(this.audioTransceiver?.sender.track);
     await this.audioTransceiver?.sender.replaceTrack(track);
+    if (track && !hadTrack) {
+      await this.renegotiateAfterAddingTrack();
+    }
   }
 
   resumeRemoteAudio(): void {
@@ -225,7 +233,9 @@ export class PeerManager {
       }
 
       const publishIfLive = () => {
-        if (track.readyState === 'ended' || track.muted) {
+        // Remote tracks start muted until the first RTP packet. Treating
+        // `muted` as unpublished hides a live video behind the avatar overlay.
+        if (track.readyState === 'ended') {
           this.callbacks.onTrackUnsubscribed?.(participant, kind);
           return;
         }
@@ -237,7 +247,6 @@ export class PeerManager {
         if (kind === 'audio') this.resumeRemoteAudio();
         publishIfLive();
       });
-      track.addEventListener('mute', publishIfLive);
       track.addEventListener('ended', () => {
         this.callbacks.onTrackUnsubscribed?.(participant, kind);
       });
@@ -260,6 +269,11 @@ export class PeerManager {
         this.callbacks.onParticipantDisconnected?.({ identity: this.state.partnerIdentity });
       }
     };
+  }
+
+  private async renegotiateAfterAddingTrack(): Promise<void> {
+    if (!this.state.isOfferer) return;
+    await this.createAndSendOffer();
   }
 
   private async createAndSendOffer(iceRestart = false): Promise<void> {
@@ -323,6 +337,7 @@ export class PeerManager {
     if (!this.audioElement) {
       this.audioElement = document.createElement('audio');
       this.audioElement.autoplay = true;
+      this.audioElement.setAttribute('playsinline', 'true');
       this.audioElement.style.display = 'none';
       document.body.appendChild(this.audioElement);
     }

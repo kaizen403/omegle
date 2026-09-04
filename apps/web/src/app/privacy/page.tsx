@@ -77,7 +77,7 @@ export default function PrivacyPage() {
               principles regarding your data and anonymity.
             </p>
             <div className="mt-6 flex items-center gap-2 text-sm text-slate-400 font-medium">
-              <span>Last updated: November 29, 2025</span>
+              <span>Last updated: September 4, 2026</span>
             </div>
           </header>
 
@@ -91,14 +91,26 @@ export default function PrivacyPage() {
               </p>
               <ul className="list-disc pl-6 space-y-2 text-slate-600">
                 <li>
-                  <strong>Log Data & IP Addresses:</strong> We collect your IP address and browser
-                  information. This is strictly used for moderation, banning users who violate our
-                  terms (e.g., nudity, harassment), and preventing abuse.
+                  <strong>Log Data &amp; IP Addresses:</strong> We collect your IP address and
+                  browser user agent when you join. These are stored with an anonymous session id
+                  in our visit log (by Indian Standard Time date) so we can investigate abuse,
+                  enforce bans, and cooperate with authorities when required.
                 </li>
                 <li>
-                  <strong>Chat Data:</strong> Chats are peer-to-peer where possible. We do not store
-                  chat logs on our servers after the chat session has ended, except for automated
-                  moderation snapshots to detect illegal content.
+                  <strong>Approximate location:</strong> We look up your IP with a geolocation
+                  provider (BigDataCloud) to record a city/region for the same abuse and
+                  moderation purposes. We do not use this for advertising.
+                </li>
+                <li>
+                  <strong>Chat Data:</strong> Video and audio are peer-to-peer. We do not keep a
+                  durable chat archive after a session ends. While a room is live, authorized
+                  administrators can monitor it for safety; those actions are written to an
+                  internal audit log.
+                </li>
+                <li>
+                  <strong>Product analytics:</strong> We record anonymized product events (for
+                  example, joins and errors) to keep the service working. We do not sell this
+                  data and we do not show ads.
                 </li>
               </ul>
             </section>
@@ -123,10 +135,9 @@ export default function PrivacyPage() {
             <section className="mb-12">
               <h2 className="text-2xl font-bold mb-4">3. How We Use Information</h2>
               <p className="text-slate-600 leading-relaxed">
-                We use the information we collect primarily to provide, maintain, protect, and
-                improve our Service, to develop new ones, and to protect Omegle and our users. We
-                may also use this information to offer you tailored content – like giving you more
-                relevant search results and ads.
+                We use the information we collect to run matchmaking, keep the service available,
+                investigate abuse, and protect users. We do not use it for advertising or sell it
+                to third parties.
               </p>
             </section>
 

@@ -197,6 +197,37 @@ export function useRtc(options: UseRtcOptions = {}) {
     [isCameraOn, isMicOn, onRemoteVideoReady, onRemoteUserLeft]
   );
 
+  const resumeRemoteAudio = useCallback(() => {
+    rtcServiceRef.current?.resumeRemoteAudio();
+  }, []);
+
+  const prepareLocalMedia = useCallback(async () => {
+    if (!isCameraOn && !isMicOn) {
+      return;
+    }
+
+    try {
+      if (!rtcServiceRef.current) {
+        const { RtcService } = await import('@/services/rtc');
+        rtcServiceRef.current = new RtcService();
+      }
+
+      await rtcServiceRef.current.createLocalPreview(isCameraOn, isMicOn);
+      hasPreviewRef.current = true;
+
+      const devices = rtcServiceRef.current.getCurrentDevices();
+      if (devices.cameraId) setCurrentCameraId(devices.cameraId);
+      if (devices.micId) setCurrentMicId(devices.micId);
+
+      if (isCameraOn) {
+        rtcServiceRef.current.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
+      }
+      rtcServiceRef.current.resumeRemoteAudio();
+    } catch {
+      // Permission denied — text chat still works after match
+    }
+  }, [isCameraOn, isMicOn]);
+
   const isTogglingCameraRef = useRef(false);
 
   const toggleCamera = useCallback(async () => {
@@ -447,15 +478,14 @@ export function useRtc(options: UseRtcOptions = {}) {
     localNetworkQuality,
     remoteNetworkQuality,
     initializeRTC,
+    prepareLocalMedia,
     toggleCamera,
     toggleMicrophone,
     switchCamera,
     switchMicrophone,
     getCurrentDevices,
     reattachLocalVideo,
-    resumeRemoteAudio: () => {
-      rtcServiceRef.current?.resumeRemoteAudio();
-    },
+    resumeRemoteAudio,
     leaveRTC,
   };
 }

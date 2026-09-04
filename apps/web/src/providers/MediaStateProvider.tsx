@@ -14,7 +14,13 @@
 
 'use client';
 
-import React, { createContext, useState, useMemo, type ReactNode } from 'react';
+import React, { createContext, useState, useMemo, useCallback, type ReactNode } from 'react';
+import {
+  getPersistedCameraState,
+  getPersistedMicState,
+  persistCameraState,
+  persistMicState,
+} from '@/lib/media';
 
 export interface MediaStateContextType {
   /** Whether the camera is currently on */
@@ -34,10 +40,19 @@ interface MediaStateProviderProps {
 }
 
 export function MediaStateProvider({ children }: MediaStateProviderProps) {
-  const [isCameraOn, setCameraOn] = useState(false);
-  const [isMicOn, setMicOn] = useState(false);
+  const [isCameraOn, setCameraOnState] = useState(getPersistedCameraState);
+  const [isMicOn, setMicOnState] = useState(getPersistedMicState);
 
-  // Memoize context value to prevent unnecessary re-renders
+  const setCameraOn = useCallback((isOn: boolean) => {
+    setCameraOnState(isOn);
+    persistCameraState(isOn);
+  }, []);
+
+  const setMicOn = useCallback((isOn: boolean) => {
+    setMicOnState(isOn);
+    persistMicState(isOn);
+  }, []);
+
   const contextValue = useMemo(
     () => ({
       isCameraOn,
@@ -45,7 +60,7 @@ export function MediaStateProvider({ children }: MediaStateProviderProps) {
       setCameraOn,
       setMicOn,
     }),
-    [isCameraOn, isMicOn]
+    [isCameraOn, isMicOn, setCameraOn, setMicOn]
   );
 
   return <MediaStateContext.Provider value={contextValue}>{children}</MediaStateContext.Provider>;

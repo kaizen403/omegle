@@ -26,13 +26,13 @@ const STORAGE_KEYS = {
 } as const;
 
 /** Default states for camera and microphone */
-const DEFAULT_CAMERA_STATE = false;
-const DEFAULT_MIC_STATE = false;
+const DEFAULT_CAMERA_STATE = true;
+const DEFAULT_MIC_STATE = true;
 
 /**
  * Get persisted camera state from session storage
  *
- * @returns The persisted camera state, or default (false) if not set
+ * @returns The persisted camera state, or default (true) if not set
  *
  * @example
  * ```tsx
@@ -56,7 +56,7 @@ export function getPersistedCameraState(): boolean {
 /**
  * Get persisted microphone state from session storage
  *
- * @returns The persisted microphone state, or default (false) if not set
+ * @returns The persisted microphone state, or default (true) if not set
  *
  * @example
  * ```tsx

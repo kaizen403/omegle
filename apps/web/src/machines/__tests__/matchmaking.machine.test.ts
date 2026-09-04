@@ -79,11 +79,11 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
 
       const snapshot = actor.getSnapshot();
       expect(snapshot.value).toBe('waiting');
-      expect(snapshot.context.userData).toEqual({ uid: 1, name: 'Test', gender: 'male' });
+      expect(snapshot.context.userData).toEqual({ name: 'Test', gender: 'male' });
       expect(snapshot.context.searchStartTime).not.toBeNull();
       actor.stop();
     });
@@ -94,7 +94,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'MATCHED', matchData: mockMatchData });
 
       const snapshot = actor.getSnapshot();
@@ -110,7 +110,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'CANCEL_SEARCH' });
 
       expect(actor.getSnapshot().value).toBe('connected');
@@ -123,7 +123,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'SEARCH_TIMEOUT' });
 
       const snapshot = actor.getSnapshot();
@@ -140,7 +140,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'MATCHED', matchData: mockMatchData });
       actor.send({ type: 'LEAVE_ROOM' });
 
@@ -156,7 +156,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'MATCHED', matchData: mockMatchData });
       actor.send({ type: 'PARTNER_LEFT' });
 
@@ -186,7 +186,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'MATCHED', matchData: mockMatchData });
       actor.send({ type: 'DISCONNECT' });
 
@@ -204,7 +204,7 @@ describe('Matchmaking State Machine', () => {
 
       actor.send({ type: 'CONNECT' });
       actor.send({ type: 'CONNECTED' });
-      actor.send({ type: 'JOIN', userData: { uid: 1, name: 'Test', gender: 'male' } });
+      actor.send({ type: 'JOIN', userData: { name: 'Test', gender: 'male' } });
       actor.send({ type: 'CONNECTION_LOST' });
 
       const snapshot = actor.getSnapshot();

@@ -4,8 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { analytics } from '@/services/analytics';
 import { EMOJI_PICKER_HIDE_DELAY, MAX_MESSAGE_LENGTH } from '@/constants';
-import { FileUpload, FilePreview } from './FileUpload';
-import { showError } from '@/lib';
 
 // Dynamically import emoji picker to avoid SSR issues
 const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
@@ -13,66 +11,19 @@ const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
 interface ChatInputProps {
   isConnected: boolean;
   onSend?: (message: string) => void;
-  onFileUpload?: (file: File, caption?: string) => Promise<void>;
   onTyping?: (isTyping: boolean) => void;
 }
 
-export const ChatInput = ({ isConnected, onSend, onFileUpload, onTyping }: ChatInputProps) => {
+export const ChatInput = ({ isConnected, onSend, onTyping }: ChatInputProps) => {
   const [message, setMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | undefined>(undefined);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = useCallback(async () => {
     const trimmedMessage = message.trim();
-
-    // If there's a file, send it with optional caption
-    if (selectedFile) {
-      if (isSending || !isConnected) return;
-
-      setIsSending(true);
-      setUploadProgress(0);
-
-      try {
-        // Simulate upload progress
-        const progressInterval = setInterval(() => {
-          setUploadProgress((prev) => {
-            if (prev === undefined || prev >= 90) {
-              clearInterval(progressInterval);
-              return 90;
-            }
-            return prev + 10;
-          });
-        }, 200);
-
-        await onFileUpload?.(selectedFile, trimmedMessage || undefined);
-
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-
-        // Clear file and message
-        setSelectedFile(null);
-        setMessage('');
-        setUploadProgress(undefined);
-
-        // Track analytics
-        analytics.trackMessageSent(trimmedMessage.length, false);
-      } catch (error) {
-        console.error('File upload failed:', error);
-        const errorMessage = error instanceof Error ? error.message : 'File upload failed';
-        showError(errorMessage);
-        setUploadProgress(undefined);
-      } finally {
-        setIsSending(false);
-        inputRef.current?.focus();
-      }
-
-      return;
-    }
 
     // Regular text message
     // Prevent sending if already sending, not connected, or empty message
@@ -104,7 +55,7 @@ export const ChatInput = ({ isConnected, onSend, onFileUpload, onTyping }: ChatI
       setIsSending(false);
       inputRef.current?.focus();
     }, 100);
-  }, [message, selectedFile, isSending, isConnected, onSend, onFileUpload, onTyping]);
+  }, [message, isSending, isConnected, onSend, onTyping]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -194,7 +145,7 @@ export const ChatInput = ({ isConnected, onSend, onFileUpload, onTyping }: ChatI
     }
   }, [isConnected]);
 
-  const canSend = isConnected && (message.trim().length > 0 || selectedFile !== null) && !isSending;
+  const canSend = isConnected && message.trim().length > 0 && !isSending;
 
   return (
     <div className="border-t border-slate-200 p-4 bg-white relative">
@@ -205,19 +156,7 @@ export const ChatInput = ({ isConnected, onSend, onFileUpload, onTyping }: ChatI
         </div>
       )}
 
-      {/* File Preview */}
-      {selectedFile && (
-        <FilePreview
-          file={selectedFile}
-          onRemove={() => setSelectedFile(null)}
-          uploadProgress={uploadProgress}
-        />
-      )}
-
       <div className="flex gap-2">
-        {/* File Upload Button */}
-        <FileUpload isConnected={isConnected} onFileSelect={setSelectedFile} disabled={isSending} />
-
         {/* Emoji Button */}
         <button
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -236,13 +175,7 @@ export const ChatInput = ({ isConnected, onSend, onFileUpload, onTyping }: ChatI
             value={message}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder={
-              selectedFile
-                ? 'Add a caption (optional)...'
-                : isConnected
-                  ? 'Type your message...'
-                  : 'Connect to start chatting'
-            }
+            placeholder={isConnected ? 'Type your message...' : 'Connect to start chatting'}
             disabled={!isConnected}
             className="w-full px-4 py-3 pr-16 text-sm rounded-xl border-2 border-slate-200 focus:outline-none focus:border-blue-400 transition-colors disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
             maxLength={MAX_MESSAGE_LENGTH}
@@ -272,9 +205,7 @@ export const ChatInput = ({ isConnected, onSend, onFileUpload, onTyping }: ChatI
               ? 'bg-blue-500 hover:bg-blue-600 active:scale-95'
               : 'bg-slate-300 cursor-not-allowed'
           }`}
-          title={
-            selectedFile ? 'Send file' : canSend ? 'Send message (Enter)' : 'Type a message to send'
-          }
+          title={canSend ? 'Send message (Enter)' : 'Type a message to send'}
           type="button"
         >
           {isSending ? (

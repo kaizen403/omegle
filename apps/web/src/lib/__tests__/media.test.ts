@@ -15,8 +15,8 @@ describe('Media State Utilities', () => {
   });
 
   describe('getPersistedCameraState', () => {
-    it('should return false by default when nothing is stored', () => {
-      expect(getPersistedCameraState()).toBe(false);
+    it('should return true by default when nothing is stored', () => {
+      expect(getPersistedCameraState()).toBe(true);
     });
 
     it('should return true when camera state is stored as true', () => {
@@ -31,8 +31,8 @@ describe('Media State Utilities', () => {
   });
 
   describe('getPersistedMicState', () => {
-    it('should return false by default when nothing is stored', () => {
-      expect(getPersistedMicState()).toBe(false);
+    it('should return true by default when nothing is stored', () => {
+      expect(getPersistedMicState()).toBe(true);
     });
 
     it('should return true when mic state is stored as true', () => {
@@ -82,7 +82,7 @@ describe('Media State Utilities', () => {
 
   describe('getPersistedMediaStates', () => {
     it('should return default states when nothing is stored', () => {
-      expect(getPersistedMediaStates()).toEqual({ camera: false, mic: false });
+      expect(getPersistedMediaStates()).toEqual({ camera: true, mic: true });
     });
 
     it('should return stored states', () => {

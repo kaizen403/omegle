@@ -56,7 +56,6 @@ function OmeglePageContent() {
     getCurrentDevices,
     reattachLocalVideo,
     sendMessage,
-    sendFileMessage,
     sendTypingIndicator,
   } = useVideoChat({
     localVideoElementId: 'local-video',
@@ -277,7 +276,6 @@ function OmeglePageContent() {
           isConnected={isMatched}
           isStrangerTyping={isPartnerTyping ?? false}
           onSendMessage={sendMessage}
-          onFileUpload={sendFileMessage}
           onTyping={handleTyping}
           connectionState={connectionState}
           messages={messages}
@@ -289,7 +287,6 @@ function OmeglePageContent() {
           isConnected={isMatched}
           isStrangerTyping={isPartnerTyping ?? false}
           onSendMessage={sendMessage}
-          onFileUpload={sendFileMessage}
           onTyping={handleTyping}
           connectionState={connectionState}
           messages={messages}

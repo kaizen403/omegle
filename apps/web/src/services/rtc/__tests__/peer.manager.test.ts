@@ -134,4 +134,40 @@ describe('PeerManager', () => {
 
     await manager.leave();
   });
+
+  it('publishes a remote track that starts muted (first RTP has not arrived)', async () => {
+    const { pc } = createMockPc();
+    const onTrackSubscribed = vi.fn();
+    const onTrackUnsubscribed = vi.fn();
+    const manager = new PeerManager(
+      createState(),
+      { onTrackSubscribed, onTrackUnsubscribed },
+      () => pc as unknown as RTCPeerConnection
+    );
+
+    await manager.join({ ...joinConfig, isOfferer: false }, vi.fn(), null, null);
+
+    const listeners: Record<string, () => void> = {};
+    const track = {
+      kind: 'video',
+      muted: true,
+      readyState: 'live',
+      addEventListener: (event: string, cb: () => void) => {
+        listeners[event] = cb;
+      },
+    };
+
+    pc.ontrack?.({ track } as unknown as RTCTrackEvent);
+
+    expect(onTrackSubscribed).toHaveBeenCalledWith({ identity: '99' }, 'video');
+    expect(onTrackUnsubscribed).not.toHaveBeenCalled();
+
+    listeners.mute?.();
+    expect(onTrackUnsubscribed).not.toHaveBeenCalled();
+
+    listeners.ended?.();
+    expect(onTrackUnsubscribed).toHaveBeenCalledWith({ identity: '99' }, 'video');
+
+    await manager.leave();
+  });
 });
