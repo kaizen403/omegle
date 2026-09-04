@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { bearer, captcha, twoFactor } from 'better-auth/plugins';
+import { bearer, captcha } from 'better-auth/plugins';
 import { config } from '../config';
 import { db } from '../db';
 import * as schema from '../db/schema';
@@ -62,9 +62,12 @@ export const auth = betterAuth({
   },
   plugins: [
     bearer(),
-    twoFactor({
-      issuer: 'Omegle VITAP Admin',
-    }),
+    // TOTP removed at the owner's request: admin sign-in is email + password only.
+    // The password is therefore the sole factor guarding a dashboard that can read live
+    // private conversations and kick users, so it should be long, unique, and not reused.
+    // Turnstile below still fronts sign-in, and /api/auth/* is rate limited.
+    // To restore: re-add `twoFactor({ issuer: 'Omegle VITAP Admin' })` here and the
+    // enrollment/verification flow in apps/admin (AuthProvider + app/page.tsx).
     ...(config.turnstileSecretKey
       ? [
           captcha({

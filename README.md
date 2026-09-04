@@ -41,4 +41,10 @@ pnpm install
 pnpm dev
 ```
 
-Admin login: Turnstile → password → TOTP enroll on first login. Public signup is off.
+Admin login: Turnstile → email + password. Public signup is off.
+
+Two-factor (TOTP) was removed at the owner's request, so the password is the only
+factor guarding the dashboard — which can read live private conversations and kick
+users. Use a long, unique password and do not reuse it. To restore 2FA, re-add the
+`twoFactor()` plugin in `apps/api/src/lib/auth.ts` and the enrolment flow in
+`apps/admin`.

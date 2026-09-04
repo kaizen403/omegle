@@ -7,8 +7,6 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { TwoFactorVerification } from "@/components/auth/TwoFactorVerification";
-import { TwoFactorEnroll } from "@/components/auth/TwoFactorEnroll";
 import { Loader2, Mail, Lock } from "lucide-react";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
@@ -17,21 +15,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPasswordInput] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [showMfa, setShowMfa] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance | null>(null);
   const router = useRouter();
-  const {
-    login,
-    isLoading,
-    verifyMfaAndLogin,
-    needsMfaEnroll,
-    mfaEnroll,
-    beginMfaEnroll,
-    verifyMfaEnroll,
-    cancelMfaEnroll,
-  } = useAuth();
+  const { login, isLoading } = useAuth();
 
   // Clear session revoked flag on login page
   useEffect(() => {
@@ -70,31 +58,11 @@ export default function LoginPage() {
 
     if (result.success) {
       router.push("/home");
-    } else if (result.requiresMfaEnroll) {
-      setShowMfa(false);
-      setErrorMessage("");
-    } else if (result.requiresMfa) {
-      // Show TOTP verification step
-      setShowMfa(true);
     } else {
       setErrorMessage(result.error || "Invalid email or password");
       // Turnstile tokens are single-use
       resetTurnstile();
     }
-  };
-
-  const handleMfaVerify = async (code: string) => {
-    const result = await verifyMfaAndLogin(code);
-    if (result.success) {
-      router.push("/home");
-    }
-    return result;
-  };
-
-  const handleMfaCancel = () => {
-    setShowMfa(false);
-    setErrorMessage("Login cancelled");
-    resetTurnstile();
   };
 
   const busy = isLoading || isSubmitting;
@@ -116,30 +84,7 @@ export default function LoginPage() {
         transition={{ duration: 0.5 }}
         className="relative z-10 w-full max-w-md mx-4 space-y-6 sm:space-y-8 bg-white/95 p-6 sm:p-10 backdrop-blur-xl rounded-2xl border border-white/70 shadow-xl"
       >
-        {needsMfaEnroll ? (
-          <TwoFactorEnroll
-            totpURI={mfaEnroll?.totpURI ?? null}
-            backupCodes={mfaEnroll?.backupCodes ?? []}
-            onStart={beginMfaEnroll}
-            onVerify={async (code) => {
-              const result = await verifyMfaEnroll(code);
-              if (result.success) {
-                router.push("/home");
-              }
-              return result;
-            }}
-            onCancel={() => {
-              void cancelMfaEnroll();
-              setErrorMessage("Authenticator setup cancelled");
-              resetTurnstile();
-            }}
-          />
-        ) : showMfa ? (
-          <TwoFactorVerification
-            onVerify={handleMfaVerify}
-            onCancel={handleMfaCancel}
-          />
-        ) : (
+        {
           <>
             <div className="text-center">
               <motion.div
@@ -298,7 +243,7 @@ export default function LoginPage() {
               </p>
             </motion.div>
           </>
-        )}
+        }
       </motion.div>
     </div>
   );

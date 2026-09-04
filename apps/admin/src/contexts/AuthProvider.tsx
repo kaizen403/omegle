@@ -25,13 +25,6 @@ interface Admin {
 interface LoginResult {
   success: boolean;
   error?: string;
-  requiresMfa?: boolean;
-  requiresMfaEnroll?: boolean;
-}
-
-interface MfaEnrollState {
-  totpURI: string;
-  backupCodes: string[];
 }
 
 interface AuthContextType {
@@ -39,23 +32,11 @@ interface AuthContextType {
   isLoading: boolean;
   admin: Admin | null;
   token: string | null;
-  needsMfaEnroll: boolean;
-  mfaEnroll: MfaEnrollState | null;
   login: (
     email: string,
     password: string,
     captchaToken?: string,
   ) => Promise<LoginResult>;
-  verifyMfaAndLogin: (
-    code: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  beginMfaEnroll: (
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  verifyMfaEnroll: (
-    code: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  cancelMfaEnroll: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -66,10 +47,6 @@ const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 // Periodic session refresh (keeps the Better Auth session cookie fresh)
 const SESSION_REFRESH_INTERVAL = 5 * 60 * 1000;
-
-// The two-factor plugin adds `twoFactorRedirect` to sign-in responses at
-// runtime; the base client types do not include it.
-type TwoFactorRedirectData = { twoFactorRedirect?: boolean } | null | undefined;
 
 /**
  * Verify the current Better Auth session cookie with the backend and
@@ -159,8 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [needsMfaEnroll, setNeedsMfaEnroll] = useState(false);
-  const [mfaEnroll, setMfaEnroll] = useState<MfaEnrollState | null>(null);
   const isMountedRef = useRef(true);
   const pendingPasswordRef = useRef<string | null>(null);
   const router = useRouter();
@@ -208,8 +183,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!data?.session) {
           setAdmin(null);
           setToken(null);
-          setNeedsMfaEnroll(false);
-          setMfaEnroll(null);
           storage.remove(STORAGE_KEYS.ADMIN_TOKEN);
           setIsLoading(false);
           return;
@@ -217,28 +190,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const sessionToken = data.session.token;
         const verification = await verifyAdminSession();
-        const sessionMfaEnabled = Boolean(
-          (data.user as { twoFactorEnabled?: boolean } | undefined)
-            ?.twoFactorEnabled,
-        );
 
         if (cancelled || !isMountedRef.current) return;
 
         if (verification.ok) {
-          const mfaEnabled = verification.mfaEnabled || sessionMfaEnabled;
-          if (!mfaEnabled) {
-            setAdmin(null);
-            setToken(null);
-            setNeedsMfaEnroll(true);
-            storage.remove(STORAGE_KEYS.ADMIN_TOKEN);
-          } else {
-            setAdmin(verification.admin);
-            setToken(sessionToken);
-            setNeedsMfaEnroll(false);
-            setMfaEnroll(null);
-            storage.set(STORAGE_KEYS.ADMIN_TOKEN, sessionToken);
-            window.dispatchEvent(new Event("adminTokenChanged"));
-          }
+          // TOTP removed: an active admin session is admitted on its own.
+          setAdmin(verification.admin);
+          setToken(sessionToken);
+          storage.set(STORAGE_KEYS.ADMIN_TOKEN, sessionToken);
+          window.dispatchEvent(new Event("adminTokenChanged"));
         } else {
           // Session exists but is not an active admin
           await authClient.signOut();
@@ -346,54 +306,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      const sessionMfaEnabled = Boolean(
-        (sessionData.user as { twoFactorEnabled?: boolean } | undefined)
-          ?.twoFactorEnabled,
-      );
-      const mfaEnabled = verification.mfaEnabled || sessionMfaEnabled;
-
-      if (!mfaEnabled) {
-        const password = pendingPasswordRef.current;
-        if (password) {
-          const { data, error } = await authClient.twoFactor.enable({
-            password,
-          });
-          pendingPasswordRef.current = null;
-          if (error || !data?.totpURI) {
-            setNeedsMfaEnroll(true);
-            setMfaEnroll(null);
-            return {
-              success: false,
-              requiresMfaEnroll: true,
-              error:
-                error?.message ||
-                "Could not start authenticator setup. Confirm your password.",
-            };
-          }
-          if (isMountedRef.current) {
-            setNeedsMfaEnroll(true);
-            setMfaEnroll({
-              totpURI: data.totpURI,
-              backupCodes: data.backupCodes || [],
-            });
-          }
-          return { success: false, requiresMfaEnroll: true };
-        }
-
-        if (isMountedRef.current) {
-          setNeedsMfaEnroll(true);
-          setMfaEnroll(null);
-        }
-        return { success: false, requiresMfaEnroll: true };
-      }
-
+      // TOTP removed: a verified admin goes straight in after email + password.
       pendingPasswordRef.current = null;
 
       if (isMountedRef.current) {
         setAdmin(verification.admin);
         setToken(sessionData.session.token);
-        setNeedsMfaEnroll(false);
-        setMfaEnroll(null);
         storage.set(STORAGE_KEYS.ADMIN_TOKEN, sessionData.session.token);
       }
 
@@ -417,7 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<LoginResult> => {
       try {
         pendingPasswordRef.current = password;
-        const { data, error } = await authClient.signIn.email(
+        const { error } = await authClient.signIn.email(
           {
             email,
             password,
@@ -434,11 +352,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: mapAuthError(error) };
         }
 
-        if ((data as TwoFactorRedirectData)?.twoFactorRedirect) {
-          pendingPasswordRef.current = null;
-          return { success: false, requiresMfa: true };
-        }
-
         return await completeLogin(email);
       } catch (error: unknown) {
         pendingPasswordRef.current = null;
@@ -452,116 +365,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [completeLogin],
   );
-
-  // Verify TOTP code and complete login
-  const verifyMfaAndLogin = useCallback(
-    async (code: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        const { error } = await authClient.twoFactor.verifyTotp({
-          code,
-          fetchOptions: { signal: controller.signal },
-        });
-
-        clearTimeout(timeoutId);
-
-        if (error) {
-          const errorMessage =
-            error.code === "INVALID_CODE" ||
-            error.code === "INVALID_TWO_FACTOR_COOKIE"
-              ? "Invalid verification code. Please check and try again."
-              : "Verification failed. Please try again.";
-          return { success: false, error: errorMessage };
-        }
-
-        const result = await completeLogin();
-        if (result.success) {
-          securityLogger.logMFASuccess();
-        } else {
-          securityLogger.logMFAFailure(
-            result.error || "admin verification failed",
-          );
-        }
-        return result;
-      } catch (error: unknown) {
-        if (error instanceof Error && error.name === "AbortError") {
-          return {
-            success: false,
-            error:
-              "Request timed out. Please check your connection and try again.",
-          };
-        }
-
-        console.error("[Auth] verifyMfaAndLogin error:", error);
-
-        return {
-          success: false,
-          error: "Unable to complete verification. Please try again.",
-        };
-      }
-    },
-    [completeLogin],
-  );
-
-  const beginMfaEnroll = useCallback(
-    async (password: string): Promise<{ success: boolean; error?: string }> => {
-      const { data, error } = await authClient.twoFactor.enable({ password });
-      if (error || !data?.totpURI) {
-        return {
-          success: false,
-          error: error?.message || "Could not start authenticator setup.",
-        };
-      }
-      if (isMountedRef.current) {
-        setNeedsMfaEnroll(true);
-        setMfaEnroll({
-          totpURI: data.totpURI,
-          backupCodes: data.backupCodes || [],
-        });
-      }
-      return { success: true };
-    },
-    [],
-  );
-
-  const verifyMfaEnroll = useCallback(
-    async (code: string): Promise<{ success: boolean; error?: string }> => {
-      const { error } = await authClient.twoFactor.verifyTotp({ code });
-      if (error) {
-        return {
-          success: false,
-          error:
-            error.code === "INVALID_CODE"
-              ? "Invalid verification code. Please check and try again."
-              : "Verification failed. Please try again.",
-        };
-      }
-      pendingPasswordRef.current = null;
-      const result = await completeLogin();
-      if (result.success) {
-        securityLogger.logMFASuccess();
-      }
-      return result;
-    },
-    [completeLogin],
-  );
-
-  const cancelMfaEnroll = useCallback(async () => {
-    pendingPasswordRef.current = null;
-    setNeedsMfaEnroll(false);
-    setMfaEnroll(null);
-    setAdmin(null);
-    setToken(null);
-    storage.remove(STORAGE_KEYS.ADMIN_TOKEN);
-    storage.remove(STORAGE_KEYS.ADMIN_USER);
-    try {
-      await authClient.signOut();
-    } catch {
-      // ignore
-    }
-  }, []);
 
   // Logout: clear Better Auth session (server clears the cookie) + local state
   const logout = useCallback(async () => {
@@ -587,8 +390,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isMountedRef.current) {
         setAdmin(null);
         setToken(null);
-        setNeedsMfaEnroll(false);
-        setMfaEnroll(null);
       }
       storage.remove(STORAGE_KEYS.ADMIN_TOKEN);
       storage.remove(STORAGE_KEYS.ADMIN_USER);
@@ -610,13 +411,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         admin,
         token,
-        needsMfaEnroll,
-        mfaEnroll,
         login,
-        verifyMfaAndLogin,
-        beginMfaEnroll,
-        verifyMfaEnroll,
-        cancelMfaEnroll,
         logout,
       }}
     >
