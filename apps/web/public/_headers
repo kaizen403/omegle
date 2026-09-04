@@ -11,7 +11,25 @@
 /*
   Cache-Control: public, max-age=0, must-revalidate
   X-Content-Type-Options: nosniff
-  X-Frame-Options: SAMEORIGIN
-  X-XSS-Protection: 1; mode=block
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=*, microphone=*, display-capture=*
+  # DENY rather than SAMEORIGIN: nothing here is meant to be framed, and the camera/mic
+  # permissions this app requests make clickjacking a privacy problem, not just a UI one.
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  # camera/microphone are needed by this origin only — do not delegate them to embeds.
+  Permissions-Policy: camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=()
+  # Content Security Policy.
+  #
+  # `frame-ancestors 'none'` is the enforced anti-framing control (X-Frame-Options is the
+  # legacy fallback above). `object-src 'none'` and `base-uri 'none'` remove plugin and
+  # base-tag injection. connect-src is deliberately broad enough for the API, its WebSocket
+  # upgrade, and PostHog; tighten the hostnames below to your own once they are stable.
+  #
+  # 'unsafe-inline' on style-src is required by the CSS-in-JS runtime.
+  # Next.js static export also inlines the RSC flight payload as <script>self.__next_f.push(...)
+  # — without 'unsafe-inline' on script-src those are blocked, hydration never runs, and the
+  # welcome form is a dead shell (or a blank __next_error__ page).
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+
+# X-XSS-Protection is intentionally omitted: the legacy auditor is gone from modern browsers
+# and its filter introduced its own cross-site leak vectors. CSP above is the real control.

@@ -68,27 +68,20 @@ export class MessageValidator {
     }
 
     // Validate based on type
-    console.log('🔍 [VALIDATOR] Checking type:', parsed.type);
     switch (parsed.type) {
       case 'join':
-        console.log('🔍 [VALIDATOR] Validating join');
         return this.validateJoin(parsed);
       case 'message':
-        console.log('🔍 [VALIDATOR] Validating message');
         return this.validateChatMessage(parsed);
       case 'typing':
-        console.log('🔍 [VALIDATOR] Validating typing');
         return this.validateTypingIndicator(parsed);
       case 'signal':
-        console.log('🔍 [VALIDATOR] Validating signal');
         return this.validateSignal(parsed);
       case 'ping':
       case 'leave':
       case 'cancel':
-        console.log('🔍 [VALIDATOR] Valid type:', parsed.type);
         return { valid: true, sanitized: parsed };
       default:
-        console.log('🔍 [VALIDATOR] Unknown type, allowing:', parsed.type);
         return { valid: true, sanitized: parsed };
     }
   }
@@ -172,7 +165,6 @@ export class MessageValidator {
   }
 
   private static validateTypingIndicator(msg: any): ValidationResult {
-    console.log('🔍 [VALIDATOR] validateTypingIndicator called with:', JSON.stringify(msg));
     const result = {
       valid: true,
       sanitized: {
@@ -180,7 +172,6 @@ export class MessageValidator {
         data: { isTyping: !!msg.data?.isTyping },
       },
     };
-    console.log('🔍 [VALIDATOR] validateTypingIndicator result:', JSON.stringify(result));
     return result;
   }
 
@@ -204,19 +195,35 @@ export class MessageValidator {
   }
 
   /**
-   * Sanitize string - remove dangerous characters, trim, enforce length
+   * Sanitize string - strip control/formatting characters, trim, enforce length.
+   *
+   * Stripping `<` and `>` is not XSS protection on its own (the clients must still escape on
+   * render); it is defence in depth. The important removals here are C0/C1 control codes,
+   * bidirectional-override characters, and zero-width joiners, which are used to spoof
+   * display names, forge log lines, and smuggle terminal escape sequences into our logs.
    */
   private static sanitizeString(str: string, maxLength: number): string {
     if (!str) return '';
 
     return (
       str
-        .trim()
-        .replace(/[<>]/g, '') // Remove HTML brackets
+        .normalize('NFC')
         // eslint-disable-next-line no-control-regex
-        .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // C0 and C1 control characters
+        .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '') // zero-width + bidi
+        .replace(/[<>]/g, '')
+        .trim()
         .substring(0, maxLength)
     );
+  }
+
+  /**
+   * Sanitize a user-chosen display name. Collapses runs of whitespace so a name cannot be
+   * padded out to imitate another user or break dashboard layout.
+   */
+  public static sanitizeDisplayName(str: string, maxLength: number = this.MAX_NAME_LENGTH): string {
+    if (typeof str !== 'string') return '';
+    return this.sanitizeString(str, maxLength).replace(/\s+/g, ' ').trim();
   }
 
   /**

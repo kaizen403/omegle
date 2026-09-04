@@ -1,4 +1,4 @@
-export { apiKeyAuth } from './apiKey';
+export { apiKeyAuth, internalApiKeyAuth } from './apiKey';
 export { corsMiddleware } from './cors';
 export { errorHandler } from './errorHandler';
 export { requestLogger } from './logger';

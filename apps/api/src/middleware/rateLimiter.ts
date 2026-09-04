@@ -1,98 +1,99 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { BoundedRateLimiter } from '../utils/boundedRateLimiter';
+import { getRequestIp } from './clientIp';
 
-interface Visitor {
-  lastSeen: number;
-  tokens: number;
+/**
+ * Per-IP HTTP rate limiting.
+ *
+ * Buckets are keyed by the *resolved* client IP (see middleware/clientIp.ts), never by a raw
+ * forwarded header, and the underlying limiter is capacity-bounded so a spoofing flood cannot
+ * grow the process heap.
+ */
+export interface RateLimitOptions {
+  /** Sustained requests per second. */
+  ratePerSecond: number;
+  /** Largest burst allowed. */
+  burst?: number;
+  /** Distinct IPs tracked before LRU eviction kicks in. */
+  maxKeys?: number;
+  /** Prefix so separate limiters do not share buckets. */
+  scope?: string;
+  /** Cost charged per request — raise it for expensive endpoints. */
+  cost?: number;
+  /** Log a warning the first time an IP trips this limiter. */
+  logRejections?: boolean;
+}
+
+export function createRateLimiter(
+  options: RateLimitOptions
+): (req: Request, res: Response, next: NextFunction) => void {
+  const capacity = Math.max(1, options.burst ?? Math.ceil(options.ratePerSecond * 2));
+  const limiter = new BoundedRateLimiter({
+    capacity,
+    refillPerSecond: options.ratePerSecond,
+    maxKeys: options.maxKeys ?? 20_000,
+  });
+  const scope = options.scope ? `${options.scope}:` : '';
+  const cost = options.cost ?? 1;
+  const logRejections = options.logRejections ?? true;
+
+  return (req: Request, res: Response, next: NextFunction): void => {
+    // Preflight carries no credentials and no body; charging it would break legitimate clients.
+    if (req.method === 'OPTIONS') {
+      next();
+      return;
+    }
+
+    const ip = getRequestIp(req);
+    const key = `${scope}${ip}`;
+
+    if (limiter.tryConsume(key, cost)) {
+      next();
+      return;
+    }
+
+    const retryAfter = limiter.retryAfterSeconds(key);
+    res.setHeader('Retry-After', String(retryAfter));
+
+    if (logRejections) {
+      logger.warn(`Rate limit exceeded [${options.scope ?? 'global'}] for ${ip} on ${req.path}`);
+    }
+
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Rate limit exceeded. Please try again later.',
+      retryAfter,
+    });
+  };
 }
 
 /**
- * Rate limiter using token bucket algorithm
- * Limits requests per IP address
+ * Retained for the existing named export surface.
+ * @deprecated Prefer `createRateLimiter` with an explicit options object.
  */
 export class RateLimiter {
-  private visitors: Map<string, Visitor>;
-  private rate: number;
-  private interval: number;
-  private maxBurst: number;
+  private readonly limiter: BoundedRateLimiter;
 
   constructor(rate: number, intervalMs: number, maxBurst: number) {
-    this.visitors = new Map();
-    this.rate = rate;
-    this.interval = intervalMs;
-    this.maxBurst = maxBurst;
-
-    // Clean up old visitors every minute
-    this.startCleanup();
-  }
-
-  private startCleanup(): void {
-    setInterval(() => {
-      const now = Date.now();
-      for (const [ip, visitor] of this.visitors.entries()) {
-        if (now - visitor.lastSeen > 3 * 60 * 1000) {
-          // 3 minutes
-          this.visitors.delete(ip);
-        }
-      }
-    }, 60 * 1000); // Every minute
-  }
-
-  private getVisitor(ip: string): Visitor {
-    let visitor = this.visitors.get(ip);
-    const now = Date.now();
-
-    if (!visitor) {
-      visitor = {
-        lastSeen: now,
-        tokens: this.maxBurst,
-      };
-      this.visitors.set(ip, visitor);
-      return visitor;
-    }
-
-    // Refill tokens based on time passed
-    const elapsed = now - visitor.lastSeen;
-    const tokensToAdd = Math.floor((elapsed / this.interval) * this.rate);
-
-    if (tokensToAdd > 0) {
-      visitor.tokens = Math.min(this.maxBurst, visitor.tokens + tokensToAdd);
-      visitor.lastSeen = now;
-    }
-
-    return visitor;
+    this.limiter = new BoundedRateLimiter({
+      capacity: maxBurst,
+      refillPerSecond: (rate * 1000) / Math.max(1, intervalMs),
+    });
   }
 
   public middleware() {
     return (req: Request, res: Response, next: NextFunction): void => {
-      const ip = req.ip || req.socket.remoteAddress || 'unknown';
-      const visitor = this.getVisitor(ip);
-
-      if (visitor.tokens > 0) {
-        visitor.tokens--;
+      const ip = getRequestIp(req);
+      if (this.limiter.tryConsume(ip)) {
         next();
-      } else {
-        logger.warn(`Rate limit exceeded for IP: ${ip}`);
-        res.status(429).json({
-          error: 'Too Many Requests',
-          message: 'Rate limit exceeded. Please try again later.',
-          retryAfter: Math.ceil(this.interval / 1000),
-        });
+        return;
       }
+      res.status(429).json({
+        error: 'Too Many Requests',
+        message: 'Rate limit exceeded. Please try again later.',
+        retryAfter: this.limiter.retryAfterSeconds(ip),
+      });
     };
   }
-}
-
-/**
- * Create a rate limiter middleware
- * @param requestsPerSecond - Number of requests allowed per second
- * @param burstSize - Maximum burst size
- */
-export function createRateLimiter(
-  requestsPerSecond: number,
-  burstSize?: number
-): (req: Request, res: Response, next: NextFunction) => void {
-  const maxBurst = burstSize || requestsPerSecond * 2;
-  const limiter = new RateLimiter(requestsPerSecond, 1000, maxBurst);
-  return limiter.middleware();
 }

@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { getRequestIp } from './clientIp';
+import { runtimeMetrics } from '../services/admin/runtimeMetrics';
 
 /**
  * HTTP request logger middleware
@@ -15,18 +17,22 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
   res.on('finish', () => {
     const latency = Date.now() - start;
     const statusCode = res.statusCode;
-    const clientIP = req.ip || req.socket.remoteAddress;
+    // Resolved against TRUSTED_PROXIES so a forged X-Forwarded-For cannot poison the log.
+    const clientIP = getRequestIp(req);
 
     const statusColor = getStatusColor(statusCode);
     const methodColor = getMethodColor(method);
 
-    const queryString =
-      Object.keys(query).length > 0 ? `?${new URLSearchParams(query as any).toString()}` : '';
+    // Log only which query keys were present. Echoing attacker-controlled values into log
+    // files invites terminal-escape and log-forging payloads.
+    const queryKeys = Object.keys(query);
+    const queryString = queryKeys.length > 0 ? `?${queryKeys.sort().join('&')}` : '';
     const fullPath = path + queryString;
 
     logger.info(
       `${methodColor}[${method}]${resetColor()} ${statusColor}${statusCode}${resetColor()} | ${latency}ms | ${clientIP} | ${fullPath}`
     );
+    runtimeMetrics.trackRequest(latency);
   });
 
   next();
