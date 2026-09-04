@@ -20,12 +20,21 @@ const luaMatchScript = readFileSync(join(__dirname, '../../scripts/redis/match.l
 export class MatchmakingService {
   private redis: RedisClientType;
   private redisClient: RedisClient;
+  /**
+   * Socket ids already counted today.
+   *
+   * Bounded: each entry is added by an inbound connection, so an unbounded Set is a
+   * straightforward memory-exhaustion path for anyone willing to reconnect in a loop. When the
+   * cap is hit we stop adding rather than evict, which at worst re-tracks a visit (the insert
+   * is idempotent on (visit_date, uid)) instead of growing without limit.
+   */
   private trackedSocketsToday: Set<string> = new Set(); // socketId set for today
-  private currentDate: string = new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
-  )
-    .toISOString()
-    .split('T')[0]; // YYYY-MM-DD in IST
+  private static readonly MAX_TRACKED_SOCKETS = 100_000;
+  /** IST is a fixed UTC+05:30 offset; India observes no daylight saving. */
+  private static readonly IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  private static readonly DAY_MS = 24 * 60 * 60 * 1000;
+
+  private currentDate: string = MatchmakingService.istDateString(); // YYYY-MM-DD in IST
 
   constructor(redisClient: RedisClientType, redisClientWrapper?: RedisClient) {
     this.redis = redisClient;
@@ -35,27 +44,39 @@ export class MatchmakingService {
     this.scheduleReset();
   }
 
+  /**
+   * Milliseconds until the next 00:00 IST.
+   *
+   * The previous implementation built `new Date(now.toLocaleString('en-US', {timeZone:
+   * 'Asia/Kolkata'}))` — an IST wall-clock reading re-parsed as *local* time — and then
+   * subtracted a real UTC timestamp from it. The two are in different frames, so the result
+   * was wrong by the local-to-IST offset and the reset fired hours late.
+   *
+   * IST is a fixed UTC+05:30 with no daylight saving, so shifting the epoch is exact.
+   */
+  private static msUntilIstMidnight(now: number = Date.now()): number {
+    const shifted = now + MatchmakingService.IST_OFFSET_MS;
+    const nextMidnightShifted =
+      Math.floor(shifted / MatchmakingService.DAY_MS) * MatchmakingService.DAY_MS +
+      MatchmakingService.DAY_MS;
+    return nextMidnightShifted - shifted;
+  }
+
+  /** Calendar date in IST as YYYY-MM-DD. */
+  private static istDateString(now: number = Date.now()): string {
+    return new Date(now + MatchmakingService.IST_OFFSET_MS).toISOString().split('T')[0];
+  }
+
   private scheduleReset(): void {
-    // Calculate midnight in IST timezone
-    const now = new Date();
-    const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const istTomorrow = new Date(istNow);
-    istTomorrow.setDate(istTomorrow.getDate() + 1);
-    istTomorrow.setHours(0, 0, 0, 0);
-
-    // Get UTC times to calculate correct offset
-    const nowUTC = now.getTime();
-    const midnightIST = istTomorrow.getTime();
-    const msUntilMidnight = midnightIST - nowUTC;
-
-    setTimeout(() => {
-      console.log('🕛 Midnight IST reached - resetting tracked sockets');
+    const timer = setTimeout(() => {
+      matchmakingLogger.info('Midnight IST reached - resetting tracked sockets');
       this.trackedSocketsToday.clear();
-      this.currentDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-        .toISOString()
-        .split('T')[0];
-      this.scheduleReset(); // Schedule next reset
-    }, msUntilMidnight);
+      this.currentDate = MatchmakingService.istDateString();
+      this.scheduleReset();
+    }, MatchmakingService.msUntilIstMidnight());
+
+    // A daily housekeeping timer must not keep the process alive on shutdown.
+    timer.unref?.();
   }
 
   /**
@@ -64,23 +85,16 @@ export class MatchmakingService {
   async addToQueue(user: QueueUser, ipAddress?: string, socketId?: string): Promise<void> {
     logMatchmakingEvent('ADD_TO_QUEUE_START', { userId: user.uid, gender: user.gender });
 
-    // Track user visit (once per day per socket)
-    if (socketId) {
-      if (!this.trackedSocketsToday.has(socketId)) {
-        // First time this socket is joining today - track it!
-        matchmakingLogger.debug(
-          `First join today for socket ${socketId}: ${user.name} (${user.uid})`
-        );
+    // Track user visit (once per day per socket).
+    //
+    // Each untracked socket costs one Neon insert plus one paid geolocation lookup, so this
+    // must never run unconditionally: the previous `else` branch tracked on *every* join when
+    // no socket id was supplied, turning join spam directly into database and API spend.
+    if (socketId && !this.trackedSocketsToday.has(socketId)) {
+      if (this.trackedSocketsToday.size < MatchmakingService.MAX_TRACKED_SOCKETS) {
         this.trackedSocketsToday.add(socketId);
-
-        userTrackingService
-          .trackUserVisit(user.uid, user.name, user.gender, ipAddress)
-          .catch((err) => {
-            matchmakingLogger.error('Failed to track user visit:', err);
-          });
       }
-    } else {
-      // No socket ID provided, track anyway
+
       userTrackingService
         .trackUserVisit(user.uid, user.name, user.gender, ipAddress)
         .catch((err) => {
@@ -110,7 +124,7 @@ export class MatchmakingService {
         queueSize,
         timestamp: score,
       });
-    }, `addToQueue:${user.uid}`);
+    }, `addToQueue:${user.uid}`, { retry: false });
   }
 
   /**
@@ -142,7 +156,20 @@ export class MatchmakingService {
   /**
    * Find a match using Lua script (atomic, prevents self-match and consecutive repeats)
    */
-  async findMatch(uid: number, gender: string): Promise<QueueUser | null> {
+  /**
+   * Atomically select a partner AND claim both users for `roomId`.
+   *
+   * The claim is what makes this safe under concurrency: without it, both users stay visible
+   * to other callers until createRoom finishes, and a lost race strands them outside the
+   * queue and outside any room. `claimTtlSeconds` bounds the damage if the caller dies before
+   * turning the claim into a real room.
+   */
+  async findMatch(
+    uid: number,
+    gender: string,
+    roomId: string,
+    claimTtlSeconds = 30
+  ): Promise<QueueUser | null> {
     return this.redisClient.executeWithProtection(async () => {
       // Prepare current user data
       const currentUser: QueueUser = {
@@ -156,7 +183,7 @@ export class MatchmakingService {
       // Execute Lua script for atomic matching
       const result = await this.redis.eval(luaMatchScript, {
         keys: [QUEUE_KEY],
-        arguments: [uid.toString(), currentData],
+        arguments: [uid.toString(), currentData, roomId, String(claimTtlSeconds)],
       });
 
       // No match found
@@ -175,7 +202,30 @@ export class MatchmakingService {
         matchType: 'lua_script',
       });
       return matchedUser;
-    }, `findMatch:${uid}`);
+    }, `findMatch:${uid}`, { retry: false });
+  }
+
+  /**
+   * Drop a pair claim made by findMatch.
+   *
+   * Called when a claimed match cannot be completed, so both users become matchable again
+   * immediately instead of waiting out the claim TTL.
+   */
+  async releaseClaim(uids: number[], roomId: string): Promise<void> {
+    try {
+      await Promise.all(
+        uids.map(async (uid) => {
+          const key = `user:room:${uid}`;
+          // Only clear a claim that is still ours; never delete a real room binding.
+          const current = await this.redis.get(key);
+          if (current === roomId) {
+            await this.redis.del(key);
+          }
+        })
+      );
+    } catch (error) {
+      logError('releaseClaim', error as Error, { roomId });
+    }
   }
 
   /**
@@ -233,13 +283,36 @@ export class MatchmakingService {
   /**
    * Get queue size
    */
-  async getQueueSize(_gender: string): Promise<number> {
+  /**
+   * Size of the queue, optionally filtered by gender.
+   *
+   * The gender argument used to be ignored and the full zCard returned for every call, so the
+   * admin dashboard rendered male == female == total and a "total" of twice the real figure.
+   * Pass 'any' (or 'all') for the unfiltered count.
+   */
+  async getQueueSize(gender: string = 'any'): Promise<number> {
     try {
       return await this.redisClient.executeWithProtection(async () => {
-        const size = await this.redis.zCard(QUEUE_KEY);
-        matchmakingLogger.debug('Queue size retrieved', { size });
+        if (gender === 'any' || gender === 'all' || !gender) {
+          const size = await this.redis.zCard(QUEUE_KEY);
+          matchmakingLogger.debug('Queue size retrieved', { gender, size });
+          return size;
+        }
+
+        const entries = await this.redis.zRange(QUEUE_KEY, 0, -1);
+        let size = 0;
+        for (const entry of entries) {
+          try {
+            if ((JSON.parse(entry) as QueueUser).gender === gender) {
+              size++;
+            }
+          } catch {
+            // Skip malformed members rather than failing the whole count.
+          }
+        }
+        matchmakingLogger.debug('Queue size retrieved', { gender, size });
         return size;
-      }, 'getQueueSize');
+      }, 'getQueueSize', { retry: true });
     } catch (error) {
       logError('getQueueSize', error as Error);
       return 0;
@@ -285,14 +358,39 @@ export class MatchmakingService {
    * Clear the entire matchmaking queue
    * Called on server startup for clean state
    */
-  async clearQueue(): Promise<number> {
+  /**
+   * Clear the queue, optionally only entries for one gender.
+   *
+   * This previously took no argument and always deleted the whole key, so an admin asking to
+   * clear the male queue silently emptied the female queue too.
+   */
+  async clearQueue(gender?: string): Promise<number> {
     try {
-      const queueSize = await this.redis.zCard(QUEUE_KEY);
-      if (queueSize > 0) {
-        await this.redis.del(QUEUE_KEY);
-        matchmakingLogger.info(`[MatchmakingService] 🧹 Cleared queue with ${queueSize} entries`);
+      if (!gender || gender === 'any' || gender === 'all') {
+        const queueSize = await this.redis.zCard(QUEUE_KEY);
+        if (queueSize > 0) {
+          await this.redis.del(QUEUE_KEY);
+          matchmakingLogger.info(`[MatchmakingService] Cleared queue with ${queueSize} entries`);
+        }
+        return queueSize;
       }
-      return queueSize;
+
+      const entries = await this.redis.zRange(QUEUE_KEY, 0, -1);
+      const doomed = entries.filter((entry) => {
+        try {
+          return (JSON.parse(entry) as QueueUser).gender === gender;
+        } catch {
+          return false;
+        }
+      });
+
+      if (doomed.length > 0) {
+        await this.redis.zRem(QUEUE_KEY, doomed);
+        matchmakingLogger.info(
+          `[MatchmakingService] Cleared ${doomed.length} ${gender} entries from queue`
+        );
+      }
+      return doomed.length;
     } catch (error) {
       logError('clearQueue', error as Error);
       return 0;

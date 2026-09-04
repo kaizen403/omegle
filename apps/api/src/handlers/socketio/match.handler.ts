@@ -2,13 +2,15 @@ import { Server as SocketIOServer } from 'socket.io';
 import { ExtendedSocket } from './types';
 import { MatchmakingService } from '../../services/matchmaking';
 import { RoomService } from '../../services/room';
-import { TurnService, isOffererUid } from '../../services/turn';
+import { TurnService, isOffererUid, summarizeIceServers } from '../../services/turn';
 import { socketLogger } from '../../utils/logger';
+import { config } from '../../config';
 import { SocketRateLimiter } from '../../utils/socketRateLimiter';
 import { MatchRequest, QueueUser, Room } from '../../models';
 import { v4 as uuidv4 } from 'uuid';
 import { botManager } from '../../services/bots';
 import { BotHandler } from './bot.handler';
+import { runtimeMetrics } from '../../services/admin/runtimeMetrics';
 
 /**
  * Match Handler - Manages matchmaking operations (join, cancel)
@@ -24,7 +26,16 @@ export class MatchHandler {
   private adminHandler?: any;
   private botHandler?: BotHandler;
   private pendingJoinOperations: Map<number, Promise<void>>; // Prevent duplicate joins
+  /**
+   * Debounce timestamps, keyed by client-chosen uid.
+   *
+   * Because the uid comes from the client, an attacker can mint a new one per join and grow
+   * this Map without limit. It is pruned on write so a uid flood cannot exhaust the heap; the
+   * per-IP join budget in SocketIOManager is what actually rate-limits the behaviour.
+   */
   private lastJoinTime: Map<number, number>; // Debounce join requests
+  private static readonly MAX_JOIN_TIME_ENTRIES = 50_000;
+  private static readonly JOIN_TIME_TTL_MS = 5 * 60 * 1000;
   private matchmakerInterval?: NodeJS.Timeout; // Periodic matchmaker
 
   constructor(
@@ -59,9 +70,12 @@ export class MatchHandler {
       } catch (error) {
         socketLogger.error('⚠️  [PERIODIC MATCHMAKER ERROR]:', error);
       }
-    }, 2000); // 2 seconds
+    }, config.limits.matchmakerTickMs);
 
-    socketLogger.info('✅ [PERIODIC MATCHMAKER] Started - checking queue every 2 seconds');
+    socketLogger.info(
+      `✅ [PERIODIC MATCHMAKER] Started - up to ${config.limits.matchmakerBatch} per ` +
+        `${config.limits.matchmakerTickMs}ms`
+    );
   }
 
   /**
@@ -83,8 +97,10 @@ export class MatchHandler {
 
     socketLogger.debug(`🔍 [PERIODIC MATCH] Processing ${queuedUsers.length} queued users`);
 
-    // Try to match users (limit to prevent overload)
-    const maxAttempts = Math.min(queuedUsers.length, 10);
+    // Drain as much of the backlog as the batch allows. Oldest-waiting first, so the queue
+    // is fair under load rather than favouring whoever the map happened to yield first.
+    queuedUsers.sort((a, b) => (a.joinedAt ?? 0) - (b.joinedAt ?? 0));
+    const maxAttempts = Math.min(queuedUsers.length, config.limits.matchmakerBatch);
 
     for (let i = 0; i < maxAttempts; i++) {
       const socket = queuedUsers[i];
@@ -137,6 +153,30 @@ export class MatchHandler {
   }
 
   /**
+   * Record a join timestamp, pruning stale entries so the map cannot grow without bound.
+   */
+  private recordJoinTime(uid: number): void {
+    const now = Date.now();
+
+    if (this.lastJoinTime.size >= MatchHandler.MAX_JOIN_TIME_ENTRIES) {
+      const cutoff = now - MatchHandler.JOIN_TIME_TTL_MS;
+      for (const [key, at] of this.lastJoinTime) {
+        if (at < cutoff) {
+          this.lastJoinTime.delete(key);
+        }
+      }
+      // Still full of fresh entries: drop the oldest insertions to stay bounded.
+      while (this.lastJoinTime.size >= MatchHandler.MAX_JOIN_TIME_ENTRIES) {
+        const oldest = this.lastJoinTime.keys().next();
+        if (oldest.done) break;
+        this.lastJoinTime.delete(oldest.value);
+      }
+    }
+
+    this.lastJoinTime.set(uid, now);
+  }
+
+  /**
    * Handle join request - user wants to find a match
    */
   public async handleJoin(socket: ExtendedSocket, data: MatchRequest): Promise<void> {
@@ -144,25 +184,23 @@ export class MatchHandler {
 
     socketLogger.info(`👤 [JOIN REQUEST] UID: ${uid}, Name: ${name}, Gender: ${gender}`);
 
-    // Idempotency check - prevent duplicate concurrent join operations
+    // Asking to search while a search is already under way is not an error — it is the same
+    // request again. Tapping "Next" twice is completely normal, and answering it with an
+    // error message puts alarming text in front of a user whose request is, in fact, being
+    // honoured. Re-affirm the searching state instead and drop the duplicate.
     if (this.pendingJoinOperations.has(uid)) {
-      socketLogger.warn(`⚠️  [JOIN IDEMPOTENT] UID: ${uid} - Join already in progress`);
-      socket.emit('match', {
-        status: 'error',
-        message: 'Join request already in progress. Please wait.',
-      });
+      socketLogger.debug(`[JOIN DUPLICATE] UID: ${uid} - join already in progress`);
+      socket.emit('match', { status: 'searching', message: 'Searching for a match...' });
       return;
     }
 
-    // Debounce check - prevent rapid successive joins (500ms cooldown)
+    // Same reasoning for the rapid-repeat debounce: it protects the queue from churn, but to
+    // the user it is still "yes, you are searching".
     const lastJoinTime = this.lastJoinTime.get(uid) || 0;
     const now = Date.now();
     if (now - lastJoinTime < 500) {
-      socketLogger.warn(`⚠️  [JOIN DEBOUNCED] UID: ${uid} - Too soon since last join`);
-      socket.emit('match', {
-        status: 'error',
-        message: 'Please wait a moment before trying again.',
-      });
+      socketLogger.debug(`[JOIN DEBOUNCED] UID: ${uid} - too soon since last join`);
+      socket.emit('match', { status: 'searching', message: 'Searching for a match...' });
       return;
     }
 
@@ -234,7 +272,7 @@ export class MatchHandler {
     const joinOperation = (async () => {
       try {
         await this.matchmaking.addToQueue(queueUser, ipAddress, socket.id);
-        this.lastJoinTime.set(uid, Date.now());
+        this.recordJoinTime(uid);
         socketLogger.debug(
           `⏳ [WAITING] UID: ${uid} (${name}) added to queue from IP: ${ipAddress}`
         );
@@ -316,6 +354,43 @@ export class MatchHandler {
   }
 
   /**
+   * Undo a claim that never became a room.
+   *
+   * Both halves matter: dropping the claim so the users are matchable again, and putting
+   * them back in the queue so something actually tries. Skipping either leaves a user
+   * connected, in state 'queue', but invisible to matchmaking — searching forever.
+   */
+  private async releaseAndRequeue(roomId: string, users: MatchRequest[]): Promise<void> {
+    await this.matchmaking.releaseClaim(
+      users.map((u) => u.uid),
+      roomId
+    );
+
+    await Promise.all(
+      users.map(async (u) => {
+        const socket = this.connections.get(u.uid);
+        // Only re-queue someone who is still connected and still waiting.
+        if (!socket?.connected || socket.state !== 'queue') {
+          return;
+        }
+        try {
+          await this.matchmaking.addToQueue({
+            uid: u.uid,
+            name: u.name,
+            gender: u.gender,
+            joinedAt: Math.floor(Date.now() / 1000),
+          });
+        } catch (error) {
+          socketLogger.error(`[REQUEUE FAILED] UID ${u.uid}:`, error);
+        }
+      })
+    );
+
+    runtimeMetrics.trackFailedMatch();
+    socketLogger.warn(`[MATCH RELEASED] room ${roomId} abandoned; users returned to queue`);
+  }
+
+  /**
    * Try to find a match
    */
   private async tryFindMatch(uid: number, name: string, gender: string): Promise<boolean> {
@@ -330,49 +405,53 @@ export class MatchHandler {
       this.matchingInProgress.add(uid);
       socketLogger.debug(`🔒 [LOCK] UID: ${uid} locked for matching`);
 
-      // Small delay to prevent immediate race conditions (reduced from 1500-3500ms)
-      const randomDelay = Math.floor(Math.random() * 200) + 100; // 100-300ms
-      await new Promise((resolve) => setTimeout(resolve, randomDelay));
-
-      // Check if user is still in queue after delay
+      // No artificial delay here. A 100-300ms sleep used to stand in for a lock, adding
+      // latency to every single match; the actual mutual exclusion comes from
+      // `matchingInProgress` above and from the atomic ZREM pair in match.lua (which only
+      // began working once the caller's real queue member was removed — see match.lua).
       const socket = this.connections.get(uid);
       if (!socket || !socket.connected || socket.state !== 'queue') {
-        socketLogger.warn(`⚠️  [MATCH ABORT] UID: ${uid} no longer in queue after delay`);
+        socketLogger.warn(`⚠️  [MATCH ABORT] UID: ${uid} no longer in queue`);
         this.matchingInProgress.delete(uid);
         return false;
       }
 
-      const matchedUser = await this.matchmaking.findMatch(uid, gender);
+      // The room id is generated up front so the Lua script can claim both users for it in
+      // the same atomic step that selects them.
+      const roomId = uuidv4();
+      const matchedUser = await this.matchmaking.findMatch(uid, gender, roomId);
 
       if (matchedUser) {
-        // Check if matched user is already being matched
-        if (this.matchingInProgress.has(matchedUser.uid)) {
-          socketLogger.warn(
-            `⚠️  [RACE DETECTED] UID: ${uid} matched with ${matchedUser.uid} who is already matching, aborting`
-          );
-          this.matchingInProgress.delete(uid);
-          return false;
-        }
-
-        // Lock both users
+        // No local "is the partner already matching?" abort here.
+        //
+        // Redis is the arbiter: findMatch's script atomically claims BOTH users for this
+        // room, and a concurrent script for the partner sees that claim and returns nothing.
+        // Winning the claim is therefore sufficient authority to proceed.
+        //
+        // Checking the in-process `matchingInProgress` flag as well used to deadlock the
+        // two-user case outright. processQueuedUsers starts an attempt for every queued user
+        // in the same tick, so with exactly two people online each one registers itself
+        // before either finishes its Redis round trip — every tick, forever. Both aborted,
+        // both were re-queued, and they could never pair. Launch night starts with two users.
         this.matchingInProgress.add(matchedUser.uid);
 
         socketLogger.info(`🎯 [MATCH FOUND] UID: ${uid} matched with UID: ${matchedUser.uid}`);
 
-        // Remove both from queue
-        await Promise.all([
-          this.matchmaking.removeFromQueue(uid, gender),
-          this.matchmaking.removeFromQueue(matchedUser.uid, matchedUser.gender),
-        ]);
+        // The Lua script already removed both from the queue atomically; re-issuing an O(n)
+        // removal here would only cost a full queue scan each.
 
         const currentUser: MatchRequest = { uid, name, gender };
-        await this.createAndNotifyMatch(currentUser, matchedUser);
+        const created = await this.createAndNotifyMatch(currentUser, matchedUser, roomId);
+
+        if (!created) {
+          await this.releaseAndRequeue(roomId, [currentUser, matchedUser]);
+        }
 
         // Unlock both users
         this.matchingInProgress.delete(uid);
         this.matchingInProgress.delete(matchedUser.uid);
 
-        return true;
+        return created;
       }
 
       // No human match found - try to match with a bot ONLY if user is male
@@ -397,9 +476,11 @@ export class MatchHandler {
             isBot: true,
           };
 
-          await this.createAndNotifyMatch(currentUser, botUser);
+          // Bot pairings bypass the queue script, so there is no prior claim — mint the id.
+          const botRoomId = uuidv4();
+          const botMatched = await this.createAndNotifyMatch(currentUser, botUser, botRoomId);
           this.matchingInProgress.delete(uid);
-          return true;
+          return botMatched;
         }
       }
 
@@ -416,7 +497,18 @@ export class MatchHandler {
   /**
    * Create room and notify both users
    */
-  private async createAndNotifyMatch(user1: MatchRequest, user2: QueueUser): Promise<void> {
+  /**
+   * Turn a claimed pair into a live room.
+   *
+   * Returns false when the match could not be completed, so the caller can release the claim
+   * and put both users back in the queue rather than leaving them stranded.
+   */
+  private async createAndNotifyMatch(
+    user1: MatchRequest,
+    user2: QueueUser,
+    claimedRoomId: string
+  ): Promise<boolean> {
+    const matchStartedAt = Date.now();
     const user1Socket = this.connections.get(user1.uid);
     const user2Socket = this.connections.get(user2.uid);
 
@@ -430,14 +522,16 @@ export class MatchHandler {
         `🚫 [BOT SAFETY] Attempted to match bot with non-male user ${user1.uid} (${user1.gender}) - BLOCKED`
       );
       this.matchingInProgress.delete(user1.uid);
-      return;
+      runtimeMetrics.trackFailedMatch();
+      return false;
     }
     if (user1IsBot && user2.gender !== 'male') {
       socketLogger.error(
         `🚫 [BOT SAFETY] Attempted to match bot with non-male user ${user2.uid} (${user2.gender}) - BLOCKED`
       );
       this.matchingInProgress.delete(user2.uid);
-      return;
+      runtimeMetrics.trackFailedMatch();
+      return false;
     }
 
     // Validate user1 connection (unless it's a bot)
@@ -472,7 +566,8 @@ export class MatchHandler {
           user2Socket.id
         );
       }
-      return;
+      runtimeMetrics.trackFailedMatch();
+      return false;
     }
 
     // Validate user2 connection (unless it's a bot)
@@ -501,7 +596,8 @@ export class MatchHandler {
           joinedAt: Math.floor(Date.now() / 1000),
         });
       }
-      return;
+      runtimeMetrics.trackFailedMatch();
+      return false;
     }
 
     // Check if either user is already in a room (skip for bots)
@@ -516,7 +612,8 @@ export class MatchHandler {
             message: 'Match failed: Partner already in chat',
           });
         }
-        return;
+        runtimeMetrics.trackFailedMatch();
+        return false;
       }
     }
 
@@ -537,23 +634,28 @@ export class MatchHandler {
             joinedAt: Math.floor(Date.now() / 1000),
           });
         }
-        return;
+        runtimeMetrics.trackFailedMatch();
+        return false;
       }
     }
 
-    const roomId = uuidv4();
+    const roomId = claimedRoomId;
     const channelName = roomId;
 
     try {
       const user1RtcEnabled = !user2IsBot;
       const user2RtcEnabled = !user1IsBot;
 
-      const ice1 = user1RtcEnabled
-        ? await this.turnService.mintIceConfig(user1.uid, 3600)
-        : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
-      const ice2 = user2RtcEnabled
-        ? await this.turnService.mintIceConfig(user2.uid, 3600)
-        : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+      // Mint both peers' ICE configs concurrently. These were two sequential awaits against
+      // Cloudflare, so every match paid both round-trips back to back on its critical path.
+      const emptyIce = () => ({
+        iceServers: [],
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      });
+      const [ice1, ice2] = await Promise.all([
+        user1RtcEnabled ? this.turnService.mintIceConfig(user1.uid, 3600) : emptyIce(),
+        user2RtcEnabled ? this.turnService.mintIceConfig(user2.uid, 3600) : emptyIce(),
+      ]);
 
       const expiresAt = ice1.expiresAt || ice2.expiresAt;
 
@@ -568,6 +670,7 @@ export class MatchHandler {
       };
 
       await this.roomService.createRoom(room);
+      runtimeMetrics.trackMatch(Date.now() - matchStartedAt);
 
       // Update socket states for real users only
       if (!user1IsBot && user1Socket) {
@@ -592,9 +695,17 @@ export class MatchHandler {
         botManager.onBotMatched(user2.uid, user1.uid, roomId);
       }
 
+      const iceSummary1 = summarizeIceServers(ice1.iceServers);
+      const iceSummary2 = summarizeIceServers(ice2.iceServers);
       socketLogger.info(
-        `🏠 [MATCH] Room: ${roomId} | ${user1.name} (${user1.uid}${user1IsBot ? ' 🤖' : ''}) <-> ${user2.name} (${user2.uid}${user2IsBot ? ' 🤖' : ''})`
+        `🏠 [MATCH] Room: ${roomId} | ${user1.name} (${user1.uid}${user1IsBot ? ' 🤖' : ''}) <-> ${user2.name} (${user2.uid}${user2IsBot ? ' 🤖' : ''}) | ICE ${iceSummary1.stun}/${iceSummary1.turn}/${iceSummary1.turns} + ${iceSummary2.stun}/${iceSummary2.turn}/${iceSummary2.turns} stun/turn/turns`
       );
+      if (user1RtcEnabled && iceSummary1.turn + iceSummary1.turns === 0) {
+        socketLogger.warn(`[ICE] STUN-only for uid ${user1.uid} — media will fail on CGNAT`);
+      }
+      if (user2RtcEnabled && iceSummary2.turn + iceSummary2.turns === 0) {
+        socketLogger.warn(`[ICE] STUN-only for uid ${user2.uid} — media will fail on CGNAT`);
+      }
 
       // Broadcast to admin
       if (this.adminHandler) {
@@ -642,6 +753,7 @@ export class MatchHandler {
       // Bot waits for user to message first - no greeting
     } catch (error) {
       socketLogger.error(`⚠️  [MATCH ERROR] Failed to create match:`, error);
+      runtimeMetrics.trackFailedMatch();
       if (!user1IsBot && user1Socket) {
         user1Socket.emit('match', { status: 'error', message: 'Failed to create match' });
       }
@@ -649,6 +761,8 @@ export class MatchHandler {
         user2Socket.emit('match', { status: 'error', message: 'Failed to create match' });
       }
     }
+
+    return true;
   }
 
   /**

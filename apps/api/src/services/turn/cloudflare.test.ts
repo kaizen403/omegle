@@ -48,7 +48,13 @@ describe('mintCloudflareIceConfig', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://rtc.live.cloudflare.com/v1/turn/keys/turn-key/credentials/generate-ice-servers',
-      expect.objectContaining({ method: 'POST' })
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer api-token',
+          'User-Agent': 'omegle-api/1.0',
+        }),
+      })
     );
     expect(iceServers).toEqual([
       { urls: 'stun:stun.cloudflare.com:3478' },

@@ -63,6 +63,30 @@ export function buildIceConfig(options: TurnIceOptions, uid: number, ttlSeconds?
   return { iceServers, expiresAt };
 }
 
+export function summarizeIceServers(iceServers: IceServer[]): {
+  stun: number;
+  turn: number;
+  turns: number;
+} {
+  const urls = iceServers.flatMap((server) =>
+    Array.isArray(server.urls) ? server.urls : [server.urls]
+  );
+  return {
+    stun: urls.filter((url) => url.startsWith('stun:')).length,
+    turn: urls.filter((url) => url.startsWith('turn:') && !url.startsWith('turns:')).length,
+    turns: urls.filter((url) => url.startsWith('turns:')).length,
+  };
+}
+
 export function isTurnConfigured(options: Pick<TurnIceOptions, 'turnHost' | 'turnAuthSecret'>): boolean {
-  return Boolean(options.turnHost.trim() && options.turnAuthSecret);
+  const host = options.turnHost.trim();
+  const secret = options.turnAuthSecret.trim();
+  if (!host || !secret) {
+    return false;
+  }
+  if (isCloudflareTurnHost(host)) {
+    const separator = secret.indexOf(':');
+    return separator > 0 && separator < secret.length - 1;
+  }
+  return true;
 }

@@ -4,7 +4,6 @@ import { RoomService } from '../../services/room';
 import { socketLogger } from '../../utils/logger';
 import { DisconnectReason } from '../../models';
 import { botManager } from '../../services/bots';
-import { storageService } from '../../services/storage/s3';
 import { ChatHandler } from './chat.handler';
 
 /**
@@ -85,24 +84,6 @@ export class RoomHandler {
     // Broadcast room deletion to admin
     if (this.adminHandler) {
       this.adminHandler.broadcastRoomDeleted(room.roomId);
-    }
-
-    // Cleanup ALL files in the room folder (for both users) - NON-BLOCKING
-    const folderPath = `chat-files/${room.roomId}`;
-    storageService
-      .deleteFolder(folderPath)
-      .then(() => {
-        socketLogger.info(`🗑️  [ROOM FILES DELETED] Cleaned up entire folder: ${folderPath}`);
-      })
-      .catch((error) => {
-        socketLogger.error(`⚠️  [ROOM FILES DELETE ERROR] Room ${room.roomId}:`, error);
-      });
-
-    // Clear uploaded files tracking for both users
-    socket.uploadedFiles = [];
-    const partnerSocket = this.connections.get(partnerUid);
-    if (partnerSocket) {
-      partnerSocket.uploadedFiles = [];
     }
 
     // Leave Socket.IO room
@@ -240,28 +221,6 @@ export class RoomHandler {
         // Broadcast room deletion
         if (this.adminHandler) {
           this.adminHandler.broadcastRoomDeleted(room.roomId);
-        }
-
-        // Cleanup ALL files in the room folder when room is deleted - NON-BLOCKING
-        const folderPath = `chat-files/${room.roomId}`;
-        storageService
-          .deleteFolder(folderPath)
-          .then(() => {
-            socketLogger.info(
-              `🗑️  [ROOM FILES DELETED] Cleaned up entire folder on disconnect: ${folderPath}`
-            );
-          })
-          .catch((error) => {
-            socketLogger.error(`⚠️  [ROOM FILES DELETE ERROR] Room ${room.roomId}:`, error);
-          });
-
-        // Clear uploaded files tracking for both users
-        if (socket) {
-          socket.uploadedFiles = [];
-        }
-        const partnerSocket = this.connections.get(partnerUid || 0);
-        if (partnerSocket) {
-          partnerSocket.uploadedFiles = [];
         }
 
         if (partnerUid) {

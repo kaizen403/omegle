@@ -81,4 +81,22 @@ describe('SignalHandler', () => {
     expect(socket.to).not.toHaveBeenCalled();
     handler.destroy();
   });
+
+  it('relays a full ICE trickle burst so TURN candidates are not dropped', () => {
+    const handler = new SignalHandler();
+    const socket = mockSocket();
+    const burst = 50;
+
+    for (let i = 0; i < burst; i += 1) {
+      handler.handleSignal(socket as never, {
+        type: 'candidate',
+        candidate: `candidate:${i} 1 UDP 1 1.1.1.1 9 typ host`,
+        sdpMid: '0',
+        sdpMLineIndex: 0,
+      });
+    }
+
+    expect(socket.toEmit).toHaveBeenCalledTimes(burst);
+    handler.destroy();
+  });
 });

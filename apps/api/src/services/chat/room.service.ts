@@ -80,7 +80,7 @@ export class RoomService {
         ttl: ROOM_TTL,
         totalActiveRooms: roomCount,
       });
-    }, `createRoom:${room.roomId}`);
+    }, `createRoom:${room.roomId}`, { retry: false });
   }
 
   /**
@@ -99,7 +99,7 @@ export class RoomService {
         const room = JSON.parse(roomData) as Room;
         logger.debug(`Room retrieved: ${roomId}`, { user1: room.user1.uid, user2: room.user2.uid });
         return room;
-      }, `getRoom:${roomId}`);
+      }, `getRoom:${roomId}`, { retry: true });
     } catch (error) {
       logError('getRoom', error as Error, { roomId });
       return null;
@@ -256,7 +256,7 @@ export class RoomService {
             user2: room.user2.uid,
             remainingRooms: roomCount || '0',
           });
-        }, `deleteRoom:${roomId}`);
+        }, `deleteRoom:${roomId}`, { retry: false });
       } finally {
         // Always release lock (only if we still own it)
         const currentValue = await this.redis.get(lockKey);
@@ -333,6 +333,26 @@ export class RoomService {
   /**
    * Get all active rooms using SCAN (non-blocking, production-safe)
    */
+  /**
+   * Collect keys matching a pattern using SCAN.
+   *
+   * KEYS is O(n) over the entire keyspace and blocks Redis's single thread for the whole
+   * sweep, so anything that can grow the keyspace (rooms, chat histories) turns a periodic
+   * cleanup into a stall that every other command waits behind. SCAN yields between batches.
+   */
+  private async scanKeys(pattern: string, count = 200): Promise<string[]> {
+    const found: string[] = [];
+    let cursor = 0;
+
+    do {
+      const result = await this.redis.scan(cursor, { MATCH: pattern, COUNT: count });
+      cursor = result.cursor;
+      found.push(...result.keys);
+    } while (cursor !== 0);
+
+    return found;
+  }
+
   async getAllRooms(): Promise<Room[]> {
     try {
       return await this.redisClient.executeWithProtection(async () => {
@@ -424,7 +444,7 @@ export class RoomService {
 
         logger.debug(`[RoomService] Returning ${rooms.length} valid rooms`);
         return rooms;
-      }, 'getAllRooms');
+      }, 'getAllRooms', { retry: true });
     } catch (error) {
       logger.error('Failed to get all rooms:', error);
       return [];
@@ -443,7 +463,7 @@ export class RoomService {
         // Set TTL to match room TTL (2 hours)
         await this.redis.expire(chatKey, ROOM_TTL);
         logger.debug(`[RoomService] Added message to room ${roomId} chat history`);
-      }, `addChatMessage:${roomId}`);
+      }, `addChatMessage:${roomId}`, { retry: false });
     } catch (error) {
       logger.error(`Failed to add message to room ${roomId}:`, error);
     }
@@ -459,7 +479,7 @@ export class RoomService {
         // Get all messages from the list (0 to limit-1)
         const messages = await this.redis.lRange(chatKey, 0, limit - 1);
         return messages.map((msg) => JSON.parse(msg));
-      }, `getChatHistory:${roomId}`);
+      }, `getChatHistory:${roomId}`, { retry: true });
     } catch (error) {
       logger.error(`Failed to get chat history for room ${roomId}:`, error);
       return [];
@@ -472,13 +492,13 @@ export class RoomService {
   async cleanupAllChatHistories(): Promise<number> {
     try {
       return await this.redisClient.executeWithProtection(async () => {
-        const chatKeys = await this.redis.keys('room:chat:*');
+        const chatKeys = await this.scanKeys('room:chat:*');
         if (chatKeys.length > 0) {
           await this.redis.del(chatKeys);
           logger.info(`[RoomService] Cleaned up ${chatKeys.length} chat histories`);
         }
         return chatKeys.length;
-      }, 'cleanupAllChatHistories');
+      }, 'cleanupAllChatHistories', { retry: false });
     } catch (error) {
       logger.error('Failed to cleanup chat histories:', error);
       return 0;
@@ -486,8 +506,8 @@ export class RoomService {
   }
 
   /**
-   * Clear ALL Redis data for fresh start
-   * Called on server startup to ensure clean state
+   * Clear ALL Redis room/queue keys.
+   * Not called on boot or shutdown — a second replica would wipe live sessions.
    */
   async clearAllData(): Promise<{ totalKeysDeleted: number; details: Record<string, number> }> {
     logger.info('[RoomService] 🧹 CLEARING ALL REDIS DATA for fresh start...');
@@ -498,7 +518,7 @@ export class RoomService {
     try {
       for (const pattern of CLEANUP_KEY_PATTERNS) {
         try {
-          const keys = await this.redis.keys(pattern);
+          const keys = await this.scanKeys(pattern);
           if (keys.length > 0) {
             await this.redis.del(keys);
             details[pattern] = keys.length;
@@ -532,7 +552,7 @@ export class RoomService {
   async cleanupStaleRooms(): Promise<number> {
     try {
       return await this.redisClient.executeWithProtection(async () => {
-        const roomKeys = await this.redis.keys(`${ROOM_KEY_PREFIX}*`);
+        const roomKeys = await this.scanKeys(`${ROOM_KEY_PREFIX}*`);
         let cleanedCount = 0;
 
         for (const key of roomKeys) {
@@ -635,7 +655,7 @@ export class RoomService {
         }
 
         return cleanedCount;
-      }, 'cleanupStaleRooms');
+      }, 'cleanupStaleRooms', { retry: false });
     } catch (error) {
       logger.error('Failed to cleanup stale rooms:', error);
       return 0;

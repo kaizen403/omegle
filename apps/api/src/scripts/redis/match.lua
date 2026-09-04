@@ -18,8 +18,24 @@
 -- KEYS[1]: queueKey (sorted set of waiting users)
 -- ARGV[1]: currentUID (user requesting match)
 -- ARGV[2]: currentData (current user data with gender)
+-- ARGV[3]: roomId to claim this pair under
+-- ARGV[4]: claim TTL in seconds
 --
 -- Returns: matched user data (JSON string) or nil if no match found
+--
+-- ATOMIC PAIR CLAIM
+-- -----------------
+-- Removing both users from the queue is not sufficient on its own. `user:room:<uid>` used to
+-- be written only at the end of createRoom, which happens after ICE credentials are minted —
+-- hundreds of milliseconds later in production. For that entire window both users looked
+-- unclaimed to any concurrently running copy of this script, so a second caller could match
+-- one of them with a third party. Whichever createRoom lost the race left its users removed
+-- from the queue and in no room at all: stuck on "Searching..." forever.
+--
+-- A load test of 1,000 simultaneous joins produced 642 matches but only 297 rooms — roughly
+-- 400 users stranded. The claim therefore happens here, inside the same atomic script that
+-- selects the pair, and carries a short TTL so a match that dies mid-flight self-heals
+-- instead of pinning both users permanently.
 
 local queueKey = KEYS[1]
 local currentUID = tonumber(ARGV[1])
@@ -58,13 +74,25 @@ local sameGenderCandidates = {}          -- Priority 2: Same gender (no consecut
 local oppositeGenderConsecutive = {}     -- Priority 3: Opposite gender with consecutive
 local sameGenderConsecutive = {}         -- Priority 4: Same gender with consecutive
 
+-- The caller's own queue member, captured verbatim while scanning.
+--
+-- We cannot rebuild it: findMatch constructs currentData with name='' and a fresh joinedAt,
+-- so it never byte-matches the member addToQueue stored (real name, original timestamp).
+-- ZREM on that reconstruction was a silent no-op, which left the caller in the queue after a
+-- successful match and allowed a third user to match with someone already paired.
+local currentMember = nil
+
 for i = 1, #allUsers do
     local userData = allUsers[i]
     local userObj = cjson.decode(userData)
     local userUID = tonumber(userObj.uid)
     local userGender = userObj.gender
     local userIsBot = userObj.isBot or false
-    
+
+    if userUID == currentUID then
+        currentMember = userData
+    end
+
     -- Skip self
     if userUID ~= currentUID then
         -- BOT MATCHING RULE: Prevent bot-to-bot matching
@@ -153,13 +181,26 @@ local selectedUser = selectedCandidates[1]
 local matchedObj = cjson.decode(selectedUser)
 local matchedUID = tonumber(matchedObj.uid)
 
+-- Claim BOTH users for this room before returning. From here on any concurrent run of this
+-- script sees them as already in a room and skips them.
+local roomId = ARGV[3]
+local claimTtl = tonumber(ARGV[4]) or 30
+if roomId and roomId ~= '' then
+    redis.call('SETEX', currentRoomKey, claimTtl, roomId)
+    redis.call('SETEX', 'user:room:' .. matchedUID, claimTtl, roomId)
+end
+
 -- Store last partner to prevent immediate consecutive rematch
 redis.call('SETEX', lastPartnerKey, 300, tostring(matchedUID))  -- 5 min TTL
 local partnerLastKey = 'user:last_partner:' .. matchedUID
 redis.call('SETEX', partnerLastKey, 300, tostring(currentUID))  -- 5 min TTL
 
--- CRITICAL: Atomically remove BOTH users from queue to prevent double-matching
+-- CRITICAL: Atomically remove BOTH users from the queue to prevent double-matching.
+-- Both removals use the exact member strings read from the sorted set in this same script,
+-- so each ZREM is guaranteed to hit.
 redis.call('ZREM', queueKey, selectedUser)
-redis.call('ZREM', queueKey, currentData)
+if currentMember then
+    redis.call('ZREM', queueKey, currentMember)
+end
 
 return selectedUser

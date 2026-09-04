@@ -1,5 +1,5 @@
 import { mintTurnCredential } from './credentials';
-import { buildIceConfig, isCloudflareTurnHost, isTurnConfigured } from './ice';
+import { buildIceConfig, isCloudflareTurnHost, isTurnConfigured, summarizeIceServers } from './ice';
 
 describe('mintTurnCredential', () => {
   it('matches coturn REST HMAC-SHA1 for a known fixture', () => {
@@ -48,6 +48,15 @@ describe('buildIceConfig', () => {
     expect(isTurnConfigured({ turnHost: '', turnAuthSecret: 'x' })).toBe(false);
   });
 
+  it('reports Cloudflare TURN unconfigured until the secret is keyId:token', () => {
+    expect(
+      isTurnConfigured({ turnHost: 'turn.cloudflare.com', turnAuthSecret: 'unconfigured-cloudflare-turn' })
+    ).toBe(false);
+    expect(isTurnConfigured({ turnHost: 'turn.cloudflare.com', turnAuthSecret: 'key-id:api-token' })).toBe(
+      true
+    );
+  });
+
   it('does not mint coturn HMAC for Cloudflare Realtime TURN', () => {
     expect(isCloudflareTurnHost('turn.cloudflare.com')).toBe(true);
     const { iceServers } = buildIceConfig(
@@ -59,5 +68,23 @@ describe('buildIceConfig', () => {
     expect(iceServers.some((server) => JSON.stringify(server.urls).includes('turn.cloudflare.com'))).toBe(
       false
     );
+  });
+});
+
+describe('summarizeIceServers', () => {
+  it('counts stun/turn/turns without reading credentials', () => {
+    expect(
+      summarizeIceServers([
+        { urls: ['stun:stun.example.com:3478', 'stun:stun.example.com:53'] },
+        {
+          urls: [
+            'turn:turn.example.com:3478?transport=udp',
+            'turns:turn.example.com:5349?transport=tcp',
+          ],
+          username: 'secret-user',
+          credential: 'secret-pass',
+        },
+      ])
+    ).toEqual({ stun: 2, turn: 1, turns: 1 });
   });
 });

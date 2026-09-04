@@ -5,7 +5,21 @@ import { socketLogger } from '../../utils/logger';
 import { SocketRateLimiter } from '../../utils/socketRateLimiter';
 import { ChatMessage, TypingIndicator } from '../../models';
 import { botManager } from '../../services/bots';
-import { storageService } from '../../services/storage/s3';
+import { MessageValidator } from '../../utils/messageValidator';
+import { config } from '../../config';
+import { GlobalBudget } from '../../utils/boundedRateLimiter';
+
+/** Single source of truth for chat text length — the validator uses the same value. */
+const MAX_CHAT_MESSAGE_LENGTH = 1000;
+
+/**
+ * Hard ceiling on paid LLM calls per rolling hour, across every user.
+ *
+ * Bot replies are triggered by inbound chat messages and each one costs money. Per-user limits
+ * cannot bound this because the client picks its own uid — so this global budget is what
+ * actually caps the bill.
+ */
+const botReplyBudget = new GlobalBudget(config.limits.botRepliesPerHour);
 
 /**
  * Chat Handler - Manages messaging and typing indicators
@@ -87,17 +101,9 @@ export class ChatHandler {
       return;
     }
 
-    const message: ChatMessage = {
-      text: data.text,
-      from: socket.uid,
-      timestamp: Date.now(),
-    };
-
-    // Validate message
-    if (!message.text || typeof message.text !== 'string') {
+    if (!data || typeof data !== 'object' || typeof data.text !== 'string') {
       socket.emit('error', { message: 'Invalid message format' });
 
-      // Broadcast to admin dashboard
       if (this.adminHandler) {
         this.adminHandler.broadcastUserError({
           timestamp: Date.now(),
@@ -109,20 +115,36 @@ export class ChatHandler {
       return;
     }
 
-    if (message.text.length > 5000) {
+    // Reject over-length input rather than silently truncating, and use the same limit the
+    // validator advertises. This path previously allowed 5000 chars against a documented
+    // 1000, so five times the intended payload reached Redis, the partner, and the dashboard.
+    if (data.text.length > MAX_CHAT_MESSAGE_LENGTH) {
       socket.emit('error', { message: 'Message too long' });
 
-      // Broadcast to admin dashboard
       if (this.adminHandler) {
         this.adminHandler.broadcastUserError({
           timestamp: Date.now(),
           uid: socket.uid,
           name: socket.name || 'Unknown',
-          error: 'Message too long (>5000 chars)',
+          error: `Message too long (>${MAX_CHAT_MESSAGE_LENGTH} chars)`,
         });
       }
       return;
     }
+
+    // Strip control/bidi characters before the text reaches Redis, the partner, and the
+    // admin dashboard.
+    const text = MessageValidator.sanitizeDisplayName(data.text, MAX_CHAT_MESSAGE_LENGTH);
+    if (!text) {
+      socket.emit('error', { message: 'Invalid message format' });
+      return;
+    }
+
+    const message: ChatMessage = {
+      text,
+      from: socket.uid,
+      timestamp: Date.now(),
+    };
 
     try {
       // Store message in Redis for admin monitoring history
@@ -150,6 +172,14 @@ export class ChatHandler {
       // Check if partner is a bot and generate response
       const partnerId = socket.partnerId;
       if (partnerId && botManager.isBot(partnerId)) {
+        // Global spend ceiling. Without it, inbound messages map 1:1 to paid model calls and
+        // the only thing bounding the bill is how fast an attacker can type.
+        if (!botReplyBudget.tryConsume()) {
+          socketLogger.warn(
+            `[BOT BUDGET] Hourly bot reply budget exhausted; skipping reply for uid ${socket.uid}`
+          );
+          return;
+        }
         // Send typing indicator immediately
         socket.emit('typing', { isTyping: true, from: partnerId });
 
@@ -219,122 +249,6 @@ export class ChatHandler {
   }
 
   /**
-   * Handle file message
-   */
-  public async handleFileMessage(socket: ExtendedSocket, data: any): Promise<void> {
-    if (!socket.uid) {
-      socketLogger.warn(`⚠️  [FILE MSG REJECTED] No UID`);
-      socket.emit('error', { message: 'Not authenticated' });
-      return;
-    }
-
-    if (socket.state !== 'active') {
-      socketLogger.warn(
-        `⚠️  [FILE MSG REJECTED] UID: ${socket.uid} not in active state (current: ${socket.state})`
-      );
-      socket.emit('error', { message: 'Not in active chat' });
-      return;
-    }
-
-    // Rate limiting for file messages
-    if (!this.rateLimiter.allowMessage(socket.uid)) {
-      socketLogger.warn(`⚠️  [RATE LIMIT] UID: ${socket.uid} - File message rate limit exceeded`);
-      socket.emit('error', { message: 'Rate limit exceeded. Please slow down.' });
-      return;
-    }
-
-    const room = await this.roomService.getRoomByUserId(socket.uid);
-    if (!room) {
-      socketLogger.warn(`⚠️  [FILE MSG REJECTED] UID: ${socket.uid} not in any room`);
-      socket.emit('error', { message: 'Not in a room' });
-      return;
-    }
-
-    // Validate file data
-    if (!data.fileUrl || !data.fileName || !data.mimeType || !data.filePath) {
-      socket.emit('error', { message: 'Invalid file message format' });
-      return;
-    }
-
-    const message: ChatMessage & {
-      fileUrl: string;
-      fileName: string;
-      mimeType: string;
-      fileSize?: number;
-    } = {
-      text: data.text || '', // Optional caption
-      from: socket.uid,
-      timestamp: Date.now(),
-      fileUrl: data.fileUrl,
-      fileName: data.fileName,
-      mimeType: data.mimeType,
-      fileSize: data.fileSize,
-    };
-
-    try {
-      // Store file path for cleanup when user disconnects
-      if (!socket.uploadedFiles) {
-        socket.uploadedFiles = [];
-      }
-      socket.uploadedFiles.push(data.filePath);
-
-      // Store message in Redis for admin monitoring history
-      const messageWithName = {
-        ...message,
-        fromName: socket.name || 'Unknown',
-      };
-      await this.roomService.addChatMessage(room.roomId, messageWithName);
-
-      // Broadcast to partner only
-      socket.to(room.roomId).emit('message', message);
-
-      // Broadcast to monitoring admins
-      if (this.adminHandler) {
-        this.adminHandler.broadcastRoomMessage(room.roomId, {
-          sender: String(message.from),
-          content: message.text || `[File: ${message.fileName}]`,
-          type: 'file',
-          fileUrl: message.fileUrl,
-          fileName: message.fileName,
-          mimeType: message.mimeType,
-          fileSize: message.fileSize,
-        });
-      }
-
-      socketLogger.info(
-        `📎 [FILE SENT] UID: ${socket.uid} -> Room: ${room.roomId} (${message.fileName})`
-      );
-    } catch (error) {
-      socketLogger.error(`⚠️  [FILE MESSAGE ERROR] UID: ${socket.uid}:`, error);
-      socket.emit('error', { message: 'Failed to send file message' });
-    }
-  }
-
-  /**
-   * Cleanup uploaded files for a user
-   */
-  public async cleanupUserFiles(socket: ExtendedSocket): Promise<void> {
-    if (!socket.uploadedFiles || socket.uploadedFiles.length === 0) {
-      return;
-    }
-
-    socketLogger.info(
-      `🗑️  [FILE CLEANUP] UID: ${socket.uid} - Cleaning up ${socket.uploadedFiles.length} files`
-    );
-
-    for (const filePath of socket.uploadedFiles) {
-      try {
-        await storageService.deleteFile(filePath);
-        socketLogger.info(`✅ [FILE DELETED] ${filePath}`);
-      } catch (error) {
-        socketLogger.error(`⚠️  [FILE DELETE ERROR] ${filePath}:`, error);
-      }
-    }
-
-    socket.uploadedFiles = [];
-  }
-
-  /**
    * Handle typing indicator
    */
   public async handleTyping(socket: ExtendedSocket, data: TypingIndicator): Promise<void> {
@@ -342,18 +256,16 @@ export class ChatHandler {
       return;
     }
 
-    if (socket.state !== 'active') {
+    if (socket.state !== 'active' || !socket.roomId) {
       return;
     }
 
-    const room = await this.roomService.getRoomByUserId(socket.uid);
-    if (!room) {
-      return;
-    }
-
-    // Broadcast typing indicator to partner only
-    socket.to(room.roomId).emit('typing', {
-      isTyping: data.isTyping,
+    // Typing fires on nearly every keystroke. Resolving the room through Redis here cost two
+    // GETs per keystroke per user; `socket.roomId` is already the authoritative in-process
+    // value, set when the room was created and cleared on leave/disconnect. Redis stays the
+    // source of truth for state *transitions* (join, message, leave), not for this hint.
+    socket.to(socket.roomId).emit('typing', {
+      isTyping: Boolean(data?.isTyping),
       from: socket.uid,
     });
 
