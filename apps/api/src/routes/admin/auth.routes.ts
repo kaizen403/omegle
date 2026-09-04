@@ -5,7 +5,12 @@ import { createRateLimiter } from '../../middleware/rateLimiter';
 import { AuthAdmin } from '../../lib/session';
 
 const router = Router();
-const loginRateLimiter = createRateLimiter(0.083, 5);
+// Session-echo endpoint. Kept tight so it cannot be used to probe session validity in bulk.
+const loginRateLimiter = createRateLimiter({
+  ratePerSecond: 0.083, // ~5/min sustained
+  burst: 5,
+  scope: 'admin-login',
+});
 
 function getUser(req: Request): AuthAdmin {
   return (req as Request & { user: AuthAdmin }).user;

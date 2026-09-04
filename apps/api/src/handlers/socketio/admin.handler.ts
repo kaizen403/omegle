@@ -4,7 +4,28 @@ import { RoomService } from '../../services/room';
 import { TurnService } from '../../services/turn';
 import { logger } from '../../utils/logger';
 import adminService from '../../services/admin/admin.service';
+import { adminAuditService } from '../../services/admin/audit.service';
 import { getAdminFromToken } from '../../lib/session';
+import { BoundedRateLimiter } from '../../utils/boundedRateLimiter';
+import { resolveClientIp } from '../../utils/clientIp';
+
+/**
+ * Admin sockets are unauthenticated until they present a valid session, and every `auth`
+ * attempt costs a Better Auth session lookup against Neon. Without a budget, an anonymous
+ * client can hold open sockets and spam `auth` to amplify load onto the database and brute
+ * force session tokens.
+ */
+const adminAuthLimiter = new BoundedRateLimiter({
+  capacity: 10,
+  refillPerSecond: 10 / 60, // ~10 attempts per minute per IP
+  maxKeys: 10_000,
+});
+
+/** How long a socket may stay connected without authenticating. */
+const ADMIN_AUTH_GRACE_MS = 10_000;
+
+/** Largest batch a single bulk_kick_users frame may carry. */
+const MAX_BULK_KICK = 200;
 
 /**
  * Admin Handler - Manages admin monitoring and control
@@ -205,12 +226,25 @@ export class AdminHandler {
    * Handle admin connection
    */
   private handleConnection(socket: AdminSocket): void {
-    logger.debug(`[ADMIN] Admin connection attempt from ${socket.handshake.address}`);
-    logger.debug(`[ADMIN] Socket ID: ${socket.id}`);
-    logger.debug(`[ADMIN] Auth token present: ${!!socket.handshake.auth?.token}`);
+    const clientIp = resolveClientIp(
+      socket.handshake.headers,
+      socket.conn?.remoteAddress || socket.handshake.address
+    );
+    (socket as AdminSocket & { clientIp?: string }).clientIp = clientIp;
+
+    logger.debug(`[ADMIN] Admin connection attempt from ${clientIp}`);
 
     socket.isAuthenticated = false;
     socket.connectedAt = Date.now();
+
+    // Drop sockets that never authenticate instead of letting them linger and consume slots.
+    socket.approvalTimeout = setTimeout(() => {
+      if (!socket.isAuthenticated) {
+        logger.warn(`[ADMIN] Socket ${socket.id} did not authenticate in time; disconnecting`);
+        socket.disconnect(true);
+      }
+    }, ADMIN_AUTH_GRACE_MS);
+    socket.approvalTimeout.unref?.();
 
     if (socket.handshake.auth?.token || socket.handshake.headers.cookie) {
       logger.debug(`[ADMIN] Auto-authenticating socket ${socket.id}`);
@@ -247,6 +281,11 @@ export class AdminHandler {
       // Clear heartbeat
       this.clearHeartbeat(socket);
 
+      if (socket.approvalTimeout) {
+        clearTimeout(socket.approvalTimeout);
+        socket.approvalTimeout = undefined;
+      }
+
       if (socket.adminId) {
         logger.debug(`[ADMIN] Removing socket ${socket.id} from adminConnections map`);
         this.adminConnections.delete(socket.id);
@@ -265,6 +304,23 @@ export class AdminHandler {
    * Handle authentication with Better Auth session cookie or bearer token
    */
   private async handleAuth(socket: AdminSocket, data: any): Promise<void> {
+    const clientIp = (socket as AdminSocket & { clientIp?: string }).clientIp || 'unknown';
+
+    // Charge the attempt before doing any database work.
+    if (!adminAuthLimiter.tryConsume(clientIp)) {
+      logger.warn(`[ADMIN] Auth rate limit exceeded for ${clientIp}`);
+      socket.emit('auth_response', { success: false, message: 'Too many attempts' });
+      socket.disconnect(true);
+      return;
+    }
+
+    // One socket authenticates once. Re-authenticating an established socket would let a
+    // caller swap identities underneath an already-authorised connection.
+    if (socket.isAuthenticated) {
+      socket.emit('auth_response', { success: true, message: 'Already authenticated' });
+      return;
+    }
+
     const sessionToken = data?.token || socket.handshake.auth?.token;
     const cookieHeader = socket.handshake.headers.cookie;
 
@@ -310,6 +366,13 @@ export class AdminHandler {
       socket.adminId = admin.uid;
       socket.isAuthenticated = true;
       socket.idToken = sessionToken;
+      socket.adminRole = admin.role;
+      socket.adminEmail = admin.email;
+
+      if (socket.approvalTimeout) {
+        clearTimeout(socket.approvalTimeout);
+        socket.approvalTimeout = undefined;
+      }
 
       this.adminConnections.set(socket.id, socket);
       logger.debug(`[ADMIN] Stored socket ${socket.id} in adminConnections map`);
@@ -457,7 +520,9 @@ export class AdminHandler {
 
     try {
       const uptime = Date.now() - this.startTime;
-      const redisHealthy = this.redisClient ? this.redisClient.checkHealth() : false;
+      // checkHealth() is async. Without the await this sent the dashboard a Promise, which
+      // serialises as {} — so the health panel never showed real Redis status.
+      const redisHealthy = this.redisClient ? await this.redisClient.checkHealth() : false;
       const memUsage = process.memoryUsage();
       const cpuUsage = process.cpuUsage();
 
@@ -562,7 +627,8 @@ export class AdminHandler {
 
       const metrics = (await this.redisClient.getMetrics?.()) || {};
       socket.emit('redis_metrics', {
-        connected: this.redisClient.checkHealth(),
+        // Likewise async — an un-awaited Promise here serialised as {}.
+        connected: await this.redisClient.checkHealth(),
         keyCount: metrics.keyCount || 0,
         memoryUsage: metrics.memoryUsage || 0,
         circuitBreakerStatus: metrics.circuitBreakerStatus || 'closed',
@@ -590,6 +656,14 @@ export class AdminHandler {
       return;
     }
 
+    // Bound the batch. An unbounded array lets a single frame pin the event loop iterating
+    // over millions of entries, and turns one compromised admin session into a whole-service
+    // outage in one message.
+    if (uids.length > MAX_BULK_KICK) {
+      socket.emit('error', { message: `Cannot kick more than ${MAX_BULK_KICK} users at once` });
+      return;
+    }
+
     const results: {
       success: number[];
       failed: number[];
@@ -606,6 +680,13 @@ export class AdminHandler {
           userSocket.disconnect(true);
           results.success.push(uid);
           logger.info(`[ADMIN] User ${uid} kicked by admin ${socket.adminId}`);
+      adminAuditService.track({
+        adminId: socket.adminId || 'unknown',
+        adminEmail: socket.adminEmail,
+        action: 'kick_user',
+        target: String(uid),
+        ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+      });
         } else {
           results.failed.push(uid);
         }
@@ -614,6 +695,15 @@ export class AdminHandler {
         results.failed.push(uid);
       }
     }
+
+    adminAuditService.track({
+      adminId: socket.adminId || 'unknown',
+      adminEmail: socket.adminEmail,
+      action: 'bulk_kick_users',
+      target: `${results.success.length} users`,
+      ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+      details: { kicked: results.success, failed: results.failed },
+    });
 
     socket.emit('bulk_kick_response', results);
     logger.info(
@@ -757,6 +847,14 @@ export class AdminHandler {
     if (userSocket) {
       userSocket.disconnect(true);
       logger.info(`[ADMIN] User ${uid} disconnected by admin ${socket.adminId}`);
+    adminAuditService.track({
+      adminId: socket.adminId || 'unknown',
+      adminEmail: socket.adminEmail,
+      action: 'disconnect_user',
+      target: String(uid),
+      ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+    });
+
       socket.emit('disconnect_response', { success: true, uid });
 
       // Broadcast admin event for logging
@@ -823,6 +921,14 @@ export class AdminHandler {
         await this.roomService.deleteRoom(roomId);
 
         logger.info(`[ADMIN] Room ${roomId} closed by admin ${socket.adminId}`);
+    adminAuditService.track({
+      adminId: socket.adminId || 'unknown',
+      adminEmail: socket.adminEmail,
+      action: 'close_room',
+      target: String(roomId),
+      ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+    });
+
         socket.emit('close_room_response', { success: true, roomId });
 
         // Broadcast room deletion
@@ -874,6 +980,14 @@ export class AdminHandler {
           ]);
           logger.info(`[ADMIN] All queues cleared by admin ${socket.adminId}`);
         }
+        adminAuditService.track({
+          adminId: socket.adminId || 'unknown',
+          adminEmail: socket.adminEmail,
+          action: 'clear_queue',
+          target: gender || 'all',
+          ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+        });
+
         socket.emit('clear_queue_response', { success: true, gender: gender || 'all' });
 
         // Broadcast updated queue stats
@@ -931,6 +1045,15 @@ export class AdminHandler {
     }
 
     this.monitoredRooms.get(roomId)!.add(socket.adminId);
+
+    // Reading a live private conversation is the most sensitive thing an admin can do here.
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'monitor_room',
+      target: roomId,
+      ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+    });
 
     logger.info(
       `[ADMIN] Added admin ${socket.adminId} to monitoredRooms for room ${roomId}. Current monitors: [${Array.from(this.monitoredRooms.get(roomId)!).join(', ')}]`

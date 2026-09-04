@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db, botConfig } from '../../db';
 import type { ProviderConfig } from './types';
 import { logger } from '../../utils/logger';
+import { decryptSecret, encryptSecret } from '../../utils/secretAtRest';
 
 const CONFIG_ID = 'default';
 const FALLBACK_PROMPT = 'Tu {name} hai, college girl. Match energy, short replies only, no emojis.';
@@ -20,12 +21,26 @@ export class BotConfigService {
     logger.info('[BOT CONFIG] Service initialized');
   }
 
+  private openProviderConfig(config: ProviderConfig | null): ProviderConfig | null {
+    if (!config?.apiKey) {
+      return config;
+    }
+    return { ...config, apiKey: decryptSecret(config.apiKey) };
+  }
+
+  private sealProviderConfig(config: ProviderConfig | null): ProviderConfig | null {
+    if (!config?.apiKey) {
+      return config;
+    }
+    return { ...config, apiKey: encryptSecret(config.apiKey) };
+  }
+
   private toStored(row: typeof botConfig.$inferSelect): StoredBotConfig {
     return {
       enabled: row.enabled,
       maxBots: row.maxBots,
       systemPrompt: row.systemPrompt,
-      providerConfig: (row.providerConfig as ProviderConfig | null) ?? null,
+      providerConfig: this.openProviderConfig((row.providerConfig as ProviderConfig | null) ?? null),
       updatedAt: row.updatedAt.getTime(),
       createdAt: row.createdAt.getTime(),
     };
@@ -53,6 +68,7 @@ export class BotConfigService {
   }): Promise<void> {
     const now = new Date();
     const existing = await this.getConfig();
+    const sealedProvider = this.sealProviderConfig(data.providerConfig);
 
     await db
       .insert(botConfig)
@@ -61,7 +77,7 @@ export class BotConfigService {
         enabled: data.enabled,
         maxBots: data.maxBots,
         systemPrompt: data.systemPrompt,
-        providerConfig: data.providerConfig,
+        providerConfig: sealedProvider,
         updatedAt: now,
         createdAt: existing ? new Date(existing.createdAt) : now,
       })
@@ -71,7 +87,7 @@ export class BotConfigService {
           enabled: data.enabled,
           maxBots: data.maxBots,
           systemPrompt: data.systemPrompt,
-          providerConfig: data.providerConfig,
+          providerConfig: sealedProvider,
           updatedAt: now,
         },
       });

@@ -3,7 +3,22 @@
  * Handles IP-to-location lookups using BigDataCloud API
  */
 
+import { isIP } from 'net';
 import type { LocationData } from './types';
+import { config } from '../../config';
+import { GlobalBudget } from '../../utils/boundedRateLimiter';
+
+/**
+ * BigDataCloud is a metered, paid API. Each tracked visit triggers one lookup, and visits are
+ * driven by inbound socket connections — so without a ceiling an attacker can burn the entire
+ * quota across all five configured keys simply by reconnecting in a loop.
+ */
+const geoBudget = new GlobalBudget(config.limits.geoLookupsPerHour);
+
+/** In-memory cache: repeat visitors from the same address cost nothing. */
+const geoCache = new Map<string, { value: LocationData | null; expiresAt: number }>();
+const GEO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const GEO_CACHE_MAX = 5000;
 
 export class GeolocationService {
   /**
@@ -27,7 +42,24 @@ export class GeolocationService {
   async getLocationFromIP(ipAddress: string): Promise<LocationData | null> {
     // Skip BigDataCloud API in development
     if (process.env.NODE_ENV !== 'production') {
-      console.log('🔧 Development mode: Skipping BigDataCloud API call');
+      console.log('Development mode: Skipping BigDataCloud API call');
+      return null;
+    }
+
+    // Only real addresses are ever sent upstream. The value originates from a request header,
+    // so an unvalidated string would be interpolated straight into the request URL — letting a
+    // caller append their own query parameters to our authenticated API call.
+    if (isIP(ipAddress) === 0) {
+      return null;
+    }
+
+    const cached = geoCache.get(ipAddress);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    if (!geoBudget.tryConsume()) {
+      console.warn('Hourly IP-geolocation budget exhausted; skipping lookup');
       return null;
     }
 
@@ -43,11 +75,19 @@ export class GeolocationService {
       const apiKey = apiKeys[i];
 
       try {
-        const url = `https://api.bigdatacloud.net/data/ip-geolocation?key=${apiKey}&ip=${ipAddress}`;
-        const response = await fetch(url);
+        const url = `https://api.bigdatacloud.net/data/ip-geolocation?key=${encodeURIComponent(apiKey)}&ip=${encodeURIComponent(ipAddress)}`;
+        // Never let a hung upstream hold a socket handler open indefinitely.
+        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
 
         if (response.ok) {
           const data: any = await response.json();
+
+          if (geoCache.size >= GEO_CACHE_MAX) {
+            const oldest = geoCache.keys().next();
+            if (!oldest.done) geoCache.delete(oldest.value);
+          }
+          geoCache.set(ipAddress, { value: data, expiresAt: Date.now() + GEO_CACHE_TTL_MS });
+
           console.log(
             `✅ Location fetched successfully using API key #${i + 1} for IP ${ipAddress}`
           );

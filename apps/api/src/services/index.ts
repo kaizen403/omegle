@@ -14,7 +14,6 @@
 export { RedisClient } from './core';
 export { RoomService, MatchmakingService } from './chat';
 export { TurnService } from './turn';
-export { storageService } from './storage/s3';
 export * from './admin';
 export * from './tracking';
 export { botManager, BotManager } from './bots';

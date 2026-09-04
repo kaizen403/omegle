@@ -100,6 +100,35 @@ export const userVisits = pgTable(
   ]
 );
 
+/**
+ * Append-only record of privileged admin actions.
+ *
+ * Admins can read and export live private conversations (monitor_room, chat export). Without
+ * a durable record there is no way to answer "who read this chat", which matters both for
+ * user privacy and for investigating a compromised admin account. Rows are written on the
+ * action, never updated.
+ */
+export const adminAuditLog = pgTable(
+  'admin_audit_log',
+  {
+    id: text('id').primaryKey(),
+    adminId: text('admin_id').notNull(),
+    adminEmail: text('admin_email'),
+    /** e.g. 'monitor_room', 'kick_user', 'close_room', 'clear_queue'. */
+    action: text('action').notNull(),
+    /** The room id, uid, or queue name the action applied to. */
+    target: text('target'),
+    ipAddress: text('ip_address'),
+    details: jsonb('details').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('admin_audit_created').on(table.createdAt),
+    index('admin_audit_admin').on(table.adminId, table.createdAt),
+  ]
+);
+
+export type AdminAuditRow = typeof adminAuditLog.$inferSelect;
 export type UserRow = typeof user.$inferSelect;
 export type UserVisitRow = typeof userVisits.$inferSelect;
 export type BotConfigRow = typeof botConfig.$inferSelect;

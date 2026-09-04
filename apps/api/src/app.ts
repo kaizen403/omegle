@@ -14,14 +14,16 @@ import { corsMiddleware } from './middleware/cors';
 import { securityHeaders } from './middleware/security';
 import { requestLogger } from './middleware/logger';
 import { errorHandler } from './middleware/errorHandler';
-import { apiKeyAuth } from './middleware/apiKey';
+import { internalApiKeyAuth } from './middleware/apiKey';
 import { requireAuth } from './middleware/auth';
 import { createRateLimiter } from './middleware/rateLimiter';
 import { requestTimeout } from './middleware/timeout';
+import { clientIpMiddleware } from './middleware/clientIp';
+import { edgeGuard } from './middleware/edgeGuard';
+import { v4 as uuidv4 } from 'uuid';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth';
 import adminRoutes from './routes/admin';
-import uploadRoutes from './routes/upload.routes';
 
 // Collect default metrics
 collectDefaultMetrics();
@@ -42,9 +44,13 @@ export class App {
     this.app = express();
     this.redis = RedisClient.getInstance();
 
-    // Trust proxy - MUST be set before any middleware
-    // This allows Express to properly read X-Forwarded-* headers from Cloudflare/reverse proxies
-    this.app.set('trust proxy', true);
+    // `trust proxy` stays OFF. With it enabled, Express believes X-Forwarded-For from any
+    // peer, so anyone reaching the origin directly can present a fresh IP per request and
+    // walk through every per-IP limit. We resolve the client IP ourselves against the
+    // explicit TRUSTED_PROXIES allowlist — see middleware/clientIp.ts.
+    this.app.set('trust proxy', false);
+    // Do not advertise the framework to scanners.
+    this.app.disable('x-powered-by');
 
     this.setupMiddleware();
     this.setupServices();
@@ -55,15 +61,20 @@ export class App {
     // Request timeout (must be early)
     this.app.use(requestTimeout(30000)); // 30 second timeout
 
-    // Request ID (must be first)
+    // Request ID. Always generate our own: echoing a client-supplied X-Request-Id lets a
+    // caller forge or collide log correlation ids.
     this.app.use((req, res, next) => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { v4: uuidv4 } = require('uuid');
-      const requestId = (req.headers['x-request-id'] as string) || uuidv4();
+      const requestId = uuidv4();
       (req as any).requestId = requestId;
       res.setHeader('X-Request-ID', requestId);
       next();
     });
+
+    // Resolve the real client IP before anything keys on it.
+    this.app.use(clientIpMiddleware);
+
+    // Drop traffic that skipped the CDN.
+    this.app.use(edgeGuard);
 
     // Security headers
     this.app.use(securityHeaders);
@@ -86,17 +97,62 @@ export class App {
     return this.systemStatus;
   }
 
+  private redisHealthCache: { value: boolean; expiresAt: number } = { value: false, expiresAt: 0 };
+  private redisHealthInFlight?: Promise<boolean>;
+
+  /**
+   * Redis health, cached for a few seconds and de-duplicated across concurrent callers, so
+   * that polling /status cannot be turned into a Redis amplification attack.
+   */
+  private async cachedRedisHealth(): Promise<boolean> {
+    const now = Date.now();
+    if (now < this.redisHealthCache.expiresAt) {
+      return this.redisHealthCache.value;
+    }
+
+    if (!this.redisHealthInFlight) {
+      this.redisHealthInFlight = this.redis
+        .checkHealth()
+        .then((value) => {
+          this.redisHealthCache = { value, expiresAt: Date.now() + 5000 };
+          return value;
+        })
+        .catch(() => {
+          this.redisHealthCache = { value: false, expiresAt: Date.now() + 5000 };
+          return false;
+        })
+        .finally(() => {
+          this.redisHealthInFlight = undefined;
+        });
+    }
+
+    return this.redisHealthInFlight;
+  }
+
   private setupRoutes(): void {
     // TLS terminates at Cloudflare. Origin stays HTTP behind Caddy — do not 301 to https.
+    // Security headers are set once in securityHeaders (setupMiddleware); do not re-set here.
 
-    // Additional security headers
-    this.app.use((req, res, next) => {
-      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('X-Frame-Options', 'DENY');
-      res.setHeader('X-XSS-Protection', '1; mode=block');
-      res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-      next();
+    this.app.use(requestLogger);
+
+    // Global per-IP ceiling.
+    //
+    // Sized for shared egress, not for one person: the campus and mobile carriers NAT the
+    // entire user base behind a few addresses, and the user app polls GET /status. A 20 r/s
+    // bucket would be shared by every student on that wifi. The endpoints worth protecting
+    // tightly (auth, admin) get their own much stricter limiters below.
+    this.app.use(
+      createRateLimiter({ ratePerSecond: 200, burst: 400, scope: 'global' })
+    );
+
+    // Authentication endpoints are the expensive ones: each sign-in runs a password hash, a
+    // Neon round-trip, and a Turnstile verification. Rate limiting must therefore run BEFORE
+    // the Better Auth handler — previously the limiter was mounted after it, leaving
+    // /api/auth/* completely unthrottled and open to credential stuffing.
+    const authLimiter = createRateLimiter({
+      ratePerSecond: 0.2, // ~12/min sustained
+      burst: 10,
+      scope: 'auth',
     });
 
     // Better Auth must be mounted before express.json().
@@ -104,31 +160,35 @@ export class App {
     const authHandler = toNodeHandler(auth);
     this.app.use((req, res, next) => {
       if (req.path === '/api/auth' || req.path.startsWith('/api/auth/')) {
-        Promise.resolve(authHandler(req, res)).catch(next);
+        authLimiter(req, res, () => {
+          Promise.resolve(authHandler(req, res)).catch(next);
+        });
         return;
       }
       next();
     });
 
-    this.app.use(express.json({ limit: '1mb' }));
-    this.app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-    this.app.use(requestLogger);
-    this.app.use(createRateLimiter(1000, 2000));
+    // 1mb of JSON was far more than any endpoint here accepts.
+    this.app.use(express.json({ limit: '64kb' }));
+    this.app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
-    this.app.use('/api/admin', adminRoutes);
-
-    // File upload routes (requires API key auth)
-    this.app.use('/api', apiKeyAuth, uploadRoutes);
+    this.app.use(
+      '/api/admin',
+      createRateLimiter({ ratePerSecond: 5, burst: 30, scope: 'admin' }),
+      adminRoutes
+    );
 
     // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({ status: 'ok' });
     });
 
-    // Simple status check - returns admin-controlled status
+    // Public status check — the user app polls this to see whether the service is open.
+    // The Redis health result is cached so a flood of polls cannot be amplified into a
+    // matching flood of Redis round-trips.
     this.app.get('/status', async (req, res) => {
       try {
-        const isRedisHealthy = await this.redis.checkHealth();
+        const isRedisHealthy = await this.cachedRedisHealth();
         res.json({
           status: this.systemStatus && isRedisHealthy,
           adminStatus: this.systemStatus,
@@ -180,8 +240,27 @@ export class App {
       }
     });
 
-    // Health check with timeout - optimized for Google Cloud Run
+    // Public liveness probe. Deliberately minimal: the detailed payload that used to live
+    // here exposed heap/RSS figures, CPU counters, Redis circuit-breaker state, connection
+    // and queue counts, Node version, and platform — a free reconnaissance and
+    // capacity-probing endpoint for anyone deciding how hard to hit the box.
     this.app.get('/health', async (req, res) => {
+      try {
+        const redisHealthy = await Promise.race([
+          this.redis.checkHealth(),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+        ]);
+
+        res.status(redisHealthy ? 200 : 503).json({
+          status: redisHealthy ? 'ok' : 'degraded',
+        });
+      } catch {
+        res.status(503).json({ status: 'error' });
+      }
+    });
+
+    // Full diagnostics stay behind the API key, alongside /metrics.
+    this.app.get('/health/details', internalApiKeyAuth, async (req, res) => {
       try {
         const healthCheckTimeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Health check timeout')), 5000)
@@ -199,71 +278,41 @@ export class App {
           healthCheckTimeout,
         ])) as [number, number, string, boolean];
 
-        const circuitBreakerMetrics = this.redis.getCircuitBreakerMetrics();
         const memUsage = process.memoryUsage();
         const cpuUsage = process.cpuUsage();
-
-        // Cloud Run specific environment variables
-        const cloudRunService = process.env.K_SERVICE || 'local';
-        const cloudRunRevision = process.env.K_REVISION || 'local';
-        const cloudRunConfiguration = process.env.K_CONFIGURATION || 'local';
-        const port = process.env.PORT || config.port;
 
         res.json({
           status: redisHealthy ? 'ok' : 'degraded',
           service: 'omegle-vitap-backend-nodejs',
-          version: '1.0.0',
           uptime: process.uptime(),
           timestamp: Math.floor(Date.now() / 1000),
           environment: config.nodeEnv,
-          cloudRun: {
-            service: cloudRunService,
-            revision: cloudRunRevision,
-            configuration: cloudRunConfiguration,
-            port: port,
-            region: process.env.K_LOCATION || process.env.CLOUD_RUN_REGION || 'unknown',
-          },
           memory: {
             rss: memUsage.rss,
             heapTotal: memUsage.heapTotal,
             heapUsed: memUsage.heapUsed,
-            external: memUsage.external,
-            arrayBuffers: memUsage.arrayBuffers,
           },
-          cpu: {
-            user: cpuUsage.user,
-            system: cpuUsage.system,
-          },
+          cpu: { user: cpuUsage.user, system: cpuUsage.system },
           redis: {
             connected: redisHealthy,
             ping: redisPing,
-            circuitBreaker: circuitBreakerMetrics,
+            circuitBreaker: this.redis.getCircuitBreakerMetrics(),
           },
           connections: {
             current: this.socketIOManager ? this.socketIOManager.getConnectionCount() : 0,
-            maximum: 'unlimited',
           },
-          queue: {
-            size: queueSize,
-            activeRooms,
-          },
-          node: {
-            version: process.version,
-            platform: process.platform,
-            arch: process.arch,
-          },
+          queue: { size: queueSize, activeRooms },
+          node: { version: process.version, platform: process.platform },
         });
       } catch (error) {
         logger.error('Health check failed:', error);
-        res.status(503).json({
-          status: 'error',
-          message: 'Service unhealthy',
-        });
+        res.status(503).json({ status: 'error' });
       }
     });
 
-    // Metrics (protected)
-    this.app.get('/metrics', apiKeyAuth, async (req, res) => {
+    // Metrics. Guarded by the server-only INTERNAL_API_KEY, not the browser-published
+    // API_KEY — Prometheus output exposes request volumes, error rates, and process internals.
+    this.app.get('/metrics', internalApiKeyAuth, async (req, res) => {
       res.set('Content-Type', register.contentType);
       res.end(await register.metrics());
     });
@@ -284,9 +333,8 @@ export class App {
       await this.redis.connect();
       logger.info('✅ Redis connected successfully');
 
-      // STARTUP CLEANUP: Clear all stale data from previous runs
-      logger.info('🧹 Running startup cleanup...');
-      await this.performStartupCleanup();
+      // Do not wipe Redis here. Rooms and queues have TTLs; a restart (or a second
+      // replica) must not delete live sessions that another process still holds.
 
       // Start HTTP server after Redis is connected
       // CRITICAL: Bind to 0.0.0.0 for Cloud Run, not just localhost
@@ -337,27 +385,6 @@ export class App {
     }
   }
 
-  /**
-   * Perform startup cleanup to ensure clean state
-   * Clears all Redis data from previous server runs
-   */
-  private async performStartupCleanup(): Promise<void> {
-    try {
-      // Clear all room-related data
-      const roomCleanup = await this.roomService.clearAllData();
-      logger.info(`✅ Room cleanup: ${roomCleanup.totalKeysDeleted} keys deleted`);
-
-      // Clear matchmaking queue
-      const queueSize = await this.matchmaking.clearQueue();
-      logger.info(`✅ Queue cleanup: ${queueSize} queued users cleared`);
-
-      logger.info('✅ Startup cleanup completed - server is in clean state');
-    } catch (error) {
-      logger.error('⚠️  Startup cleanup failed (continuing anyway):', error);
-      // Don't fail startup if cleanup fails - the TTLs will eventually clean up
-    }
-  }
-
   private isShuttingDown = false;
 
   private async shutdown(): Promise<void> {
@@ -390,15 +417,8 @@ export class App {
         await this.socketIOManager.shutdown();
       }
 
-      // 4. Clean up Redis data before disconnecting
-      logger.info('🧹 Running shutdown cleanup...');
-      try {
-        // Clear all rooms and queues on shutdown
-        const roomCleanup = await this.roomService.clearAllData();
-        logger.info(`Shutdown cleanup: ${roomCleanup.totalKeysDeleted} keys deleted`);
-      } catch (error) {
-        logger.warn('Shutdown cleanup failed (Redis may already be closing):', error);
-      }
+      // 4. Leave Redis rooms/queues in place. TTLs expire them; wiping on stop
+      //    would drop live sessions if another process still uses the same Redis.
 
       // 5. Disconnect Redis
       await this.redis.disconnect();

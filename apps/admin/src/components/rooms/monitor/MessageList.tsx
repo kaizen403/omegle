@@ -2,17 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { Room } from "@/contexts/AdminSocketContext";
-import Image from "next/image";
-import { FileText, Download } from "lucide-react";
 
 interface Message {
   message?: {
     sender: string;
     content: string;
-    fileUrl?: string;
-    fileName?: string;
-    mimeType?: string;
-    fileSize?: number;
   };
   timestamp: number;
 }
@@ -107,68 +101,9 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                     : "bg-purple-600/20 border border-purple-500/30 rounded-tr-sm"
                 }`}
               >
-                {/* Show file/image if present */}
-                {msg.message?.fileUrl && msg.message?.mimeType ? (
-                  <div className="space-y-2">
-                    {msg.message.mimeType.startsWith("image/") ? (
-                      <div className="relative rounded-lg overflow-hidden max-w-xs">
-                        <Image
-                          src={msg.message.fileUrl}
-                          alt={msg.message.fileName || "Image"}
-                          width={300}
-                          height={300}
-                          className="object-cover"
-                          unoptimized
-                        />
-                      </div>
-                    ) : msg.message.mimeType.startsWith("video/") ? (
-                      <div className="relative rounded-lg overflow-hidden max-w-xs bg-[#e8f4f8]">
-                        <video
-                          src={msg.message.fileUrl}
-                          controls
-                          className="w-full max-h-64"
-                          preload="metadata"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      </div>
-                    ) : msg.message.mimeType.startsWith("audio/") ? (
-                      <div className="bg-sky-50/50 rounded-lg p-3">
-                        <audio
-                          src={msg.message.fileUrl}
-                          controls
-                          className="w-full"
-                          preload="metadata"
-                        >
-                          Your browser does not support the audio tag.
-                        </audio>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center p-3 bg-sky-50/50 rounded-lg">
-                        <a
-                          href={msg.message.fileUrl}
-                          download={msg.message.fileName}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-blue-400 hover:text-blue-300"
-                        >
-                          <FileText className="w-5 h-5" />
-                          <Download className="w-4 h-4" />
-                        </a>
-                      </div>
-                    )}
-                    {/* Caption if present */}
-                    {msg.message.content && (
-                      <p className="text-sm text-slate-800 leading-relaxed break-words px-4 pb-3">
-                        {msg.message.content}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-800 leading-relaxed break-words px-4 py-3">
-                    {msg.message?.content || "No content"}
-                  </p>
-                )}
+                <p className="text-sm text-slate-800 leading-relaxed break-words px-4 py-3">
+                  {msg.message?.content || "No content"}
+                </p>
               </div>
             </div>
           </div>

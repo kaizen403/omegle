@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db, userVisits } from '../../db';
 import { geolocationService } from './geolocation.service';
@@ -41,8 +41,11 @@ export class UserTrackingService {
 
       let location: LocationData | null = null;
       if (ipAddress) {
-        const testIP = ipAddress === '127.0.0.1' ? '8.8.8.8' : ipAddress;
-        location = await geolocationService.getLocationFromIP(testIP);
+        // No substitution here. This used to rewrite 127.0.0.1 to 8.8.8.8 so a developer
+        // would see a location locally, but the branch ran in production too: any request
+        // that resolved to loopback got billed a geolocation lookup and was recorded with
+        // Google's address instead of being left blank.
+        location = await geolocationService.getLocationFromIP(ipAddress);
       }
 
       await db
@@ -85,9 +88,7 @@ export class UserTrackingService {
     }
   }
 
-  async getDailyStats(date: string): Promise<DailyStats> {
-    const users = await this.getUsersByDate(date);
-
+  private statsFromVisits(date: string, users: { gender: string }[]): DailyStats {
     return {
       date,
       totalUsers: users.length,
@@ -97,19 +98,50 @@ export class UserTrackingService {
     };
   }
 
-  async getStatsForDateRange(startDate: string, endDate: string): Promise<DailyStats[]> {
-    const stats: DailyStats[] = [];
-    const start = new Date(startDate);
+  private listDatesInclusive(startDate: string, endDate: string): string[] {
+    const dates: string[] = [];
+    const current = new Date(startDate);
     const end = new Date(endDate);
-    const currentDate = new Date(start);
+    while (current <= end) {
+      dates.push(this.getDateString(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  }
 
-    while (currentDate <= end) {
-      const dateString = this.getDateString(currentDate);
-      stats.push(await this.getDailyStats(dateString));
-      currentDate.setDate(currentDate.getDate() + 1);
+  async getDailyStats(date: string): Promise<DailyStats> {
+    const users = await this.getUsersByDate(date);
+    return this.statsFromVisits(date, users);
+  }
+
+  async getStatsForDates(dates: string[]): Promise<DailyStats[]> {
+    if (dates.length === 0) {
+      return [];
     }
 
-    return stats;
+    try {
+      const rows = await db
+        .select({ visitDate: userVisits.visitDate, gender: userVisits.gender })
+        .from(userVisits)
+        .where(inArray(userVisits.visitDate, dates));
+
+      const byDate = new Map<string, { gender: string }[]>();
+      for (const date of dates) {
+        byDate.set(date, []);
+      }
+      for (const row of rows) {
+        byDate.get(row.visitDate)?.push(row);
+      }
+
+      return dates.map((date) => this.statsFromVisits(date, byDate.get(date) ?? []));
+    } catch (error) {
+      console.error('Error fetching stats for dates:', error);
+      return dates.map((date) => this.statsFromVisits(date, []));
+    }
+  }
+
+  async getStatsForDateRange(startDate: string, endDate: string): Promise<DailyStats[]> {
+    return this.getStatsForDates(this.listDatesInclusive(startDate, endDate));
   }
 
   async getTodayStats(): Promise<DailyStats> {
@@ -117,16 +149,14 @@ export class UserTrackingService {
   }
 
   async getLastNDaysStats(days: number = 7): Promise<DailyStats[]> {
-    const stats: DailyStats[] = [];
     const today = new Date();
-
-    for (let i = 0; i < days; i++) {
+    const dates: string[] = [];
+    for (let i = days - 1; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
-      stats.push(await this.getDailyStats(this.getDateString(date)));
+      dates.push(this.getDateString(date));
     }
-
-    return stats.reverse();
+    return this.getStatsForDates(dates);
   }
 
   async getUsersList(date: string): Promise<UserListItem[]> {

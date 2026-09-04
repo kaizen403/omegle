@@ -102,14 +102,21 @@ export class RedisClient {
   }
 
   /**
-   * Execute Redis operation with circuit breaker protection
+   * Execute Redis operation with circuit breaker protection.
+   *
+   * Retries are opt-in. INCR / ZADD / LPUSH / Lua are not idempotent — a timeout
+   * after the write landed would double-apply the change.
    */
   public async executeWithProtection<T>(
     operation: () => Promise<T>,
-    operationName: string
+    operationName: string,
+    options: { retry?: boolean } = {}
   ): Promise<T> {
     return this.circuitBreaker.execute(async () => {
-      return this.retryHandler.executeWithRetry(operation, operationName);
+      if (options.retry) {
+        return this.retryHandler.executeWithRetry(operation, operationName);
+      }
+      return operation();
     });
   }
 
