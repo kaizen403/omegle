@@ -5,7 +5,8 @@
 
 'use client';
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
+import { LogoMark } from '@/components/brand';
 
 interface Props {
   children: ReactNode;
@@ -26,30 +27,15 @@ export class OmegleErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-      errorInfo: null,
-    };
+    return { hasError: true, error, errorInfo: null };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Silently handle error in production
-
-    this.setState({
-      error,
-      errorInfo,
-    });
+    this.setState({ error, errorInfo });
   }
 
   private handleReset = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    });
-
-    // Reload page to reset state
+    this.setState({ hasError: false, error: null, errorInfo: null });
     window.location.href = '/omegle';
   };
 
@@ -59,80 +45,42 @@ export class OmegleErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
+      if (this.props.fallback) return this.props.fallback;
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-            <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-full bg-red-100">
-              <svg
-                className="w-8 h-8 text-red-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-
-            <h2 className="text-2xl font-bold text-center text-gray-900 mb-2">
-              Something went wrong
-            </h2>
-
-            <p className="text-gray-600 text-center mb-6">
-              We encountered an unexpected error. This might be due to:
+        <div className="bg-sky bg-bubbles flex min-h-screen items-center justify-center px-4">
+          <div className="bg-surface shadow-card pop w-full max-w-md rounded-3xl p-8 text-center sm:p-10">
+            <LogoMark size={56} className="mx-auto" />
+            <h2 className="text-text mt-6 text-2xl font-bold tracking-tight">Something broke</h2>
+            <p className="text-text-2 mt-3 leading-relaxed">
+              Usually it&apos;s camera permissions, a flaky network, or an old browser. Give it
+              another go.
             </p>
 
-            <ul className="text-sm text-gray-600 mb-6 space-y-2">
-              <li className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>Camera or microphone permission issues</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>Network connectivity problems</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>Browser compatibility issues</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>Device hardware conflicts</span>
-              </li>
-            </ul>
-
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <details className="mb-6 p-4 bg-gray-100 rounded text-xs">
-                <summary className="cursor-pointer font-semibold text-gray-700 mb-2">
-                  Error Details (Development Only)
-                </summary>
-                <pre className="whitespace-pre-wrap text-red-600 overflow-auto max-h-40">
+              <details className="bg-sky mt-5 rounded-2xl p-4 text-left text-xs">
+                <summary className="text-text-2 cursor-pointer font-medium">Error details</summary>
+                <pre className="text-red mt-2 max-h-40 overflow-auto whitespace-pre-wrap">
                   {this.state.error.toString()}
                   {this.state.errorInfo && this.state.errorInfo.componentStack}
                 </pre>
               </details>
             )}
 
-            <div className="flex gap-3">
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
               <button
+                type="button"
                 onClick={this.handleReset}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                className="bg-blue hover:bg-blue-dark inline-flex h-11 items-center rounded-full px-5 text-sm font-semibold text-white transition-colors"
               >
-                Try Again
+                Try again
               </button>
               <button
+                type="button"
                 onClick={this.handleGoHome}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-4 rounded-lg transition-colors"
+                className="bg-blue-softer hover:bg-blue-soft text-blue-dark inline-flex h-11 items-center rounded-full px-5 text-sm font-semibold transition-colors"
               >
-                Go Home
+                Go home
               </button>
             </div>
           </div>

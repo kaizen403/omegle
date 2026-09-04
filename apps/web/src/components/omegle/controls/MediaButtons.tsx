@@ -1,6 +1,6 @@
 /**
  * Media Buttons
- * Camera and microphone toggle controls with device selection
+ * Camera and microphone toggles with device selection
  */
 
 'use client';
@@ -8,6 +8,7 @@
 import { memo, RefObject } from 'react';
 import { CameraOnIcon, CameraOffIcon, MicOnIcon, MicOffIcon, DropdownArrowIcon } from './Icons';
 import { DeviceSelector } from '../video';
+import { cn } from '@/lib/utils';
 
 interface MediaToggleButtonProps {
   isOn: boolean;
@@ -15,23 +16,23 @@ interface MediaToggleButtonProps {
   type: 'camera' | 'microphone';
 }
 
-/**
- * Base media toggle button (camera/mic)
- */
+/** Base media toggle (camera/mic) */
 export const MediaToggleButton = memo(({ isOn, onToggle, type }: MediaToggleButtonProps) => {
   const isCam = type === 'camera';
-  const title = isOn
-    ? `Turn off ${type} (stays off until you turn it back on)`
-    : `Turn on ${type} (stays on for next matches)`;
+  const title = isOn ? `Turn off ${type}` : `Turn on ${type}`;
 
   return (
     <button
+      type="button"
       onClick={onToggle}
-      className={`w-11 h-11 lg:w-12 lg:h-12 rounded-full flex items-center justify-center text-white transition-colors ${
-        isOn ? 'bg-slate-600 hover:bg-slate-700' : 'bg-red-500 hover:bg-red-600'
-      }`}
+      className={cn(
+        'inline-flex size-11 items-center justify-center rounded-full transition-all duration-150 active:scale-95',
+        isOn
+          ? 'bg-sky text-text hover:bg-sky-2'
+          : 'bg-red-soft text-red hover:bg-red hover:text-white'
+      )}
       title={title}
-      aria-label={isOn ? `Turn off ${type}` : `Turn on ${type}`}
+      aria-label={title}
       aria-pressed={isOn}
     >
       {isCam ? isOn ? <CameraOnIcon /> : <CameraOffIcon /> : isOn ? <MicOnIcon /> : <MicOffIcon />}
@@ -47,24 +48,29 @@ interface DeviceMenuTriggerProps {
   type: 'camera' | 'microphone';
 }
 
-/**
- * Small dropdown trigger button for device selection
- */
-export const DeviceMenuTrigger = memo(({ isOn, onToggleMenu, type }: DeviceMenuTriggerProps) => {
-  if (!isOn) return null;
+/** Small chevron that opens the device list */
+export const DeviceMenuTrigger = memo(
+  ({ isOn, showMenu, onToggleMenu, type }: DeviceMenuTriggerProps) => {
+    if (!isOn) return null;
 
-  return (
-    <button
-      onClick={onToggleMenu}
-      className="device-menu-trigger absolute -top-1 -right-1 w-5 h-5 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-white transition-colors"
-      title={`Change ${type}`}
-      aria-label={`Select ${type} device`}
-      aria-haspopup="listbox"
-    >
-      <DropdownArrowIcon />
-    </button>
-  );
-});
+    return (
+      <button
+        type="button"
+        onClick={onToggleMenu}
+        className={cn(
+          'device-menu-trigger absolute -right-0.5 -bottom-0.5 flex size-5 items-center justify-center rounded-full ring-2 ring-white transition-colors',
+          showMenu ? 'bg-blue text-white' : 'bg-line-2 text-text hover:bg-blue hover:text-white'
+        )}
+        title={`Change ${type}`}
+        aria-label={`Choose a ${type}`}
+        aria-haspopup="listbox"
+        aria-expanded={showMenu}
+      >
+        <DropdownArrowIcon />
+      </button>
+    );
+  }
+);
 DeviceMenuTrigger.displayName = 'DeviceMenuTrigger';
 
 interface MediaControlWithSelectorProps {
@@ -79,9 +85,7 @@ interface MediaControlWithSelectorProps {
   onSwitchDevice?: (deviceId: string) => void;
 }
 
-/**
- * Complete media control with toggle button + device selector
- */
+/** Toggle button + device selector */
 export const MediaControlWithSelector = memo(
   ({
     type,
@@ -95,7 +99,7 @@ export const MediaControlWithSelector = memo(
     onSwitchDevice,
   }: MediaControlWithSelectorProps) => {
     return (
-      <div ref={buttonRef} className="relative device-selector-button">
+      <div ref={buttonRef} className="device-selector-button relative">
         <MediaToggleButton isOn={isOn} onToggle={onToggle} type={type} />
 
         {onSwitchDevice && (

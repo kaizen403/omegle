@@ -1,5 +1,6 @@
-import { ReactNode, memo, useMemo } from 'react';
-import { FlickeringGrid } from '@/components/ui/flickering-grid';
+import { ReactNode, memo } from 'react';
+import { User, VideoOff, MicOff } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface VideoDisplayProps {
   id: string;
@@ -14,54 +15,28 @@ interface VideoDisplayProps {
   children?: ReactNode;
 }
 
-/**
- * Video theme configuration
- * Defines color schemes for different gender contexts
- */
-interface VideoTheme {
-  bgClass: string;
-  gridColor: string;
-  iconBgClass: string;
-  iconColorClass: string;
-  textColorClass: string;
-}
+type Tint = 'blue' | 'pink';
 
 /**
- * Get theme configuration based on gender and connection state
- * Uses Tailwind theme colors defined in globals.css
+ * Local tile follows the user's gender; the remote tile follows the
+ * partner's once connected. Everything else stays Omegle blue.
  */
-const getTheme = (
-  partnerGender?: 'male' | 'female' | 'other',
-  userGender?: 'male' | 'female' | 'other',
+const getTint = (
+  partnerGender?: string,
+  userGender?: string,
   isConnected?: boolean,
   isLocalVideo?: boolean
-): VideoTheme => {
-  // For local video, use user's gender
-  // For remote video, use partner's gender when connected
+): Tint => {
   const genderToUse = isLocalVideo ? userGender : partnerGender;
-  // Case-insensitive comparison to handle "Female" or "female"
   const isFemale = genderToUse?.toLowerCase() === 'female';
-  const shouldApplyPink = isLocalVideo ? isFemale : isConnected && isFemale;
-
-  if (shouldApplyPink) {
-    return {
-      bgClass: 'bg-video-pink-bg',
-      gridColor: 'rgb(236, 72, 153)',
-      iconBgClass: 'bg-video-pink-icon-bg',
-      iconColorClass: 'text-video-pink-text',
-      textColorClass: 'text-video-pink-text',
-    };
-  }
-
-  // Default blue theme for male/other or when not connected
-  return {
-    bgClass: 'bg-video-blue-bg',
-    gridColor: 'rgb(0, 132, 209)',
-    iconBgClass: 'bg-video-blue-icon-bg',
-    iconColorClass: 'text-video-blue-text',
-    textColorClass: 'text-video-blue-text',
-  };
+  const applyPink = isLocalVideo ? isFemale : Boolean(isConnected) && isFemale;
+  return applyPink ? 'pink' : 'blue';
 };
+
+const TINT = {
+  blue: { surface: 'bg-blue-softer', ring: 'bg-blue-soft text-blue', text: 'text-blue' },
+  pink: { surface: 'bg-pink-soft', ring: 'bg-pink/15 text-pink', text: 'text-pink' },
+} as const;
 
 const VideoDisplayComponent = ({
   id,
@@ -76,158 +51,105 @@ const VideoDisplayComponent = ({
   children,
 }: VideoDisplayProps) => {
   const isLocalVideo = id === 'local-video';
-  // Get theme based on gender and connection state
-  const theme = useMemo(
-    () => getTheme(partnerGender, userGender, isConnected, isLocalVideo),
-    [partnerGender, userGender, isConnected, isLocalVideo]
-  );
+  const tint = TINT[getTint(partnerGender, userGender, isConnected, isLocalVideo)];
 
   // Local: hide the preview when this user turned the camera off.
   // Remote: keep the <video> visible after match. WebRTC tracks start muted,
   // so a "camera off" flag must not cover a live feed with the avatar overlay.
   const showPlaceholder = isLocalVideo ? !isCameraOn : !isConnected;
+  const showSearching = isSearching && !isLocalVideo;
 
   return (
     <div
-      className={`h-full w-full relative overflow-hidden rounded-lg transition-colors duration-500 min-h-[200px] ${theme.bgClass}`}
+      className={cn(
+        'relative h-full min-h-[180px] w-full overflow-hidden rounded-3xl transition-colors duration-500',
+        showPlaceholder ? tint.surface : 'bg-text'
+      )}
       role="region"
-      aria-label={id === 'local-video' ? 'Your video feed' : 'Partner video feed'}
+      aria-label={isLocalVideo ? 'Your video' : 'Their video'}
     >
-      {/* Flickering Grid Background - always visible */}
-      <FlickeringGrid
-        className="absolute inset-0 w-full h-full"
-        squareSize={4}
-        gridGap={6}
-        color={theme.gridColor}
-        maxOpacity={0.4}
-        flickerChance={0.3}
-      />
-
-      {/* Video Element */}
+      {/* Video mount point (renderer appends a <video> here) */}
       <div
         id={id}
-        className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${showPlaceholder ? 'opacity-0' : 'opacity-100'}`}
+        className={cn(
+          'absolute inset-0 h-full w-full transition-opacity duration-300 [&_video]:h-full [&_video]:w-full [&_video]:object-cover',
+          showPlaceholder ? 'opacity-0' : 'opacity-100'
+        )}
         aria-label={label}
       />
 
-      {/* Placeholder when not connected or camera off */}
-      {showPlaceholder && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      {/* Placeholder */}
+      {showPlaceholder && !showSearching && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3.5">
           <div
-            className={`w-20 h-20 rounded-full flex items-center justify-center mb-3 transition-colors duration-500 ${theme.iconBgClass}`}
+            className={cn(
+              'flex size-16 items-center justify-center rounded-full transition-colors duration-500',
+              tint.ring
+            )}
           >
-            <svg
-              className={`w-10 h-10 transition-colors duration-500 ${theme.iconColorClass}`}
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                clipRule="evenodd"
-              />
-            </svg>
+            <User className="size-8" strokeWidth={2} aria-hidden />
           </div>
-          <p
-            className={`text-sm font-medium transition-colors duration-500 ${theme.textColorClass}`}
-          >
-            {id === 'local-video' && !isCameraOn ? 'Camera is off' : label}
-          </p>
-          {id === 'local-video' && !isCameraOn && (
-            <p className="text-xs text-slate-500 mt-1 text-center px-4">
-              Click the camera button below to enable
+          <div className="text-center">
+            <p className={cn('font-semibold', tint.text)}>
+              {isLocalVideo && !isCameraOn ? 'Camera is off' : label}
             </p>
-          )}
-          {isSearching && (
-            <p className="text-xs text-slate-500 mt-1 animate-pulse">Searching for match...</p>
-          )}
-        </div>
-      )}
-
-      {/* Searching Overlay - Enhanced aesthetic animation */}
-      {isSearching && id === 'remote-video' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-black/30 via-blue-900/20 to-black/30 backdrop-blur-md z-10">
-          <div className="bg-white/95 backdrop-blur-xl rounded-3xl px-10 py-8 shadow-[0_20px_60px_rgba(0,132,209,0.3)] flex flex-col items-center relative overflow-hidden">
-            {/* Animated gradient background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-cyan-50 animate-pulse opacity-50"></div>
-
-            {/* Multi-ring spinner with staggered animations */}
-            <div className="relative w-20 h-20 mb-6 z-10">
-              {/* Outer ring - slow rotation */}
-              <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-video-blue-text border-r-video-blue-text opacity-30 animate-spin-slow"></div>
-
-              {/* Middle ring - medium rotation opposite direction */}
-              <div className="absolute inset-2 rounded-full border-[3px] border-transparent border-t-cyan-500 border-b-cyan-500 opacity-50 animate-spin-medium-reverse"></div>
-
-              {/* Inner ring - fast rotation */}
-              <div className="absolute inset-4 rounded-full border-[3px] border-transparent border-t-video-blue-text border-l-video-blue-text animate-spin-fast"></div>
-
-              {/* Center pulsing dot */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-3 h-3 rounded-full bg-video-blue-text shadow-[0_0_20px_rgba(0,132,209,0.6)] animate-pulse-glow"></div>
-              </div>
-            </div>
-
-            {/* Text content with animations */}
-            <div className="text-center z-10">
-              <p className="text-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
-                Searching for a match
-                <span className="inline-block animate-pulse">...</span>
-              </p>
-              <p className="text-sm text-gray-600 font-medium">
-                Finding someone interesting for you
-              </p>
-            </div>
-
-            {/* Animated dots indicator */}
-            <div className="flex gap-2 mt-4 z-10">
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce-delay-0"></div>
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce-delay-200"></div>
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce-delay-400"></div>
-            </div>
+            <p className="text-text-3 mt-0.5 text-sm">
+              {isLocalVideo && !isCameraOn
+                ? 'Tap the camera button to turn it on'
+                : 'Hit start to meet someone'}
+            </p>
           </div>
         </div>
       )}
 
-      {/* Connection Indicator - Green blinking dot */}
-      {isConnected && showConnectionIndicator && (
-        <div className="absolute top-4 left-4 z-20">
-          <div className="w-3 h-3 rounded-full bg-green-500 animate-connection-blink" />
+      {/* Searching */}
+      {showSearching && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
+          <div className="ring-spinner size-11" aria-hidden />
+          <div className="text-center">
+            <p className="text-text font-semibold">Looking for someone</p>
+            <p className="text-text-3 mt-0.5 text-sm">Hang tight, this is usually quick</p>
+          </div>
         </div>
       )}
 
-      {/* Camera/Mic Muted Indicators */}
-      {!showPlaceholder && (
-        <div className="absolute top-4 right-4 flex gap-2 z-20">
+      {/* Name chip */}
+      <div className="absolute top-3 left-3 z-20">
+        <span
+          className={cn(
+            'inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-sm font-medium backdrop-blur-md',
+            showPlaceholder ? 'bg-surface/80 text-text-2' : 'bg-text/55 text-white'
+          )}
+        >
+          {isConnected && showConnectionIndicator && (
+            <span className="bg-green animate-live size-2 rounded-full" aria-hidden />
+          )}
+          {isLocalVideo ? 'You' : label}
+        </span>
+      </div>
+
+      {/* Muted indicators over a live feed */}
+      {!showPlaceholder && (!isCameraOn || !isMicOn) && (
+        <div className="absolute top-3 right-3 z-20 flex gap-1.5">
           {!isCameraOn && (
-            <div className="bg-red-500/90 backdrop-blur-sm p-2 rounded-full" title="Camera is off">
-              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A2 2 0 0017 13.5V7a2 2 0 00-3.53-1.235L10.94 8.293 3.707 2.293zM13.5 16.443l-2.121-2.121c.167.03.338.05.514.05.828 0 1.5-.448 1.5-1s-.672-1-1.5-1a1.863 1.863 0 00-.857.205L9.536 11.08C10.127 10.423 10.828 10 11.893 10c1.657 0 3 1.119 3 2.5v3.943zM4 7a2 2 0 012-2h.172l2 2H6v6a2 2 0 002 2h6.172l2 2H8a4 4 0 01-4-4V7z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
+            <span
+              className="bg-text/55 flex size-7 items-center justify-center rounded-full text-white backdrop-blur-md"
+              title="Camera is off"
+            >
+              <VideoOff className="size-3.5" strokeWidth={2} aria-hidden />
+            </span>
           )}
           {!isMicOn && (
-            <div
-              className="bg-red-500/90 backdrop-blur-sm p-2 rounded-full"
-              title="Microphone is off"
+            <span
+              className="bg-text/55 flex size-7 items-center justify-center rounded-full text-white backdrop-blur-md"
+              title="Mic is off"
             >
-              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
+              <MicOff className="size-3.5" strokeWidth={2} aria-hidden />
+            </span>
           )}
         </div>
       )}
 
-      {/* Children (e.g., controls) */}
       {children}
     </div>
   );

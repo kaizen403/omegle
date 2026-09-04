@@ -1,38 +1,67 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { WelcomeForm } from '@/components/welcome/WelcomeForm';
+import { Logo, BrandLockup } from '@/components/brand';
 
 export default function WelcomePage() {
   useEffect(() => {
-    document.title = 'Welcome - Omegle';
+    document.title = 'Omegle for VITAP students';
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-sky-500/40">
-      {/* Core animated gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-400 via-blue-400 to-cyan-400 animate-gradient-xy" />
+    <div className="bg-sky bg-bubbles text-text flex min-h-screen flex-col">
+      <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-5">
+        <Logo height={26} priority />
+        <nav className="flex items-center gap-1" aria-label="Site">
+          <Link
+            href="/faq"
+            className="text-text-2 hover:text-text hover:bg-surface rounded-full px-3.5 py-2 text-sm font-medium transition-colors"
+          >
+            FAQ
+          </Link>
+          <Link
+            href="/community-guidelines"
+            className="text-text-2 hover:text-text hover:bg-surface rounded-full px-3.5 py-2 text-sm font-medium transition-colors"
+          >
+            Guidelines
+          </Link>
+        </nav>
+      </header>
 
-      {/* Premium overlays */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_50%)] opacity-70" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,_rgba(14,165,233,0.45),_transparent_55%)] opacity-70" />
-        <div className="absolute inset-0 opacity-30 bg-[linear-gradient(120deg,rgba(255,255,255,0.18)_1px,transparent_1px)] bg-[size:160px_160px]" />
-        <div className="absolute inset-0 opacity-40 blur-3xl bg-gradient-to-br from-white/10 via-transparent to-purple-500/20" />
-      </div>
+      <main className="flex flex-1 items-center justify-center px-4 py-6">
+        <div className="w-full max-w-md">
+          <div className="pop pop-1">
+            <BrandLockup />
+            <p className="text-text-2 mx-auto mt-4 max-w-xs text-center text-[15px] leading-relaxed">
+              Random video and text chat with people on campus. No sign up, no history.
+            </p>
+          </div>
 
-      {/* Animated orbs - keep original hues */}
-      <div className="absolute top-20 left-10 sm:left-20 w-60 sm:w-72 h-60 sm:h-72 bg-sky-300/40 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob" />
-      <div className="absolute top-44 right-4 sm:right-20 w-56 sm:w-72 h-56 sm:h-72 bg-blue-300/40 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-2000" />
-      <div className="absolute -bottom-10 left-20 sm:left-40 w-64 sm:w-72 h-64 sm:h-72 bg-cyan-300/40 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-4000" />
-
-      <main className="relative z-10 px-4 sm:px-8 lg:px-12 py-10 sm:py-14 lg:py-16">
-        <div className="max-w-6xl mx-auto flex items-center justify-center min-h-[70vh]">
-          <section className="w-full max-w-md sm:max-w-lg mx-auto">
+          <div className="pop pop-2 mt-7">
             <WelcomeForm />
-          </section>
+          </div>
         </div>
       </main>
+
+      <footer className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-6">
+        <p className="text-text-3 text-sm">© {new Date().getFullYear()} Omegle VITAP</p>
+        <nav className="flex gap-5 text-sm" aria-label="Legal">
+          <Link href="/terms" className="text-text-3 hover:text-text transition-colors">
+            Terms
+          </Link>
+          <Link href="/privacy" className="text-text-3 hover:text-text transition-colors">
+            Privacy
+          </Link>
+          <Link
+            href="/community-guidelines"
+            className="text-text-3 hover:text-text transition-colors"
+          >
+            Guidelines
+          </Link>
+        </nav>
+      </footer>
     </div>
   );
 }

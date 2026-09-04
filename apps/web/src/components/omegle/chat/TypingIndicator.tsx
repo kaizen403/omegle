@@ -2,34 +2,14 @@
 
 export const TypingIndicator = () => {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-slate-500 italic">typing</span>
-      <div className="flex gap-1">
-        <div
-          className="w-1.5 h-1.5 rounded-full animate-bounce"
-          style={{
-            backgroundColor: '#64748b',
-            animationDelay: '0ms',
-            animationDuration: '1s',
-          }}
-        ></div>
-        <div
-          className="w-1.5 h-1.5 rounded-full animate-bounce"
-          style={{
-            backgroundColor: '#64748b',
-            animationDelay: '150ms',
-            animationDuration: '1s',
-          }}
-        ></div>
-        <div
-          className="w-1.5 h-1.5 rounded-full animate-bounce"
-          style={{
-            backgroundColor: '#64748b',
-            animationDelay: '300ms',
-            animationDuration: '1s',
-          }}
-        ></div>
-      </div>
+    <div className="flex h-4 items-center gap-1" aria-label="Typing">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="bg-text-3 animate-typing size-1.5 rounded-full"
+          style={{ animationDelay: `${i * 150}ms` }}
+        />
+      ))}
     </div>
   );
 };

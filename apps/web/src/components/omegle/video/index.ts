@@ -4,6 +4,5 @@
  */
 
 export { VideoDisplay } from './VideoDisplay';
-export { VideoPlaceholder } from './VideoPlaceholder';
 export { NetworkQualityIndicator } from './NetworkQualityIndicator';
 export { DeviceSelector } from './DeviceSelector';

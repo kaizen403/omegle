@@ -1,36 +1,25 @@
 'use client';
 
-import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 interface ChatHeaderProps {
   isConnected: boolean;
+  partnerName?: string;
 }
 
-export const ChatHeader = ({ isConnected }: ChatHeaderProps) => {
+export const ChatHeader = ({ isConnected, partnerName }: ChatHeaderProps) => {
   return (
-    <div className="px-4 py-3 flex items-center justify-between border-b border-slate-200">
-      <div className="flex items-center gap-2">
-        <div
-          className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
-        ></div>
-        <span className="text-sm font-medium text-video-blue-text">
-          {isConnected ? 'Connected' : 'Not connected'}
-        </span>
-      </div>
-      <Link
-        href="/welcome"
-        className="flex items-center gap-1.5 text-sm font-medium transition-all hover:gap-2 text-video-blue-text"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M10 19l-7-7m0 0l7-7m-7 7h18"
-          />
-        </svg>
-        Home
-      </Link>
+    <div className="flex h-14 shrink-0 items-center justify-between px-5">
+      <p className="text-text truncate font-semibold">
+        {isConnected ? partnerName || 'Stranger' : 'Chat'}
+      </p>
+      <span className="text-text-3 inline-flex items-center gap-1.5 text-sm">
+        <span
+          className={cn('size-2 rounded-full', isConnected ? 'bg-green animate-live' : 'bg-line-2')}
+          aria-hidden
+        />
+        {isConnected ? 'Connected' : 'Not connected'}
+      </span>
     </div>
   );
 };
