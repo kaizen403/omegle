@@ -13,9 +13,7 @@ const CF_TURN_TIMEOUT_MS = 4000;
  * Cloudflare Realtime TURN uses TURN_AUTH_SECRET as `{keyId}:{apiToken}`.
  * Reuses existing env names — do not add a new alias.
  */
-export function parseCloudflareTurnSecret(
-  secret: string
-): { keyId: string; token: string } | null {
+export function parseCloudflareTurnSecret(secret: string): { keyId: string; token: string } | null {
   const trimmed = secret.trim();
   const separator = trimmed.indexOf(':');
   if (separator <= 0 || separator === trimmed.length - 1) {
@@ -38,7 +36,9 @@ function sanitizeIceServers(servers: IceServer[]): IceServer[] {
       const urls = dropBrowserBlockedUrls(server.urls);
       return { ...server, urls: urls.length === 1 ? urls[0] : urls };
     })
-    .filter((server) => (Array.isArray(server.urls) ? server.urls.length > 0 : Boolean(server.urls)));
+    .filter((server) =>
+      Array.isArray(server.urls) ? server.urls.length > 0 : Boolean(server.urls)
+    );
 }
 
 export async function mintCloudflareIceConfig(

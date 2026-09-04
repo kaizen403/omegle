@@ -1,8 +1,4 @@
-import {
-  mintResumeToken,
-  verifyResumeToken,
-  PendingSessionRegistry,
-} from './sessionResume';
+import { mintResumeToken, verifyResumeToken, PendingSessionRegistry } from './sessionResume';
 
 describe('resume tokens', () => {
   it('round-trips the uid it was minted for', () => {

@@ -23,7 +23,9 @@ function isSignalType(value: unknown): value is SignalType {
 /**
  * Validate a WebRTC signal without inspecting SDP contents.
  */
-export function parseRtcSignal(data: unknown): { ok: true; signal: RtcSignal } | { ok: false; error: string } {
+export function parseRtcSignal(
+  data: unknown
+): { ok: true; signal: RtcSignal } | { ok: false; error: string } {
   if (!data || typeof data !== 'object') {
     return { ok: false, error: 'Missing or invalid signal data' };
   }

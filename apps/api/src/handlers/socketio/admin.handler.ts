@@ -680,13 +680,13 @@ export class AdminHandler {
           userSocket.disconnect(true);
           results.success.push(uid);
           logger.info(`[ADMIN] User ${uid} kicked by admin ${socket.adminId}`);
-      adminAuditService.track({
-        adminId: socket.adminId || 'unknown',
-        adminEmail: socket.adminEmail,
-        action: 'kick_user',
-        target: String(uid),
-        ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
-      });
+          adminAuditService.track({
+            adminId: socket.adminId || 'unknown',
+            adminEmail: socket.adminEmail,
+            action: 'kick_user',
+            target: String(uid),
+            ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+          });
         } else {
           results.failed.push(uid);
         }
@@ -847,13 +847,13 @@ export class AdminHandler {
     if (userSocket) {
       userSocket.disconnect(true);
       logger.info(`[ADMIN] User ${uid} disconnected by admin ${socket.adminId}`);
-    adminAuditService.track({
-      adminId: socket.adminId || 'unknown',
-      adminEmail: socket.adminEmail,
-      action: 'disconnect_user',
-      target: String(uid),
-      ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
-    });
+      adminAuditService.track({
+        adminId: socket.adminId || 'unknown',
+        adminEmail: socket.adminEmail,
+        action: 'disconnect_user',
+        target: String(uid),
+        ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+      });
 
       socket.emit('disconnect_response', { success: true, uid });
 
@@ -921,13 +921,13 @@ export class AdminHandler {
         await this.roomService.deleteRoom(roomId);
 
         logger.info(`[ADMIN] Room ${roomId} closed by admin ${socket.adminId}`);
-    adminAuditService.track({
-      adminId: socket.adminId || 'unknown',
-      adminEmail: socket.adminEmail,
-      action: 'close_room',
-      target: String(roomId),
-      ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
-    });
+        adminAuditService.track({
+          adminId: socket.adminId || 'unknown',
+          adminEmail: socket.adminEmail,
+          action: 'close_room',
+          target: String(roomId),
+          ipAddress: (socket as AdminSocket & { clientIp?: string }).clientIp,
+        });
 
         socket.emit('close_room_response', { success: true, roomId });
 

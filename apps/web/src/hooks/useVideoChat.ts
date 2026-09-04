@@ -258,13 +258,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
     onError: handleMatchmakingError,
   });
 
-  const {
-    messages,
-    isPartnerTyping,
-    sendMessage,
-    sendTypingIndicator,
-    clearMessages,
-  } = useChat({
+  const { messages, isPartnerTyping, sendMessage, sendTypingIndicator, clearMessages } = useChat({
     ws: getSocketIOService(),
     isInSession,
     onMessageReceived: () => {},

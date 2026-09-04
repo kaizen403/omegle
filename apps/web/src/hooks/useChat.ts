@@ -89,13 +89,7 @@ interface UseChatOptions {
  * @see {@link UseChatOptions} for configuration options
  */
 export function useChat(options: UseChatOptions) {
-  const {
-    ws,
-    isInSession,
-    onMessageReceived,
-    onTypingIndicator,
-    isChatOpen = true,
-  } = options;
+  const { ws, isInSession, onMessageReceived, onTypingIndicator, isChatOpen = true } = options;
 
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [isPartnerTypingInternal, setIsPartnerTypingInternal] = useState(false);

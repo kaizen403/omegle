@@ -293,23 +293,22 @@ export class SocketIOManager {
       }
 
       this.serialize(socket, async () => {
+        const validation = this.connectionHandler.validateJoinRequest(data);
+        if (!validation.valid) {
+          this.connectionHandler.sendError(socket, validation.error!);
+          return;
+        }
 
-      const validation = this.connectionHandler.validateJoinRequest(data);
-      if (!validation.valid) {
-        this.connectionHandler.sendError(socket, validation.error!);
-        return;
-      }
-
-      // Registration must gate the join, not run alongside it.
-      const registration = this.connectionHandler.registerConnection(
-        socket,
-        data.name,
-        data.gender
-      );
-      if (!registration.ok) {
-        this.connectionHandler.sendError(socket, registration.error);
-        return;
-      }
+        // Registration must gate the join, not run alongside it.
+        const registration = this.connectionHandler.registerConnection(
+          socket,
+          data.name,
+          data.gender
+        );
+        if (!registration.ok) {
+          this.connectionHandler.sendError(socket, registration.error);
+          return;
+        }
 
         // Use the sanitized values the server stored, not the raw client payload.
         await this.matchHandler.handleJoin(socket, {
@@ -446,9 +445,7 @@ export class SocketIOManager {
    */
   private isTransportDrop(reason: string): boolean {
     return (
-      reason === 'transport close' ||
-      reason === 'transport error' ||
-      reason === 'ping timeout'
+      reason === 'transport close' || reason === 'transport error' || reason === 'ping timeout'
     );
   }
 
@@ -525,12 +522,7 @@ export class SocketIOManager {
       return;
     }
 
-    await this.roomHandler.cleanupUserOnDisconnect(
-      uid,
-      gender,
-      disconnectReason,
-      this.matchmaking
-    );
+    await this.roomHandler.cleanupUserOnDisconnect(uid, gender, disconnectReason, this.matchmaking);
   }
 
   /**

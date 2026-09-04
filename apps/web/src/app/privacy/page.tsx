@@ -92,25 +92,25 @@ export default function PrivacyPage() {
               <ul className="list-disc pl-6 space-y-2 text-slate-600">
                 <li>
                   <strong>Log Data &amp; IP Addresses:</strong> We collect your IP address and
-                  browser user agent when you join. These are stored with an anonymous session id
-                  in our visit log (by Indian Standard Time date) so we can investigate abuse,
-                  enforce bans, and cooperate with authorities when required.
+                  browser user agent when you join. These are stored with an anonymous session id in
+                  our visit log (by Indian Standard Time date) so we can investigate abuse, enforce
+                  bans, and cooperate with authorities when required.
                 </li>
                 <li>
                   <strong>Approximate location:</strong> We look up your IP with a geolocation
-                  provider (BigDataCloud) to record a city/region for the same abuse and
-                  moderation purposes. We do not use this for advertising.
+                  provider (BigDataCloud) to record a city/region for the same abuse and moderation
+                  purposes. We do not use this for advertising.
                 </li>
                 <li>
                   <strong>Chat Data:</strong> Video and audio are peer-to-peer. We do not keep a
                   durable chat archive after a session ends. While a room is live, authorized
-                  administrators can monitor it for safety; those actions are written to an
-                  internal audit log.
+                  administrators can monitor it for safety; those actions are written to an internal
+                  audit log.
                 </li>
                 <li>
                   <strong>Product analytics:</strong> We record anonymized product events (for
-                  example, joins and errors) to keep the service working. We do not sell this
-                  data and we do not show ads.
+                  example, joins and errors) to keep the service working. We do not sell this data
+                  and we do not show ads.
                 </li>
               </ul>
             </section>
@@ -136,8 +136,8 @@ export default function PrivacyPage() {
               <h2 className="text-2xl font-bold mb-4">3. How We Use Information</h2>
               <p className="text-slate-600 leading-relaxed">
                 We use the information we collect to run matchmaking, keep the service available,
-                investigate abuse, and protect users. We do not use it for advertising or sell it
-                to third parties.
+                investigate abuse, and protect users. We do not use it for advertising or sell it to
+                third parties.
               </p>
             </section>
 

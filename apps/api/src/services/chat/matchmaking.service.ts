@@ -112,19 +112,23 @@ export class MatchmakingService {
     const userData = JSON.stringify(user);
     const score = Date.now() / 1000; // Unix timestamp in seconds
 
-    await this.redisClient.executeWithProtection(async () => {
-      await this.redis.zAdd(QUEUE_KEY, { score, value: userData });
-      await this.redis.expire(QUEUE_KEY, QUEUE_TTL);
-      await this.redis.publish(MATCH_CHANNEL, 'user_joined');
+    await this.redisClient.executeWithProtection(
+      async () => {
+        await this.redis.zAdd(QUEUE_KEY, { score, value: userData });
+        await this.redis.expire(QUEUE_KEY, QUEUE_TTL);
+        await this.redis.publish(MATCH_CHANNEL, 'user_joined');
 
-      const queueSize = await this.redis.zCard(QUEUE_KEY);
-      logMatchmakingEvent('USER_ADDED_TO_QUEUE', {
-        userId: user.uid,
-        gender: user.gender,
-        queueSize,
-        timestamp: score,
-      });
-    }, `addToQueue:${user.uid}`, { retry: false });
+        const queueSize = await this.redis.zCard(QUEUE_KEY);
+        logMatchmakingEvent('USER_ADDED_TO_QUEUE', {
+          userId: user.uid,
+          gender: user.gender,
+          queueSize,
+          timestamp: score,
+        });
+      },
+      `addToQueue:${user.uid}`,
+      { retry: false }
+    );
   }
 
   /**
@@ -170,39 +174,43 @@ export class MatchmakingService {
     roomId: string,
     claimTtlSeconds = 30
   ): Promise<QueueUser | null> {
-    return this.redisClient.executeWithProtection(async () => {
-      // Prepare current user data
-      const currentUser: QueueUser = {
-        uid,
-        name: '',
-        gender,
-        joinedAt: Math.floor(Date.now() / 1000),
-      };
-      const currentData = JSON.stringify(currentUser);
+    return this.redisClient.executeWithProtection(
+      async () => {
+        // Prepare current user data
+        const currentUser: QueueUser = {
+          uid,
+          name: '',
+          gender,
+          joinedAt: Math.floor(Date.now() / 1000),
+        };
+        const currentData = JSON.stringify(currentUser);
 
-      // Execute Lua script for atomic matching
-      const result = await this.redis.eval(luaMatchScript, {
-        keys: [QUEUE_KEY],
-        arguments: [uid.toString(), currentData, roomId, String(claimTtlSeconds)],
-      });
+        // Execute Lua script for atomic matching
+        const result = await this.redis.eval(luaMatchScript, {
+          keys: [QUEUE_KEY],
+          arguments: [uid.toString(), currentData, roomId, String(claimTtlSeconds)],
+        });
 
-      // No match found
-      if (!result) {
-        logMatchmakingEvent('NO_MATCH_FOUND', { userId: uid, gender });
-        return null;
-      }
+        // No match found
+        if (!result) {
+          logMatchmakingEvent('NO_MATCH_FOUND', { userId: uid, gender });
+          return null;
+        }
 
-      // Parse matched user
-      const matchedUser: QueueUser = JSON.parse(result as string);
-      logMatchmakingEvent('MATCH_FOUND', {
-        user1: uid,
-        user2: matchedUser.uid,
-        user1Gender: gender,
-        user2Gender: matchedUser.gender,
-        matchType: 'lua_script',
-      });
-      return matchedUser;
-    }, `findMatch:${uid}`, { retry: false });
+        // Parse matched user
+        const matchedUser: QueueUser = JSON.parse(result as string);
+        logMatchmakingEvent('MATCH_FOUND', {
+          user1: uid,
+          user2: matchedUser.uid,
+          user1Gender: gender,
+          user2Gender: matchedUser.gender,
+          matchType: 'lua_script',
+        });
+        return matchedUser;
+      },
+      `findMatch:${uid}`,
+      { retry: false }
+    );
   }
 
   /**
@@ -292,27 +300,31 @@ export class MatchmakingService {
    */
   async getQueueSize(gender: string = 'any'): Promise<number> {
     try {
-      return await this.redisClient.executeWithProtection(async () => {
-        if (gender === 'any' || gender === 'all' || !gender) {
-          const size = await this.redis.zCard(QUEUE_KEY);
+      return await this.redisClient.executeWithProtection(
+        async () => {
+          if (gender === 'any' || gender === 'all' || !gender) {
+            const size = await this.redis.zCard(QUEUE_KEY);
+            matchmakingLogger.debug('Queue size retrieved', { gender, size });
+            return size;
+          }
+
+          const entries = await this.redis.zRange(QUEUE_KEY, 0, -1);
+          let size = 0;
+          for (const entry of entries) {
+            try {
+              if ((JSON.parse(entry) as QueueUser).gender === gender) {
+                size++;
+              }
+            } catch {
+              // Skip malformed members rather than failing the whole count.
+            }
+          }
           matchmakingLogger.debug('Queue size retrieved', { gender, size });
           return size;
-        }
-
-        const entries = await this.redis.zRange(QUEUE_KEY, 0, -1);
-        let size = 0;
-        for (const entry of entries) {
-          try {
-            if ((JSON.parse(entry) as QueueUser).gender === gender) {
-              size++;
-            }
-          } catch {
-            // Skip malformed members rather than failing the whole count.
-          }
-        }
-        matchmakingLogger.debug('Queue size retrieved', { gender, size });
-        return size;
-      }, 'getQueueSize', { retry: true });
+        },
+        'getQueueSize',
+        { retry: true }
+      );
     } catch (error) {
       logError('getQueueSize', error as Error);
       return 0;

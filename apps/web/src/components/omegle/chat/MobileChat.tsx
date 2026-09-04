@@ -89,11 +89,7 @@ export const MobileChat = ({
             />
           </div>
           <div className="flex-shrink-0">
-            <ChatInput
-              isConnected={isConnected}
-              onSend={onSendMessage}
-              onTyping={onTyping}
-            />
+            <ChatInput isConnected={isConnected} onSend={onSendMessage} onTyping={onTyping} />
           </div>
         </div>
       </div>

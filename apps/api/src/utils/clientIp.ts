@@ -162,9 +162,7 @@ function expandTrustedProxies(entries: string[]): Cidr[] {
     }
   }
 
-  return expanded
-    .map(parseCidr)
-    .filter((cidr): cidr is Cidr => cidr !== null);
+  return expanded.map(parseCidr).filter((cidr): cidr is Cidr => cidr !== null);
 }
 
 // TRUSTED_PROXIES is fixed at boot, so parse the ranges once.

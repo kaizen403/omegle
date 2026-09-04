@@ -181,13 +181,7 @@ export const config: Config = {
   },
 };
 
-const requiredFields = [
-  'apiKey',
-  'redisHost',
-  'jwt.secret',
-  'databaseUrl',
-  'betterAuthSecret',
-];
+const requiredFields = ['apiKey', 'redisHost', 'jwt.secret', 'databaseUrl', 'betterAuthSecret'];
 
 if (isProduction) {
   requiredFields.push('turnHost', 'turnAuthSecret');
@@ -237,7 +231,9 @@ if (isProduction) {
   }
 
   if (!config.turnstileSecretKey) {
-    missingFields.push('TURNSTILE_SECRET_KEY (admin sign-in captcha cannot be disabled in production)');
+    missingFields.push(
+      'TURNSTILE_SECRET_KEY (admin sign-in captcha cannot be disabled in production)'
+    );
   }
 
   // A misconfigured TURN secret is silent and severe: mintIceConfig falls back to STUN-only,

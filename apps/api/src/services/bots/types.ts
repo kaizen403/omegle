@@ -72,10 +72,7 @@ export interface AnthropicProviderConfig {
 }
 
 export type ProviderConfig =
-  | BedrockProviderConfig
-  | OpenAIProviderConfig
-  | AzureProviderConfig
-  | AnthropicProviderConfig;
+  BedrockProviderConfig | OpenAIProviderConfig | AzureProviderConfig | AnthropicProviderConfig;
 
 // ============= Bot Configuration =============
 

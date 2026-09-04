@@ -40,7 +40,9 @@ export class BotConfigService {
       enabled: row.enabled,
       maxBots: row.maxBots,
       systemPrompt: row.systemPrompt,
-      providerConfig: this.openProviderConfig((row.providerConfig as ProviderConfig | null) ?? null),
+      providerConfig: this.openProviderConfig(
+        (row.providerConfig as ProviderConfig | null) ?? null
+      ),
       updatedAt: row.updatedAt.getTime(),
       createdAt: row.createdAt.getTime(),
     };

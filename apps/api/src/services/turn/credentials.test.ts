@@ -50,11 +50,14 @@ describe('buildIceConfig', () => {
 
   it('reports Cloudflare TURN unconfigured until the secret is keyId:token', () => {
     expect(
-      isTurnConfigured({ turnHost: 'turn.cloudflare.com', turnAuthSecret: 'unconfigured-cloudflare-turn' })
+      isTurnConfigured({
+        turnHost: 'turn.cloudflare.com',
+        turnAuthSecret: 'unconfigured-cloudflare-turn',
+      })
     ).toBe(false);
-    expect(isTurnConfigured({ turnHost: 'turn.cloudflare.com', turnAuthSecret: 'key-id:api-token' })).toBe(
-      true
-    );
+    expect(
+      isTurnConfigured({ turnHost: 'turn.cloudflare.com', turnAuthSecret: 'key-id:api-token' })
+    ).toBe(true);
   });
 
   it('does not mint coturn HMAC for Cloudflare Realtime TURN', () => {
@@ -65,9 +68,9 @@ describe('buildIceConfig', () => {
       3600
     );
     expect(iceServers.every((server) => !server.credential)).toBe(true);
-    expect(iceServers.some((server) => JSON.stringify(server.urls).includes('turn.cloudflare.com'))).toBe(
-      false
-    );
+    expect(
+      iceServers.some((server) => JSON.stringify(server.urls).includes('turn.cloudflare.com'))
+    ).toBe(false);
   });
 });
 

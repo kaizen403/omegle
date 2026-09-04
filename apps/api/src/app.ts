@@ -141,9 +141,7 @@ export class App {
     // entire user base behind a few addresses, and the user app polls GET /status. A 20 r/s
     // bucket would be shared by every student on that wifi. The endpoints worth protecting
     // tightly (auth, admin) get their own much stricter limiters below.
-    this.app.use(
-      createRateLimiter({ ratePerSecond: 200, burst: 400, scope: 'global' })
-    );
+    this.app.use(createRateLimiter({ ratePerSecond: 200, burst: 400, scope: 'global' }));
 
     // Authentication endpoints are the expensive ones: each sign-in runs a password hash, a
     // Neon round-trip, and a Turnstile verification. Rate limiting must therefore run BEFORE

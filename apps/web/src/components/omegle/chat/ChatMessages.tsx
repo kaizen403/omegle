@@ -95,7 +95,7 @@ export const ChatMessages = ({
 
             return (
               <div key={message.id} className="w-full">
-                {(
+                {
                   <div className="flex items-start gap-2">
                     <span
                       className={`text-sm font-semibold min-w-[70px] flex-shrink-0 ${
@@ -122,7 +122,7 @@ export const ChatMessages = ({
                       )}
                     </div>
                   </div>
-                )}
+                }
               </div>
             );
           })}

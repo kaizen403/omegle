@@ -36,11 +36,7 @@ const ChatWindowComponent = ({
           partnerName={partnerName}
         />
       </div>
-      <ChatInput
-        isConnected={isConnected}
-        onSend={onSendMessage}
-        onTyping={onTyping}
-      />
+      <ChatInput isConnected={isConnected} onSend={onSendMessage} onTyping={onTyping} />
     </div>
   );
 };

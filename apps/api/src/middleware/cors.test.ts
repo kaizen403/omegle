@@ -26,7 +26,9 @@ describe('isOriginAllowed', () => {
   });
 
   it('rejects a domain that only contains the pattern as a path or query', () => {
-    expect(isOriginAllowed('https://attacker.com/https://omegle.example.com', patterns)).toBe(false);
+    expect(isOriginAllowed('https://attacker.com/https://omegle.example.com', patterns)).toBe(
+      false
+    );
     expect(isOriginAllowed('https://attacker.com?x=pages.dev', patterns)).toBe(false);
   });
 

@@ -39,48 +39,52 @@ export class RoomService {
     const user1Key = `user:room:${room.user1.uid}`;
     const user2Key = `user:room:${room.user2.uid}`;
 
-    await this.redisClient.executeWithProtection(async () => {
-      await this.redis.setEx(roomKey, ROOM_TTL, roomData);
-      await Promise.all([
-        this.redis.setEx(user1Key, ROOM_TTL, room.roomId),
-        this.redis.setEx(user2Key, ROOM_TTL, room.roomId),
-      ]);
+    await this.redisClient.executeWithProtection(
+      async () => {
+        await this.redis.setEx(roomKey, ROOM_TTL, roomData);
+        await Promise.all([
+          this.redis.setEx(user1Key, ROOM_TTL, room.roomId),
+          this.redis.setEx(user2Key, ROOM_TTL, room.roomId),
+        ]);
 
-      // Increment counter with type safety
-      try {
-        await this.redis.incr('room:count');
-      } catch (error: any) {
-        // If room:count is wrong type, reset it and increment
-        if (error.message?.includes('WRONGTYPE')) {
-          logger.warn('[RoomService] room:count has wrong type in createRoom, resetting');
-          await this.redis.del('room:count');
+        // Increment counter with type safety
+        try {
           await this.redis.incr('room:count');
-        } else {
-          throw error;
+        } catch (error: any) {
+          // If room:count is wrong type, reset it and increment
+          if (error.message?.includes('WRONGTYPE')) {
+            logger.warn('[RoomService] room:count has wrong type in createRoom, resetting');
+            await this.redis.del('room:count');
+            await this.redis.incr('room:count');
+          } else {
+            throw error;
+          }
         }
-      }
 
-      let roomCount = '0';
-      try {
-        roomCount = (await this.redis.get('room:count')) || '0';
-      } catch (error: any) {
-        // If room:count is corrupted, use fallback value
-        if (error.message?.includes('WRONGTYPE')) {
-          logger.warn(
-            '[RoomService] room:count has wrong type when reading for log in createRoom, using fallback'
-          );
-          roomCount = '0';
+        let roomCount = '0';
+        try {
+          roomCount = (await this.redis.get('room:count')) || '0';
+        } catch (error: any) {
+          // If room:count is corrupted, use fallback value
+          if (error.message?.includes('WRONGTYPE')) {
+            logger.warn(
+              '[RoomService] room:count has wrong type when reading for log in createRoom, using fallback'
+            );
+            roomCount = '0';
+          }
         }
-      }
 
-      logRoomEvent('ROOM_CREATED', room.roomId, {
-        user1: room.user1.uid,
-        user2: room.user2.uid,
-        channelName: room.channelName,
-        ttl: ROOM_TTL,
-        totalActiveRooms: roomCount,
-      });
-    }, `createRoom:${room.roomId}`, { retry: false });
+        logRoomEvent('ROOM_CREATED', room.roomId, {
+          user1: room.user1.uid,
+          user2: room.user2.uid,
+          channelName: room.channelName,
+          ttl: ROOM_TTL,
+          totalActiveRooms: roomCount,
+        });
+      },
+      `createRoom:${room.roomId}`,
+      { retry: false }
+    );
   }
 
   /**
@@ -90,16 +94,23 @@ export class RoomService {
     const roomKey = ROOM_KEY_PREFIX + roomId;
 
     try {
-      return await this.redisClient.executeWithProtection(async () => {
-        const roomData = await this.redis.get(roomKey);
-        if (!roomData) {
-          logger.debug(`Room not found: ${roomId}`);
-          return null;
-        }
-        const room = JSON.parse(roomData) as Room;
-        logger.debug(`Room retrieved: ${roomId}`, { user1: room.user1.uid, user2: room.user2.uid });
-        return room;
-      }, `getRoom:${roomId}`, { retry: true });
+      return await this.redisClient.executeWithProtection(
+        async () => {
+          const roomData = await this.redis.get(roomKey);
+          if (!roomData) {
+            logger.debug(`Room not found: ${roomId}`);
+            return null;
+          }
+          const room = JSON.parse(roomData) as Room;
+          logger.debug(`Room retrieved: ${roomId}`, {
+            user1: room.user1.uid,
+            user2: room.user2.uid,
+          });
+          return room;
+        },
+        `getRoom:${roomId}`,
+        { retry: true }
+      );
     } catch (error) {
       logError('getRoom', error as Error, { roomId });
       return null;
@@ -185,78 +196,84 @@ export class RoomService {
           `[RoomService] 🗑️  Keys to delete: [${roomKey}, ${chatKey}, ${user1Key}, ${user2Key}]`
         );
 
-        await this.redisClient.executeWithProtection(async () => {
-          // Delete room, chat history, and user mappings in one atomic operation
-          const deletedCount = await this.redis.del([roomKey, chatKey, user1Key, user2Key]);
+        await this.redisClient.executeWithProtection(
+          async () => {
+            // Delete room, chat history, and user mappings in one atomic operation
+            const deletedCount = await this.redis.del([roomKey, chatKey, user1Key, user2Key]);
 
-          logger.info(
-            `[RoomService] 🗑️  DEL operation result: deletedCount=${deletedCount} (expected 4 or less)`
-          );
-
-          // Diagnostic: If nothing was deleted, check if keys exist
-          if (deletedCount === 0) {
-            logger.error(
-              `[RoomService] ⚠️  DELETE FAILED - No keys were deleted for room ${roomId}!`
+            logger.info(
+              `[RoomService] 🗑️  DEL operation result: deletedCount=${deletedCount} (expected 4 or less)`
             );
-            const keyChecks = await Promise.all([
-              this.redis.exists(roomKey),
-              this.redis.exists(chatKey),
-              this.redis.exists(user1Key),
-              this.redis.exists(user2Key),
-            ]);
-            logger.error(
-              `[RoomService] Key existence check: room=${keyChecks[0]}, chat=${keyChecks[1]}, user1=${keyChecks[2]}, user2=${keyChecks[3]}`
-            );
-          }
 
-          // Only decrement counter if we actually deleted the room (avoid negative counts)
-          if (deletedCount > 0) {
-            try {
-              const currentCount = await this.redis.get('room:count');
-              const count = parseInt(currentCount || '0', 10);
+            // Diagnostic: If nothing was deleted, check if keys exist
+            if (deletedCount === 0) {
+              logger.error(
+                `[RoomService] ⚠️  DELETE FAILED - No keys were deleted for room ${roomId}!`
+              );
+              const keyChecks = await Promise.all([
+                this.redis.exists(roomKey),
+                this.redis.exists(chatKey),
+                this.redis.exists(user1Key),
+                this.redis.exists(user2Key),
+              ]);
+              logger.error(
+                `[RoomService] Key existence check: room=${keyChecks[0]}, chat=${keyChecks[1]}, user1=${keyChecks[2]}, user2=${keyChecks[3]}`
+              );
+            }
 
-              // Don't go below 0
-              if (count > 0) {
-                await this.redis.decr('room:count');
-              } else {
-                await this.redis.set('room:count', '0');
+            // Only decrement counter if we actually deleted the room (avoid negative counts)
+            if (deletedCount > 0) {
+              try {
+                const currentCount = await this.redis.get('room:count');
+                const count = parseInt(currentCount || '0', 10);
+
+                // Don't go below 0
+                if (count > 0) {
+                  await this.redis.decr('room:count');
+                } else {
+                  await this.redis.set('room:count', '0');
+                }
+              } catch (error: any) {
+                // If room:count is wrong type, reset it
+                if (error.message?.includes('WRONGTYPE')) {
+                  logger.warn(
+                    '[RoomService] room:count has wrong type in deleteRoom, resetting to 0'
+                  );
+                  await this.redis.del('room:count');
+                  await this.redis.set('room:count', '0');
+                } else {
+                  throw error;
+                }
               }
+            }
+
+            let roomCount = '0';
+            try {
+              roomCount = (await this.redis.get('room:count')) || '0';
             } catch (error: any) {
-              // If room:count is wrong type, reset it
+              // If room:count is corrupted, use 0 for logging
               if (error.message?.includes('WRONGTYPE')) {
                 logger.warn(
-                  '[RoomService] room:count has wrong type in deleteRoom, resetting to 0'
+                  '[RoomService] room:count has wrong type when reading for log, using 0'
                 );
-                await this.redis.del('room:count');
-                await this.redis.set('room:count', '0');
-              } else {
-                throw error;
+                roomCount = '0';
               }
             }
-          }
 
-          let roomCount = '0';
-          try {
-            roomCount = (await this.redis.get('room:count')) || '0';
-          } catch (error: any) {
-            // If room:count is corrupted, use 0 for logging
-            if (error.message?.includes('WRONGTYPE')) {
-              logger.warn('[RoomService] room:count has wrong type when reading for log, using 0');
-              roomCount = '0';
-            }
-          }
+            logger.info(
+              `[RoomService] Room ${roomId} COMPLETELY DESTROYED - ${deletedCount} keys removed (room + chat + users), ${roomCount} rooms remaining`
+            );
 
-          logger.info(
-            `[RoomService] Room ${roomId} COMPLETELY DESTROYED - ${deletedCount} keys removed (room + chat + users), ${roomCount} rooms remaining`
-          );
-
-          logRoomEvent('ROOM_DELETED', roomId, {
-            deletedKeys: deletedCount,
-            user1: room.user1.uid,
-            user2: room.user2.uid,
-            remainingRooms: roomCount || '0',
-          });
-        }, `deleteRoom:${roomId}`, { retry: false });
+            logRoomEvent('ROOM_DELETED', roomId, {
+              deletedKeys: deletedCount,
+              user1: room.user1.uid,
+              user2: room.user2.uid,
+              remainingRooms: roomCount || '0',
+            });
+          },
+          `deleteRoom:${roomId}`,
+          { retry: false }
+        );
       } finally {
         // Always release lock (only if we still own it)
         const currentValue = await this.redis.get(lockKey);
@@ -355,96 +372,100 @@ export class RoomService {
 
   async getAllRooms(): Promise<Room[]> {
     try {
-      return await this.redisClient.executeWithProtection(async () => {
-        const roomKeys: string[] = [];
-        let cursor = 0;
+      return await this.redisClient.executeWithProtection(
+        async () => {
+          const roomKeys: string[] = [];
+          let cursor = 0;
 
-        // Use SCAN instead of KEYS for non-blocking iteration
-        do {
-          const result = await this.redis.scan(cursor, {
-            MATCH: `${ROOM_KEY_PREFIX}*`,
-            COUNT: 100, // Scan 100 keys at a time
-          });
+          // Use SCAN instead of KEYS for non-blocking iteration
+          do {
+            const result = await this.redis.scan(cursor, {
+              MATCH: `${ROOM_KEY_PREFIX}*`,
+              COUNT: 100, // Scan 100 keys at a time
+            });
 
-          cursor = result.cursor;
-          const keys = result.keys;
+            cursor = result.cursor;
+            const keys = result.keys;
 
-          // Filter out non-room keys (room:chat:*, room:count, etc)
-          // Only keep keys that are UUIDs (actual rooms)
-          const filteredKeys = keys.filter((key) => {
-            const keyPart = key.replace(ROOM_KEY_PREFIX, '');
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-              keyPart
-            );
-            return isUUID;
-          });
-
-          roomKeys.push(...filteredKeys);
-        } while (cursor !== 0);
-
-        logger.debug(`[RoomService] Found ${roomKeys.length} room keys using SCAN`);
-
-        if (roomKeys.length === 0) {
-          return [];
-        }
-
-        // Get all room data with error handling for wrong types
-        const roomsData = await Promise.all(
-          roomKeys.map(async (key) => {
-            try {
-              return await this.redis.get(key);
-            } catch (error: any) {
-              if (error.message?.includes('WRONGTYPE')) {
-                logger.warn(`[RoomService] WRONGTYPE error for key ${key}, marking for cleanup`);
-                return null;
-              }
-              throw error;
-            }
-          })
-        );
-
-        // Parse and filter valid rooms
-        const rooms: Room[] = [];
-        const staleKeys: string[] = [];
-
-        for (let i = 0; i < roomsData.length; i++) {
-          const data = roomsData[i];
-          if (data) {
-            try {
-              const room = JSON.parse(data);
-
-              // Validate room has both users
-              if (!room.user1 || !room.user2 || !room.user1.uid || !room.user2.uid) {
-                logger.warn(
-                  `[RoomService] Invalid room structure in ${roomKeys[i]}, marking for cleanup`
-                );
-                staleKeys.push(roomKeys[i]);
-                continue;
-              }
-
-              logger.debug(
-                `[RoomService] Parsed room ${room.roomId}: user1=${room.user1?.uid}, user2=${room.user2?.uid}`
+            // Filter out non-room keys (room:chat:*, room:count, etc)
+            // Only keep keys that are UUIDs (actual rooms)
+            const filteredKeys = keys.filter((key) => {
+              const keyPart = key.replace(ROOM_KEY_PREFIX, '');
+              const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+                keyPart
               );
-              rooms.push(room);
-            } catch (error) {
-              logger.error(`Failed to parse room data from key ${roomKeys[i]}:`, error);
+              return isUUID;
+            });
+
+            roomKeys.push(...filteredKeys);
+          } while (cursor !== 0);
+
+          logger.debug(`[RoomService] Found ${roomKeys.length} room keys using SCAN`);
+
+          if (roomKeys.length === 0) {
+            return [];
+          }
+
+          // Get all room data with error handling for wrong types
+          const roomsData = await Promise.all(
+            roomKeys.map(async (key) => {
+              try {
+                return await this.redis.get(key);
+              } catch (error: any) {
+                if (error.message?.includes('WRONGTYPE')) {
+                  logger.warn(`[RoomService] WRONGTYPE error for key ${key}, marking for cleanup`);
+                  return null;
+                }
+                throw error;
+              }
+            })
+          );
+
+          // Parse and filter valid rooms
+          const rooms: Room[] = [];
+          const staleKeys: string[] = [];
+
+          for (let i = 0; i < roomsData.length; i++) {
+            const data = roomsData[i];
+            if (data) {
+              try {
+                const room = JSON.parse(data);
+
+                // Validate room has both users
+                if (!room.user1 || !room.user2 || !room.user1.uid || !room.user2.uid) {
+                  logger.warn(
+                    `[RoomService] Invalid room structure in ${roomKeys[i]}, marking for cleanup`
+                  );
+                  staleKeys.push(roomKeys[i]);
+                  continue;
+                }
+
+                logger.debug(
+                  `[RoomService] Parsed room ${room.roomId}: user1=${room.user1?.uid}, user2=${room.user2?.uid}`
+                );
+                rooms.push(room);
+              } catch (error) {
+                logger.error(`Failed to parse room data from key ${roomKeys[i]}:`, error);
+                staleKeys.push(roomKeys[i]);
+              }
+            } else {
+              logger.warn(`[RoomService] No data for key ${roomKeys[i]}, marking for cleanup`);
               staleKeys.push(roomKeys[i]);
             }
-          } else {
-            logger.warn(`[RoomService] No data for key ${roomKeys[i]}, marking for cleanup`);
-            staleKeys.push(roomKeys[i]);
           }
-        }
 
-        // Clean up stale keys
-        if (staleKeys.length > 0) {
-          logger.debug(`[RoomService] Cleaning up ${staleKeys.length} stale room keys`);
-          await this.redis.del(staleKeys);
-        }
+          // Clean up stale keys
+          if (staleKeys.length > 0) {
+            logger.debug(`[RoomService] Cleaning up ${staleKeys.length} stale room keys`);
+            await this.redis.del(staleKeys);
+          }
 
-        logger.debug(`[RoomService] Returning ${rooms.length} valid rooms`);
-        return rooms;
-      }, 'getAllRooms', { retry: true });
+          logger.debug(`[RoomService] Returning ${rooms.length} valid rooms`);
+          return rooms;
+        },
+        'getAllRooms',
+        { retry: true }
+      );
     } catch (error) {
       logger.error('Failed to get all rooms:', error);
       return [];
@@ -457,13 +478,17 @@ export class RoomService {
   async addChatMessage(roomId: string, message: any): Promise<void> {
     const chatKey = `room:chat:${roomId}`;
     try {
-      await this.redisClient.executeWithProtection(async () => {
-        // Store as JSON string in a list (RPUSH adds to end)
-        await this.redis.rPush(chatKey, JSON.stringify(message));
-        // Set TTL to match room TTL (2 hours)
-        await this.redis.expire(chatKey, ROOM_TTL);
-        logger.debug(`[RoomService] Added message to room ${roomId} chat history`);
-      }, `addChatMessage:${roomId}`, { retry: false });
+      await this.redisClient.executeWithProtection(
+        async () => {
+          // Store as JSON string in a list (RPUSH adds to end)
+          await this.redis.rPush(chatKey, JSON.stringify(message));
+          // Set TTL to match room TTL (2 hours)
+          await this.redis.expire(chatKey, ROOM_TTL);
+          logger.debug(`[RoomService] Added message to room ${roomId} chat history`);
+        },
+        `addChatMessage:${roomId}`,
+        { retry: false }
+      );
     } catch (error) {
       logger.error(`Failed to add message to room ${roomId}:`, error);
     }
@@ -475,11 +500,15 @@ export class RoomService {
   async getChatHistory(roomId: string, limit: number = 100): Promise<any[]> {
     const chatKey = `room:chat:${roomId}`;
     try {
-      return await this.redisClient.executeWithProtection(async () => {
-        // Get all messages from the list (0 to limit-1)
-        const messages = await this.redis.lRange(chatKey, 0, limit - 1);
-        return messages.map((msg) => JSON.parse(msg));
-      }, `getChatHistory:${roomId}`, { retry: true });
+      return await this.redisClient.executeWithProtection(
+        async () => {
+          // Get all messages from the list (0 to limit-1)
+          const messages = await this.redis.lRange(chatKey, 0, limit - 1);
+          return messages.map((msg) => JSON.parse(msg));
+        },
+        `getChatHistory:${roomId}`,
+        { retry: true }
+      );
     } catch (error) {
       logger.error(`Failed to get chat history for room ${roomId}:`, error);
       return [];
@@ -491,14 +520,18 @@ export class RoomService {
    */
   async cleanupAllChatHistories(): Promise<number> {
     try {
-      return await this.redisClient.executeWithProtection(async () => {
-        const chatKeys = await this.scanKeys('room:chat:*');
-        if (chatKeys.length > 0) {
-          await this.redis.del(chatKeys);
-          logger.info(`[RoomService] Cleaned up ${chatKeys.length} chat histories`);
-        }
-        return chatKeys.length;
-      }, 'cleanupAllChatHistories', { retry: false });
+      return await this.redisClient.executeWithProtection(
+        async () => {
+          const chatKeys = await this.scanKeys('room:chat:*');
+          if (chatKeys.length > 0) {
+            await this.redis.del(chatKeys);
+            logger.info(`[RoomService] Cleaned up ${chatKeys.length} chat histories`);
+          }
+          return chatKeys.length;
+        },
+        'cleanupAllChatHistories',
+        { retry: false }
+      );
     } catch (error) {
       logger.error('Failed to cleanup chat histories:', error);
       return 0;
@@ -551,111 +584,115 @@ export class RoomService {
    */
   async cleanupStaleRooms(): Promise<number> {
     try {
-      return await this.redisClient.executeWithProtection(async () => {
-        const roomKeys = await this.scanKeys(`${ROOM_KEY_PREFIX}*`);
-        let cleanedCount = 0;
+      return await this.redisClient.executeWithProtection(
+        async () => {
+          const roomKeys = await this.scanKeys(`${ROOM_KEY_PREFIX}*`);
+          let cleanedCount = 0;
 
-        for (const key of roomKeys) {
-          // Skip non-room keys (room:count, room:chat:*, etc.)
-          if (key === 'room:count' || key.startsWith('room:chat:')) {
-            continue;
-          }
+          for (const key of roomKeys) {
+            // Skip non-room keys (room:count, room:chat:*, etc.)
+            if (key === 'room:count' || key.startsWith('room:chat:')) {
+              continue;
+            }
 
-          // Only process actual room keys (room:{uuid} format)
-          const roomId = key.replace(ROOM_KEY_PREFIX, '');
-          // Skip if roomId contains ':' (meaning it's a sub-key like room:chat:xxx)
-          if (roomId.includes(':')) {
-            continue;
-          }
+            // Only process actual room keys (room:{uuid} format)
+            const roomId = key.replace(ROOM_KEY_PREFIX, '');
+            // Skip if roomId contains ':' (meaning it's a sub-key like room:chat:xxx)
+            if (roomId.includes(':')) {
+              continue;
+            }
 
-          const data = await this.redis.get(key);
-          if (!data) {
-            // Orphaned room key with no data
-            await this.redis.del(key);
-            cleanedCount++;
-            logger.warn(`[RoomService] Deleted orphaned room key: ${key}`);
-            continue;
-          }
-
-          try {
-            const room = JSON.parse(data);
-
-            // Check 1: Malformed room structure
-            if (!room.user1 || !room.user2 || !room.user1.uid || !room.user2.uid) {
+            const data = await this.redis.get(key);
+            if (!data) {
+              // Orphaned room key with no data
               await this.redis.del(key);
               cleanedCount++;
-              logger.warn(`[RoomService] Deleted malformed room: ${roomId}`);
+              logger.warn(`[RoomService] Deleted orphaned room key: ${key}`);
               continue;
             }
 
-            // Check 2: User mappings - detect partial or full orphaning
-            const user1Mapping = await this.redis.get(`user:room:${room.user1.uid}`);
-            const user2Mapping = await this.redis.get(`user:room:${room.user2.uid}`);
+            try {
+              const room = JSON.parse(data);
 
-            // Both users disconnected (full orphan)
-            if (!user1Mapping && !user2Mapping) {
-              logger.warn(
-                `[RoomService] Found fully orphaned room ${roomId} - both users disconnected`
-              );
-              await this.deleteRoom(roomId);
-              cleanedCount++;
-              continue;
-            }
-
-            // One user disconnected (partial orphan) - delete and notify remaining user
-            if (!user1Mapping || !user2Mapping) {
-              const disconnectedUid = !user1Mapping ? room.user1.uid : room.user2.uid;
-              logger.warn(
-                `[RoomService] Found partially orphaned room ${roomId} - user ${disconnectedUid} disconnected`
-              );
-
-              // Delete room and user mappings
-              await this.redis.del([
-                key,
-                `user:room:${room.user1.uid}`,
-                `user:room:${room.user2.uid}`,
-              ]);
-
-              // Decrement counter with type safety
-              try {
-                const currentCount = await this.redis.get('room:count');
-                const count = parseInt(currentCount || '0', 10);
-                if (count > 0) {
-                  await this.redis.decr('room:count');
-                } else {
-                  // Reset to 0 if negative or invalid
-                  await this.redis.set('room:count', '0');
-                }
-              } catch (error: any) {
-                // If room:count is wrong type, reset it
-                if (error.message?.includes('WRONGTYPE')) {
-                  logger.warn('[RoomService] room:count has wrong type, resetting to 0');
-                  await this.redis.del('room:count');
-                  await this.redis.set('room:count', '0');
-                } else {
-                  throw error;
-                }
+              // Check 1: Malformed room structure
+              if (!room.user1 || !room.user2 || !room.user1.uid || !room.user2.uid) {
+                await this.redis.del(key);
+                cleanedCount++;
+                logger.warn(`[RoomService] Deleted malformed room: ${roomId}`);
+                continue;
               }
 
+              // Check 2: User mappings - detect partial or full orphaning
+              const user1Mapping = await this.redis.get(`user:room:${room.user1.uid}`);
+              const user2Mapping = await this.redis.get(`user:room:${room.user2.uid}`);
+
+              // Both users disconnected (full orphan)
+              if (!user1Mapping && !user2Mapping) {
+                logger.warn(
+                  `[RoomService] Found fully orphaned room ${roomId} - both users disconnected`
+                );
+                await this.deleteRoom(roomId);
+                cleanedCount++;
+                continue;
+              }
+
+              // One user disconnected (partial orphan) - delete and notify remaining user
+              if (!user1Mapping || !user2Mapping) {
+                const disconnectedUid = !user1Mapping ? room.user1.uid : room.user2.uid;
+                logger.warn(
+                  `[RoomService] Found partially orphaned room ${roomId} - user ${disconnectedUid} disconnected`
+                );
+
+                // Delete room and user mappings
+                await this.redis.del([
+                  key,
+                  `user:room:${room.user1.uid}`,
+                  `user:room:${room.user2.uid}`,
+                ]);
+
+                // Decrement counter with type safety
+                try {
+                  const currentCount = await this.redis.get('room:count');
+                  const count = parseInt(currentCount || '0', 10);
+                  if (count > 0) {
+                    await this.redis.decr('room:count');
+                  } else {
+                    // Reset to 0 if negative or invalid
+                    await this.redis.set('room:count', '0');
+                  }
+                } catch (error: any) {
+                  // If room:count is wrong type, reset it
+                  if (error.message?.includes('WRONGTYPE')) {
+                    logger.warn('[RoomService] room:count has wrong type, resetting to 0');
+                    await this.redis.del('room:count');
+                    await this.redis.set('room:count', '0');
+                  } else {
+                    throw error;
+                  }
+                }
+
+                cleanedCount++;
+                logger.info(`[RoomService] Cleaned partial orphan room ${roomId}`);
+              }
+            } catch (error) {
+              // Invalid JSON or other parsing error
+              await this.redis.del(key);
               cleanedCount++;
-              logger.info(`[RoomService] Cleaned partial orphan room ${roomId}`);
+              logger.error(`[RoomService] Deleted invalid room ${key}:`, error);
             }
-          } catch (error) {
-            // Invalid JSON or other parsing error
-            await this.redis.del(key);
-            cleanedCount++;
-            logger.error(`[RoomService] Deleted invalid room ${key}:`, error);
           }
-        }
 
-        if (cleanedCount > 0) {
-          logger.warn(
-            `[RoomService] 🧹 PERIODIC CLEANUP: Removed ${cleanedCount} stale/orphaned rooms`
-          );
-        }
+          if (cleanedCount > 0) {
+            logger.warn(
+              `[RoomService] 🧹 PERIODIC CLEANUP: Removed ${cleanedCount} stale/orphaned rooms`
+            );
+          }
 
-        return cleanedCount;
-      }, 'cleanupStaleRooms', { retry: false });
+          return cleanedCount;
+        },
+        'cleanupStaleRooms',
+        { retry: false }
+      );
     } catch (error) {
       logger.error('Failed to cleanup stale rooms:', error);
       return 0;

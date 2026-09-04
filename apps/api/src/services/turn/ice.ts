@@ -23,7 +23,11 @@ export function isCloudflareTurnHost(host: string): boolean {
  * STUN-only when host or secret is missing (local without coturn).
  * Cloudflare Realtime TURN is minted separately — coturn HMAC is invalid there.
  */
-export function buildIceConfig(options: TurnIceOptions, uid: number, ttlSeconds?: number): IceConfig {
+export function buildIceConfig(
+  options: TurnIceOptions,
+  uid: number,
+  ttlSeconds?: number
+): IceConfig {
   const expiresAt = turnExpiryUnix(ttlSeconds ?? DEFAULT_TURN_TTL_SECONDS);
   const iceServers: IceServer[] = [];
   const stunUrls = parseStunList(options.stunUrls);
@@ -46,10 +50,7 @@ export function buildIceConfig(options: TurnIceOptions, uid: number, ttlSeconds?
 
   if (host && options.turnAuthSecret && !cloudflareTurn) {
     const { username, credential } = mintTurnCredential(options.turnAuthSecret, uid, expiresAt);
-    const turnUrls = [
-      `turn:${host}:${port}?transport=udp`,
-      `turn:${host}:${port}?transport=tcp`,
-    ];
+    const turnUrls = [`turn:${host}:${port}?transport=udp`, `turn:${host}:${port}?transport=tcp`];
     if (options.turnTlsPort > 0) {
       turnUrls.push(`turns:${host}:${options.turnTlsPort}?transport=tcp`);
     }
@@ -78,7 +79,9 @@ export function summarizeIceServers(iceServers: IceServer[]): {
   };
 }
 
-export function isTurnConfigured(options: Pick<TurnIceOptions, 'turnHost' | 'turnAuthSecret'>): boolean {
+export function isTurnConfigured(
+  options: Pick<TurnIceOptions, 'turnHost' | 'turnAuthSecret'>
+): boolean {
   const host = options.turnHost.trim();
   const secret = options.turnAuthSecret.trim();
   if (!host || !secret) {

@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 
-const ALLOW_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-API-Key, x-captcha-response';
+const ALLOW_HEADERS =
+  'Content-Type, Authorization, X-Requested-With, X-API-Key, x-captcha-response';
 const EXPOSE_HEADERS = 'Content-Length, Content-Type, set-auth-token';
 
 /**
