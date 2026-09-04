@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { HomeAuthGuard } from "./HomeAuthGuard";
 
 export const metadata: Metadata = {
-  title: "Dashboard",
+  title: {
+    default: "Dashboard",
+    template: "%s | Omegle Admin",
+  },
 };
 
 export default function HomeLayout({
