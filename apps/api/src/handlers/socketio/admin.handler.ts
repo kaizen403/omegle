@@ -217,6 +217,56 @@ export class AdminHandler {
    * Setup admin namespace handlers
    */
   public setupHandlers(): void {
+    // Gate the namespace itself.
+    //
+    // `io.use()` only installs middleware on the main "/" namespace — the API-key, capacity
+    // and per-IP checks applied there never ran for "/admin". An anonymous socket could
+    // therefore join this namespace and, because every broadcast below is namespace-wide
+    // (`adminNamespace.emit`), receive live `user_update` / `room_created` traffic containing
+    // real users' names, uids and IP addresses, plus `admin_session_connected` carrying an
+    // admin's own address. Verified by connecting with no credentials and capturing five
+    // PII-bearing events while a legitimate admin was online.
+    //
+    // Authenticate before the socket is allowed into the namespace at all, so an
+    // unauthenticated client never becomes a broadcast recipient.
+    this.adminNamespace.use(async (socket, next) => {
+      const clientIp = resolveClientIp(
+        socket.handshake.headers,
+        socket.conn?.remoteAddress || socket.handshake.address
+      );
+
+      if (!adminAuthLimiter.tryConsume(clientIp)) {
+        logger.warn(`[ADMIN] Handshake rate limit exceeded for ${clientIp}`);
+        return next(new Error('Too many attempts'));
+      }
+
+      const token = socket.handshake.auth?.token;
+      const cookieHeader = socket.handshake.headers.cookie;
+
+      if (!token && !cookieHeader) {
+        logger.warn(`[ADMIN] Rejected unauthenticated /admin connection from ${clientIp}`);
+        return next(new Error('Authentication required'));
+      }
+
+      try {
+        const admin = await getAdminFromToken(token, cookieHeader);
+        if (!admin || !admin.isActive) {
+          logger.warn(`[ADMIN] Rejected invalid /admin session from ${clientIp}`);
+          return next(new Error('Invalid or expired session'));
+        }
+
+        // Stash the verified identity so handleConnection does not re-query.
+        (socket as AdminSocket).adminId = admin.uid;
+        (socket as AdminSocket).adminEmail = admin.email;
+        (socket as AdminSocket).adminRole = admin.role;
+        (socket as AdminSocket).clientIp = clientIp;
+        return next();
+      } catch (error) {
+        logger.error('[ADMIN] Namespace auth error:', error);
+        return next(new Error('Authentication failed'));
+      }
+    });
+
     this.adminNamespace.on('connection', (socket: AdminSocket) => {
       this.handleConnection(socket);
     });
