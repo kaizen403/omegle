@@ -299,7 +299,7 @@ function OmeglePageContent() {
 
 /** Slim room header: wordmark, status, exit. */
 function RoomHeader({ isMatched, isSearching }: { isMatched: boolean; isSearching: boolean }) {
-  const status = isMatched ? 'Connected' : isSearching ? 'Searching' : 'Ready';
+  const status = isMatched ? 'Connected' : isSearching ? 'Searching' : '';
   return (
     <header className="flex h-14 shrink-0 items-center justify-between px-4 lg:px-5">
       <Logo height={22} priority />

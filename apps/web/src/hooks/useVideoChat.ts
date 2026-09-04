@@ -146,6 +146,10 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
+          // Refresh from the socket here: by match time the `connected` event has certainly
+          // arrived, and this is the only place the id is consumed. Note useRtc prefers the
+          // server-sent `isOfferer`, so this is a fallback rather than load-bearing.
+          syncSessionUid();
           const uid = currentUidRef.current;
 
           await initializeRTC(matchData, uid, localVideoElementId, remoteVideoElementId);
@@ -220,6 +224,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
       }
     },
     [
+      syncSessionUid,
       initializeRTC,
       leaveRTC,
       localVideoElementId,
@@ -278,11 +283,12 @@ export function useVideoChat(options: UseVideoChatOptions) {
         return;
       }
 
-      if (syncSessionUid() === null) {
-        showError('Still connecting. Please try again in a moment.', ErrorCode.CONNECTION_TIMEOUT);
-        return;
-      }
-
+      // No connection check here. `join` already handles a cold socket: it stores the
+      // request in pendingJoinRef, calls connect(), and replays it once the socket is up.
+      // Blocking on a session id before calling join was a deadlock — joining is what
+      // opens the connection that produces the id, so Start could never succeed on a
+      // freshly loaded page.
+      //
       // uid is intentionally absent: the server uses the socket's own identity.
       const authData = {
         name: userData.name.trim(),
@@ -297,7 +303,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
       await prepareLocalMedia();
       join(authData);
     },
-    [join, prepareLocalMedia, syncSessionUid]
+    [join, prepareLocalMedia]
   );
 
   const stopSearch = useCallback(async () => {
