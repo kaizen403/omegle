@@ -26,18 +26,20 @@ const ChatWindowComponent = ({
   partnerName,
 }: ChatWindowProps) => {
   return (
-    <div className="hidden lg:flex flex-col bg-white border-l border-slate-300 w-full lg:w-[45%] h-full shadow-xl overflow-hidden">
-      <ChatHeader isConnected={isConnected} />
-      <div className="flex-1 overflow-hidden">
-        <ChatMessages
-          isConnected={isConnected}
-          isStrangerTyping={isStrangerTyping}
-          messages={messages}
-          partnerName={partnerName}
-        />
+    <aside className="hidden h-full w-full p-3 pt-0 lg:flex lg:w-[40%] lg:p-4 lg:pl-2 xl:w-[36%]">
+      <div className="bg-surface shadow-card flex h-full w-full flex-col overflow-hidden rounded-3xl">
+        <ChatHeader isConnected={isConnected} partnerName={partnerName} />
+        <div className="min-h-0 flex-1">
+          <ChatMessages
+            isConnected={isConnected}
+            isStrangerTyping={isStrangerTyping}
+            messages={messages}
+            partnerName={partnerName}
+          />
+        </div>
+        <ChatInput isConnected={isConnected} onSend={onSendMessage} onTyping={onTyping} />
       </div>
-      <ChatInput isConnected={isConnected} onSend={onSendMessage} onTyping={onTyping} />
-    </div>
+    </aside>
   );
 };
 

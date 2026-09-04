@@ -7,18 +7,15 @@ import {
 } from '@/providers';
 import { BrowserPolyfillInit, GlobalErrorHandler } from '@/components/common';
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Figtree } from 'next/font/google';
 import { HeroUIProvider } from '@heroui/system';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const figtree = Figtree({
+  variable: '--font-figtree',
   subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -124,10 +121,11 @@ export const metadata: Metadata = {
   category: 'social networking',
   classification: 'Random Video Chat, Stranger Chat, Social Networking',
   icons: {
-    icon: [{ url: '/omegle.png', sizes: 'any', type: 'image/png' }, { url: '/favicon.ico' }],
-    apple: '/omegle.png',
-    shortcut: '/omegle.png',
+    icon: [{ url: '/omegle-mark.png', sizes: '620x620', type: 'image/png' }],
+    apple: '/apple-touch-icon.png',
+    shortcut: '/omegle-mark.png',
   },
+  manifest: '/site.webmanifest',
   robots: {
     index: true,
     follow: true,
@@ -189,7 +187,7 @@ export default function RootLayout({
         {/* <meta name="google-site-verification" content="YOUR_CODE" /> */}
         <link rel="canonical" href="https://vitap.in" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${figtree.variable} antialiased`}>
         <BrowserPolyfillInit />
         <GlobalErrorHandler />
         <HeroUIProvider>

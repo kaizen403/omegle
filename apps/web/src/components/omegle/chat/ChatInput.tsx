@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { Smile, ArrowUp, Loader2 } from 'lucide-react';
 import { analytics } from '@/services/analytics';
 import { EMOJI_PICKER_HIDE_DELAY, MAX_MESSAGE_LENGTH } from '@/constants';
+import { cn } from '@/lib/utils';
 
 // Dynamically import emoji picker to avoid SSR issues
 const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
@@ -24,33 +26,22 @@ export const ChatInput = ({ isConnected, onSend, onTyping }: ChatInputProps) => 
 
   const handleSend = useCallback(async () => {
     const trimmedMessage = message.trim();
-
-    // Regular text message
-    // Prevent sending if already sending, not connected, or empty message
-    if (isSending || !isConnected || !trimmedMessage) {
-      return;
-    }
+    if (isSending || !isConnected || !trimmedMessage) return;
 
     setIsSending(true);
 
-    // Clear typing timeout and send stop typing
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
     onTyping?.(false);
-
-    // Send message
     onSend?.(trimmedMessage);
 
-    // Track analytics
     const hasEmoji = /[\p{Emoji}]/u.test(trimmedMessage);
     analytics.trackMessageSent(trimmedMessage.length, hasEmoji);
 
-    // Clear input
     setMessage('');
 
-    // Reset sending state after a short delay to prevent rapid fire
     setTimeout(() => {
       setIsSending(false);
       inputRef.current?.focus();
@@ -63,22 +54,14 @@ export const ChatInput = ({ isConnected, onSend, onTyping }: ChatInputProps) => 
 
     if (!isConnected) return;
 
-    // Send typing indicator
     if (newValue.length > 0) {
       onTyping?.(true);
-
-      // Clear existing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      // Set new timeout to stop typing after inactivity
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         onTyping?.(false);
         typingTimeoutRef.current = null;
       }, EMOJI_PICKER_HIDE_DELAY);
     } else {
-      // User cleared the input
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
@@ -97,12 +80,9 @@ export const ChatInput = ({ isConnected, onSend, onTyping }: ChatInputProps) => 
     [handleSend]
   );
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
   }, []);
 
@@ -111,133 +91,101 @@ export const ChatInput = ({ isConnected, onSend, onTyping }: ChatInputProps) => 
       setMessage((prev) => prev + emojiData.emoji);
       setShowEmojiPicker(false);
       onTyping?.(true);
-
-      // Track emoji usage
       analytics.trackEmojiUsed();
-
-      // Focus input after emoji selection
       setTimeout(() => inputRef.current?.focus(), 0);
     },
     [onTyping]
   );
 
-  // Close emoji picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
         setShowEmojiPicker(false);
       }
     };
-
-    if (showEmojiPicker) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (showEmojiPicker) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showEmojiPicker]);
 
-  // Focus input when connected
   useEffect(() => {
-    if (isConnected) {
-      inputRef.current?.focus();
-    }
+    if (isConnected) inputRef.current?.focus();
   }, [isConnected]);
 
   const canSend = isConnected && message.trim().length > 0 && !isSending;
+  const nearLimit = message.length >= MAX_MESSAGE_LENGTH * 0.9;
 
   return (
-    <div className="border-t border-slate-200 p-4 bg-white relative">
-      {/* Emoji Picker */}
+    <div className="relative shrink-0 p-3">
       {showEmojiPicker && (
-        <div ref={emojiPickerRef} className="absolute bottom-20 left-4 z-50">
-          <EmojiPicker onEmojiClick={handleEmojiClick} width={300} height={400} />
+        <div
+          ref={emojiPickerRef}
+          className="shadow-float animate-pop-up absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 overflow-hidden rounded-2xl"
+        >
+          <EmojiPicker onEmojiClick={handleEmojiClick} width={300} height={380} />
         </div>
       )}
 
-      <div className="flex gap-2">
-        {/* Emoji Button */}
+      <div
+        className={cn(
+          'bg-sky flex h-13 items-center gap-1 rounded-2xl px-1.5 transition-all',
+          'focus-within:bg-surface focus-within:ring-blue/50 focus-within:ring-2',
+          !isConnected && 'opacity-60'
+        )}
+      >
         <button
+          type="button"
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
           disabled={!isConnected}
-          className="p-3 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+          className="text-text-3 hover:text-text hover:bg-sky-2 flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors disabled:pointer-events-none"
           title="Add emoji"
-          type="button"
+          aria-label="Add emoji"
         >
-          <span className="text-xl">😊</span>
+          <Smile className="size-5" strokeWidth={2} aria-hidden />
         </button>
 
-        <div className="flex-1 relative">
-          <input
-            ref={inputRef}
-            type="text"
-            value={message}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            placeholder={isConnected ? 'Type your message...' : 'Connect to start chatting'}
-            disabled={!isConnected}
-            className="w-full px-4 py-3 pr-16 text-sm rounded-xl border-2 border-slate-200 focus:outline-none focus:border-blue-400 transition-colors disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-            maxLength={MAX_MESSAGE_LENGTH}
-            autoComplete="off"
-            spellCheck="true"
-          />
-          {/* Character Counter - Inside Input */}
-          {message.length > 0 && (
-            <span
-              className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs pointer-events-none ${
-                message.length >= MAX_MESSAGE_LENGTH
-                  ? 'text-red-500 font-semibold'
-                  : message.length >= MAX_MESSAGE_LENGTH * 0.9
-                    ? 'text-orange-500'
-                    : 'text-slate-400'
-              }`}
-            >
-              {message.length}/{MAX_MESSAGE_LENGTH}
-            </span>
-          )}
-        </div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={message}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder={isConnected ? 'say something...' : 'not connected yet'}
+          disabled={!isConnected}
+          className="text-text placeholder:text-text-3 h-full min-w-0 flex-1 bg-transparent px-1 text-[16px] outline-none disabled:cursor-not-allowed"
+          maxLength={MAX_MESSAGE_LENGTH}
+          autoComplete="off"
+          spellCheck="true"
+          aria-label="Message"
+        />
+
+        {nearLimit && (
+          <span
+            className={cn(
+              'text-xs tabular-nums',
+              message.length >= MAX_MESSAGE_LENGTH ? 'text-red' : 'text-text-3'
+            )}
+          >
+            {MAX_MESSAGE_LENGTH - message.length}
+          </span>
+        )}
+
         <button
+          type="button"
           onClick={handleSend}
           disabled={!canSend}
-          className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+          className={cn(
+            'flex size-10 shrink-0 items-center justify-center rounded-xl transition-all',
             canSend
-              ? 'bg-blue-500 hover:bg-blue-600 active:scale-95'
-              : 'bg-slate-300 cursor-not-allowed'
-          }`}
-          title={canSend ? 'Send message (Enter)' : 'Type a message to send'}
-          type="button"
+              ? 'bg-blue hover:bg-blue-dark text-white active:scale-95'
+              : 'bg-line-2/50 text-text-3 cursor-not-allowed'
+          )}
+          title={canSend ? 'Send' : 'Type a message'}
+          aria-label="Send message"
         >
           {isSending ? (
-            <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              ></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            <Loader2 className="size-4 animate-spin" strokeWidth={2.5} aria-hidden />
           ) : (
-            <svg
-              className="w-6 h-6 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M14 5l7 7m0 0l-7 7m7-7H3"
-              />
-            </svg>
+            <ArrowUp className="size-5" strokeWidth={2.5} aria-hidden />
           )}
         </button>
       </div>

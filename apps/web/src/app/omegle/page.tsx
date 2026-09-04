@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser, useVideoChat } from '@/hooks';
 import { REDIRECT_DELAY } from '@/constants';
@@ -19,6 +20,8 @@ import { isBrowserSupported } from '@/lib/browser-polyfill';
 import { analytics } from '@/services/analytics';
 import { isMobileDevice } from '@/services/rtc';
 import type { MatchDataMatched } from '@/types/matchmaking';
+import { Logo } from '@/components/brand';
+import { cn } from '@/lib/utils';
 
 /**
  * OmeglePageContent - Main video chat experience
@@ -213,16 +216,15 @@ function OmeglePageContent() {
   }
 
   return (
-    <div className="h-screen w-screen flex bg-page-bg overflow-hidden fixed inset-0">
-      {/* Match Confetti Overlay */}
+    <div className="bg-sky bg-bubbles text-text fixed inset-0 flex h-dvh w-screen flex-col overflow-hidden">
       <MatchConfetti isActive={showMatchConfetti} />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* Video Areas - Fill screen on mobile, 55% on desktop */}
-        <div className="w-full lg:w-[55%] flex flex-col p-2 gap-2 lg:p-4 lg:gap-4 h-full overflow-hidden">
-          {/* Stranger Video - Takes available height minus controls on mobile */}
-          <div className="flex-1 relative min-h-0">
+      <RoomHeader isMatched={isMatched} isSearching={isSearching} />
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        {/* Video column */}
+        <div className="flex h-full min-h-0 w-full flex-col gap-3 p-3 lg:w-[60%] lg:p-4 lg:pr-2 xl:w-[64%]">
+          <div className="relative min-h-0 flex-1">
             <VideoDisplay
               id="remote-video"
               label={matchData?.partnerName || 'Stranger'}
@@ -235,11 +237,10 @@ function OmeglePageContent() {
             />
           </div>
 
-          {/* Your Video - Takes available height minus controls on mobile */}
-          <div className="flex-1 relative min-h-0">
+          <div className="relative min-h-0 flex-1">
             <VideoDisplay
               id="local-video"
-              label="Your camera"
+              label="You"
               isConnected={isMatched}
               isCameraOn={isCameraOn}
               isMicOn={isMicOn}
@@ -247,7 +248,6 @@ function OmeglePageContent() {
               showConnectionIndicator={false}
               userGender={gender.toLowerCase() as 'male' | 'female' | 'other'}
             >
-              {/* Control Buttons */}
               <RoomControls
                 isMatched={isMatched}
                 isSearching={isSearching}
@@ -271,7 +271,6 @@ function OmeglePageContent() {
           </div>
         </div>
 
-        {/* Right Side - Desktop Chat Window */}
         <ChatWindow
           isConnected={isMatched}
           isStrangerTyping={isPartnerTyping ?? false}
@@ -282,7 +281,6 @@ function OmeglePageContent() {
           partnerName={matchData?.partnerName}
         />
 
-        {/* Mobile Chat */}
         <MobileChat
           isConnected={isMatched}
           isStrangerTyping={isPartnerTyping ?? false}
@@ -296,6 +294,32 @@ function OmeglePageContent() {
         />
       </div>
     </div>
+  );
+}
+
+/** Slim room header: wordmark, status, exit. */
+function RoomHeader({ isMatched, isSearching }: { isMatched: boolean; isSearching: boolean }) {
+  const status = isMatched ? 'Connected' : isSearching ? 'Searching' : 'Ready';
+  return (
+    <header className="flex h-14 shrink-0 items-center justify-between px-4 lg:px-5">
+      <Logo height={22} priority />
+      <span className="text-text-3 inline-flex items-center gap-1.5 text-sm">
+        <span
+          className={cn(
+            'size-2 rounded-full',
+            isMatched ? 'bg-green animate-live' : isSearching ? 'bg-blue' : 'bg-line-2'
+          )}
+          aria-hidden
+        />
+        {status}
+      </span>
+      <Link
+        href="/welcome"
+        className="text-text-2 hover:bg-surface hover:text-text inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium transition-colors"
+      >
+        Leave
+      </Link>
+    </header>
   );
 }
 

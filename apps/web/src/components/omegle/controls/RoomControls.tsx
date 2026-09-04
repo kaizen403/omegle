@@ -1,6 +1,6 @@
 /**
  * Room Controls
- * Complete control bar for video chat room
+ * Floating control bar for the video chat room
  */
 
 'use client';
@@ -29,9 +29,6 @@ interface RoomControlsProps {
   onToggleMobileChat?: () => void;
 }
 
-/**
- * Complete room control bar with all media and action controls
- */
 export const RoomControls = memo(
   ({
     isMatched,
@@ -70,48 +67,50 @@ export const RoomControls = memo(
     };
 
     return (
-      <div className="absolute bottom-4 lg:bottom-6 left-1/2 transform -translate-x-1/2 flex gap-2 lg:gap-4 z-30 px-2">
-        {/* Camera Control */}
-        <MediaControlWithSelector
-          type="camera"
-          isOn={isCameraOn}
-          currentDeviceId={currentCameraId}
-          showMenu={showCameraMenu}
-          buttonRef={cameraButtonRef}
-          onToggle={onToggleCamera}
-          onToggleMenu={handleCameraMenuToggle}
-          onCloseMenu={() => setShowCameraMenu(false)}
-          onSwitchDevice={onSwitchCamera}
-        />
+      <div className="absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 lg:bottom-4">
+        <div
+          className="bg-surface/95 shadow-float flex items-center gap-2 rounded-full p-2 backdrop-blur-md"
+          role="toolbar"
+          aria-label="Room controls"
+        >
+          <MediaControlWithSelector
+            type="camera"
+            isOn={isCameraOn}
+            currentDeviceId={currentCameraId}
+            showMenu={showCameraMenu}
+            buttonRef={cameraButtonRef}
+            onToggle={onToggleCamera}
+            onToggleMenu={handleCameraMenuToggle}
+            onCloseMenu={() => setShowCameraMenu(false)}
+            onSwitchDevice={onSwitchCamera}
+          />
 
-        {/* Microphone Control */}
-        <MediaControlWithSelector
-          type="microphone"
-          isOn={isMicOn}
-          currentDeviceId={currentMicId}
-          showMenu={showMicMenu}
-          buttonRef={micButtonRef}
-          onToggle={onToggleMicrophone}
-          onToggleMenu={handleMicMenuToggle}
-          onCloseMenu={() => setShowMicMenu(false)}
-          onSwitchDevice={onSwitchMicrophone}
-        />
+          <MediaControlWithSelector
+            type="microphone"
+            isOn={isMicOn}
+            currentDeviceId={currentMicId}
+            showMenu={showMicMenu}
+            buttonRef={micButtonRef}
+            onToggle={onToggleMicrophone}
+            onToggleMenu={handleMicMenuToggle}
+            onCloseMenu={() => setShowMicMenu(false)}
+            onSwitchDevice={onSwitchMicrophone}
+          />
 
-        {/* Action Buttons */}
-        {isMatched ? (
-          <>
-            {/* Chat Button - for mobile when matched */}
-            {isMobile && onToggleMobileChat && (
-              <ChatButton onClick={onToggleMobileChat} unreadCount={unreadChatCount} />
-            )}
-            <NextButton onClick={onNext} />
-            <LeaveButton onClick={onLeave} />
-          </>
-        ) : isSearching ? (
-          <StopButton onClick={onStop} />
-        ) : (
-          <StartButton onClick={onStart} />
-        )}
+          {isMatched ? (
+            <>
+              {isMobile && onToggleMobileChat && (
+                <ChatButton onClick={onToggleMobileChat} unreadCount={unreadChatCount} />
+              )}
+              <NextButton onClick={onNext} />
+              <LeaveButton onClick={onLeave} />
+            </>
+          ) : isSearching ? (
+            <StopButton onClick={onStop} />
+          ) : (
+            <StartButton onClick={onStart} />
+          )}
+        </div>
       </div>
     );
   }

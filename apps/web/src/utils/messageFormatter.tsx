@@ -12,8 +12,7 @@ import Linkify from 'linkify-react';
 const linkifyOptions = {
   target: '_blank',
   rel: 'noopener noreferrer',
-  className:
-    'text-blue-600 hover:text-blue-700 underline hover:no-underline font-medium transition-colors',
+  className: 'underline underline-offset-2 hover:no-underline font-medium transition-colors',
   validate: {
     url: (value: string) => /^https?:\/\//.test(value) || /^www\./.test(value),
   },

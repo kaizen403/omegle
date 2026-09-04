@@ -1,13 +1,13 @@
 /**
  * Action Buttons
- * Room action controls: Start, Stop, Next, Leave
+ * Room actions: start, stop, next, leave, chat
  */
 
 'use client';
 
 import { memo } from 'react';
-import { Button } from '@heroui/button';
-import { PlayIcon, StopIcon, NextIcon, LeaveIcon } from './Icons';
+import { PlayIcon, StopIcon, NextIcon, LeaveIcon, ChatIcon } from './Icons';
+import { cn } from '@/lib/utils';
 
 interface ActionButtonProps {
   onClick: () => void;
@@ -16,76 +16,72 @@ interface ActionButtonProps {
   disabled?: boolean;
 }
 
-/**
- * Start matching button
- */
+const round =
+  'inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:pointer-events-none';
+
+const pill =
+  'inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none';
+
+/** Start matching */
 export const StartButton = memo(({ onClick, disabled }: ActionButtonProps) => (
-  <Button
+  <button
+    type="button"
     onClick={onClick}
-    isIconOnly
-    radius="full"
-    isDisabled={disabled}
-    className="w-11 h-11 min-w-11 lg:w-12 lg:h-12 lg:min-w-12 bg-green-500 hover:bg-green-600 text-white"
+    disabled={disabled}
+    className={cn(pill, 'bg-blue hover:bg-blue-dark shadow-blue text-white')}
     title="Start matching"
     aria-label="Start matching with a stranger"
   >
     <PlayIcon />
-  </Button>
+    Start
+  </button>
 ));
 StartButton.displayName = 'StartButton';
 
-/**
- * Stop searching button
- */
+/** Stop searching */
 export const StopButton = memo(({ onClick, disabled }: ActionButtonProps) => (
-  <Button
+  <button
+    type="button"
     onClick={onClick}
-    isIconOnly
-    radius="full"
-    isDisabled={disabled}
-    className="w-11 h-11 min-w-11 lg:w-12 lg:h-12 lg:min-w-12 bg-red-500 hover:bg-red-600 text-white"
+    disabled={disabled}
+    className={cn(pill, 'bg-sky text-text hover:bg-sky-2')}
     title="Stop searching"
     aria-label="Stop searching for a match"
   >
     <StopIcon />
-  </Button>
+    Stop
+  </button>
 ));
 StopButton.displayName = 'StopButton';
 
-/**
- * Next stranger button
- */
+/** Next stranger */
 export const NextButton = memo(({ onClick, disabled }: ActionButtonProps) => (
-  <Button
+  <button
+    type="button"
     onClick={onClick}
-    isIconOnly
-    radius="full"
-    isDisabled={disabled}
-    className="w-11 h-11 min-w-11 lg:w-12 lg:h-12 lg:min-w-12 text-white"
-    style={{ backgroundColor: '#0084d1' }}
+    disabled={disabled}
+    className={cn(pill, 'bg-blue hover:bg-blue-dark shadow-blue text-white')}
     title="Next stranger"
-    aria-label="Skip to next stranger"
+    aria-label="Skip to the next stranger"
   >
     <NextIcon />
-  </Button>
+    Next
+  </button>
 ));
 NextButton.displayName = 'NextButton';
 
-/**
- * Leave room button
- */
+/** Leave room */
 export const LeaveButton = memo(({ onClick, disabled }: ActionButtonProps) => (
-  <Button
+  <button
+    type="button"
     onClick={onClick}
-    isIconOnly
-    radius="full"
-    isDisabled={disabled}
-    className="w-11 h-11 min-w-11 lg:w-12 lg:h-12 lg:min-w-12 bg-red-500 hover:bg-red-600 text-white"
-    title="Leave room"
-    aria-label="Leave the chat room"
+    disabled={disabled}
+    className={cn(round, 'bg-red-soft text-red hover:bg-red hover:text-white')}
+    title="Leave"
+    aria-label="Leave the chat"
   >
     <LeaveIcon />
-  </Button>
+  </button>
 ));
 LeaveButton.displayName = 'LeaveButton';
 
@@ -93,30 +89,19 @@ interface ChatButtonProps extends ActionButtonProps {
   unreadCount?: number;
 }
 
-/**
- * Mobile chat toggle button
- * Shows unread message count badge
- */
+/** Mobile chat toggle with unread badge */
 export const ChatButton = memo(({ onClick, disabled, unreadCount = 0 }: ChatButtonProps) => (
   <button
+    type="button"
     onClick={onClick}
     disabled={disabled}
-    className="w-11 h-11 lg:w-12 lg:h-12 rounded-full bg-slate-600 hover:bg-slate-700 flex items-center justify-center text-white transition-colors relative"
+    className={cn(round, 'bg-sky text-text hover:bg-sky-2 relative')}
     title="Open chat"
-    aria-label="Open chat"
+    aria-label={unreadCount > 0 ? `Open chat, ${unreadCount} unread` : 'Open chat'}
   >
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      />
-    </svg>
-
-    {/* Unread Message Count Badge */}
+    <ChatIcon />
     {unreadCount > 0 && (
-      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+      <span className="bg-blue absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white ring-2 ring-white">
         {unreadCount > 9 ? '9+' : unreadCount}
       </span>
     )}

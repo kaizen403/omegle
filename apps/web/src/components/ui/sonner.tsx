@@ -11,17 +11,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            'group toast group-[.toaster]:bg-white group-[.toaster]:text-slate-950 group-[.toaster]:border-slate-200 group-[.toaster]:shadow-lg',
-          description: 'group-[.toast]:text-slate-500',
-          actionButton: 'group-[.toast]:bg-slate-900 group-[.toast]:text-slate-50',
-          cancelButton: 'group-[.toast]:bg-slate-100 group-[.toast]:text-slate-500',
-          error:
-            'group-[.toaster]:bg-red-500 group-[.toaster]:text-white group-[.toaster]:border-red-600',
-          success:
-            'group-[.toaster]:bg-green-500 group-[.toaster]:text-white group-[.toaster]:border-green-600',
-          warning:
-            'group-[.toaster]:bg-amber-500 group-[.toaster]:text-white group-[.toaster]:border-amber-600',
-          info: 'group-[.toaster]:bg-blue-500 group-[.toaster]:text-white group-[.toaster]:border-blue-600',
+            'group toast !bg-surface !text-text !border-0 !rounded-2xl !shadow-float !font-sans !text-sm',
+          title: '!font-medium',
+          description: '!text-text-3',
+          actionButton: '!bg-blue !text-white !rounded-full',
+          cancelButton: '!bg-sky !text-text-2 !rounded-full',
+          icon: 'group-data-[type=error]:!text-red group-data-[type=success]:!text-green group-data-[type=warning]:!text-orange group-data-[type=info]:!text-blue',
         },
       }}
       {...props}
