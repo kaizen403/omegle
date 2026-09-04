@@ -7,6 +7,7 @@ import { ChatMessage, TypingIndicator } from '../../models';
 import { botManager } from '../../services/bots';
 import { MessageValidator } from '../../utils/messageValidator';
 import { config } from '../../config';
+import { analyticsService } from '../../services/admin/analytics.service';
 import { GlobalBudget } from '../../utils/boundedRateLimiter';
 
 /** Single source of truth for chat text length — the validator uses the same value. */
@@ -155,6 +156,7 @@ export class ChatHandler {
         timestamp: message.timestamp,
       };
       await this.roomService.addChatMessage(room.roomId, messageWithName);
+      analyticsService.recordMessage();
 
       // Broadcast to partner only (not sender - frontend does optimistic update)
       socket.to(room.roomId).emit('message', message);

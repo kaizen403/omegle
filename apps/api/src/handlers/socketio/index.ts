@@ -17,6 +17,7 @@ import { isOriginAllowed } from '../../middleware/cors';
 import { BoundedRateLimiter } from '../../utils/boundedRateLimiter';
 import { PendingSessionRegistry, DEFAULT_GRACE_MS } from '../../services/chat/sessionResume';
 import { botManager } from '../../services/bots';
+import { maintenanceService } from '../../services/admin/maintenance.service';
 import { isOffererUid } from '../../services/turn';
 import { socketLogger } from '../../utils/logger';
 import { DisconnectReason } from '../../models';
@@ -165,6 +166,10 @@ export class SocketIOManager {
 
     registerRuntimeMetrics(this.adminHandler);
 
+    // One shared timer computes analytics once and broadcasts to every dashboard, instead of
+    // each admin polling and each poll walking every room.
+    this.adminHandler.startAnalyticsPush();
+
     // Link admin handler to other handlers
     this.matchHandler.setAdminHandler(this.adminHandler);
     this.roomHandler.setAdminHandler(this.adminHandler);
@@ -286,6 +291,19 @@ export class SocketIOManager {
     const ip = socket.clientIP || 'unknown';
 
     socket.on('join', (data) => {
+      // Maintenance is enforced here, not merely reported. Before this the flag was shown on
+      // admin dashboards and consulted by nothing, so "turning the site off" left every user
+      // able to connect, match and chat.
+      if (!maintenanceService.isOpen()) {
+        const note = maintenanceService.snapshot().message;
+        socket.emit('maintenance', { maintenance: true, message: note });
+        socket.emit('match', {
+          status: 'error',
+          message: note || 'The service is under maintenance. Please try again shortly.',
+        });
+        return;
+      }
+
       // Per-IP budget first: reject before touching Redis, Neon, or the geolocation API.
       if (!this.ipJoinLimiter.tryConsume(ip)) {
         this.connectionHandler.sendError(socket, 'Too many requests. Please slow down.');
@@ -526,6 +544,60 @@ export class SocketIOManager {
   }
 
   /**
+   * Bring the product down, or back up, for connected users.
+   *
+   * Closing: tell everyone, end live rooms so nobody is left in a half-dead call, and return
+   * them to idle. Users are deliberately NOT disconnected — an open socket that knows why it
+   * is idle recovers cleanly when the site reopens, whereas a forced disconnect just starts
+   * the client's reconnect loop against a service that is refusing joins.
+   *
+   * Reopening: tell everyone so the UI can drop its maintenance screen without a reload.
+   */
+  public applyMaintenanceState(open: boolean, message: string | null): void {
+    this.io.emit('maintenance', { maintenance: !open, message });
+
+    if (open) {
+      socketLogger.warn('[MAINTENANCE] Site reopened - users may join again');
+      return;
+    }
+
+    let endedRooms = 0;
+    const handled = new Set<string>();
+
+    for (const socket of this.connections.values()) {
+      if (!socket.connected || handled.has(socket.id)) {
+        continue;
+      }
+      handled.add(socket.id);
+
+      if (socket.state === 'active' && socket.roomId && socket.uid && socket.gender) {
+        endedRooms++;
+        void this.roomHandler
+          .cleanupUserOnDisconnect(
+            socket.uid,
+            socket.gender,
+            DisconnectReason.SERVER_SHUTDOWN,
+            this.matchmaking
+          )
+          .catch((error) => socketLogger.error('[MAINTENANCE] cleanup failed:', error));
+      }
+
+      socket.state = 'idle';
+      socket.roomId = undefined;
+      socket.partnerId = undefined;
+      socket.emit('match', {
+        status: 'partner_disconnected',
+        message: message || 'The service is going into maintenance.',
+      });
+    }
+
+    void this.matchmaking.clearQueue().catch(() => undefined);
+    socketLogger.warn(
+      `[MAINTENANCE] Site closed - ended ${endedRooms} live rooms and cleared the queue`
+    );
+  }
+
+  /**
    * Get connection count
    */
   public getConnectionCount(): number {
@@ -571,6 +643,7 @@ export class SocketIOManager {
     this.connectionHandler.destroy();
     // Held sessions cannot be resumed across a restart; drop their timers.
     this.pendingSessions.destroy();
+    this.adminHandler.stopAnalyticsPush();
 
     // 3. Broadcast shutdown to admin clients
     if (this.adminHandler) {

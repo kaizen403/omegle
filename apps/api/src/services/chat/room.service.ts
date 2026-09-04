@@ -2,6 +2,7 @@ import { RedisClientType } from 'redis';
 import { Room } from '../../models';
 import { logger, logRoomEvent, logError } from '../../utils/logger';
 import { RedisClient } from '../core/redis';
+import { analyticsService } from '../admin/analytics.service';
 import { randomUUID } from 'crypto';
 
 const ROOM_KEY_PREFIX = 'room:';
@@ -73,6 +74,10 @@ export class RoomService {
             roomCount = '0';
           }
         }
+
+        // Durable, monotonic total. `room:count` is a gauge that decrements on close, so
+        // it can never answer "how many rooms have ever been created".
+        analyticsService.recordRoomCreated();
 
         logRoomEvent('ROOM_CREATED', room.roomId, {
           user1: room.user1.uid,

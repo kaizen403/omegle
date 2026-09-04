@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { botManager } from '../../services/bots';
 import { BotHandler } from './bot.handler';
 import { runtimeMetrics } from '../../services/admin/runtimeMetrics';
+import { analyticsService } from '../../services/admin/analytics.service';
 
 /**
  * Match Handler - Manages matchmaking operations (join, cancel)
@@ -671,6 +672,7 @@ export class MatchHandler {
 
       await this.roomService.createRoom(room);
       runtimeMetrics.trackMatch(Date.now() - matchStartedAt);
+      analyticsService.recordMatch();
 
       // Update socket states for real users only
       if (!user1IsBot && user1Socket) {

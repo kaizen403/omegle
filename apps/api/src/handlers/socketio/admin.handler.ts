@@ -5,6 +5,7 @@ import { TurnService } from '../../services/turn';
 import { logger } from '../../utils/logger';
 import adminService from '../../services/admin/admin.service';
 import { adminAuditService } from '../../services/admin/audit.service';
+import { analyticsService } from '../../services/admin/analytics.service';
 import { getAdminFromToken } from '../../lib/session';
 import { BoundedRateLimiter } from '../../utils/boundedRateLimiter';
 import { resolveClientIp } from '../../utils/clientIp';
@@ -61,6 +62,7 @@ export class AdminHandler {
   private matchmakingMetrics = {
     totalMatches: 0,
     matchesLastMinute: 0,
+    matchesPerMinute: 0,
     failedMatches: 0,
     matchTimes: [] as number[],
     lastMinuteTimestamp: Date.now(),
@@ -1239,6 +1241,113 @@ export class AdminHandler {
   /**
    * Broadcast event to all admins
    */
+  /**
+   * Push a site status change straight to every connected dashboard.
+   *
+   * Emitted directly rather than through `queueEvent`: the batcher would deliver this as
+   * `system_status_batch` after up to 200ms, and taking the whole site down is not something
+   * to deliver late or under a different event name. The admin client has always listened for
+   * `system_status`; until now the server never emitted it, so one admin's toggle never
+   * reached another's screen.
+   */
+  /**
+   * Push a full analytics snapshot to every dashboard on an interval.
+   *
+   * Pushed rather than polled: the health page previously polled every 3s per admin, and each
+   * poll walked every room and JSON-parsed up to 100 chat messages just to produce a count.
+   * One shared timer computing once and broadcasting is both cheaper and gives every admin
+   * the same numbers at the same moment.
+   */
+  private analyticsInterval: NodeJS.Timeout | null = null;
+
+  public startAnalyticsPush(intervalMs = 2000): void {
+    if (this.analyticsInterval) {
+      return;
+    }
+
+    this.analyticsInterval = setInterval(() => {
+      // Nobody is watching — skip the work entirely.
+      if (this.adminConnections.size === 0) {
+        return;
+      }
+      void this.emitAnalytics().catch((error) => logger.debug('[ANALYTICS] push failed', error));
+    }, intervalMs);
+    this.analyticsInterval.unref?.();
+  }
+
+  public stopAnalyticsPush(): void {
+    if (this.analyticsInterval) {
+      clearInterval(this.analyticsInterval);
+      this.analyticsInterval = null;
+    }
+  }
+
+  private async emitAnalytics(): Promise<void> {
+    const users = Array.from(this.userConnectionsMap.values()) as Array<{
+      state?: string;
+      gender?: string;
+      connected?: boolean;
+    }>;
+
+    const live = {
+      connectedUsers: users.length,
+      idle: users.filter((u) => u.state === 'idle').length,
+      queued: users.filter((u) => u.state === 'queue').length,
+      active: users.filter((u) => u.state === 'active').length,
+      activeRooms: 0,
+      male: users.filter((u) => u.gender === 'male').length,
+      female: users.filter((u) => u.gender === 'female').length,
+      monitoredRooms: this.monitoredRooms.size,
+    };
+
+    const [cumulative, activeRooms, redisHealthy] = await Promise.all([
+      analyticsService.getCumulative(),
+      this.matchmakingService?.getActiveRoomsCount?.() ?? Promise.resolve(0),
+      this.redisClient?.checkHealth?.() ?? Promise.resolve(false),
+    ]);
+    live.activeRooms = activeRooms || 0;
+
+    // Record the high-water mark from the same sample the dashboard is seeing.
+    void analyticsService.recordConcurrentUsers(live.connectedUsers);
+
+    const net = this.getNetworkStats();
+    const matchmaking = this.getMatchmakingStats();
+
+    this.adminNamespace.emit('analytics', {
+      live,
+      cumulative: {
+        roomsCreatedTotal: cumulative.roomsCreatedTotal,
+        roomsCreatedToday: cumulative.roomsCreatedToday,
+        matchesTotal: cumulative.matchesTotal,
+        messagesTotal: cumulative.messagesTotal,
+        peakConcurrentUsers: Math.max(cumulative.peakConcurrentUsers, live.connectedUsers),
+        visitsToday: cumulative.roomsCreatedToday,
+      },
+      rates: {
+        matchesPerMinute: matchmaking.matchesPerMinute ?? 0,
+        connectionsPerMinute: (net.connectionsPerSecond ?? 0) * 60,
+        messagesPerMinute: 0,
+      },
+      health: {
+        uptimeSeconds: Math.floor((Date.now() - this.startTime) / 1000),
+        redisHealthy: Boolean(redisHealthy),
+        memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        errorsLast5Min: this.getErrorMetrics().last5Minutes ?? 0,
+      },
+      timestamp: Date.now(),
+    });
+  }
+
+  public broadcastSystemStatus(payload: {
+    status: boolean;
+    maintenance: boolean;
+    message: string | null;
+    changedBy: string;
+    timestamp: number;
+  }): void {
+    this.adminNamespace.emit('system_status', payload);
+  }
+
   public broadcastEvent(event: any): void {
     this.adminNamespace.emit('admin_event', event);
   }
@@ -1435,8 +1544,15 @@ export class AdminHandler {
       .map((e) => ({ message: e.message, count: e.count }));
 
     return {
-      last5Minutes: recentErrors.reduce((sum, e) => sum + e.count, 0),
+      // Count DISTINCT error kinds seen in the window, not their lifetime totals.
+      // trackError keeps one row per unique message and increments `count` forever while
+      // refreshing `timestamp`, so summing `count` here reported every occurrence since boot
+      // as if it happened in the last five minutes — which latched the dashboard's error
+      // panel permanently red on any service that had ever seen a recurring error.
+      last5Minutes: recentErrors.length,
       topErrors,
+      // Distinct messages currently retained (the buffer is capped), not total errors.
+      distinctTracked: this.errorLog.length,
       totalTracked: this.errorLog.length,
     };
   }
@@ -1447,8 +1563,12 @@ export class AdminHandler {
   private getMatchmakingStats(): any {
     const now = Date.now();
 
-    // Reset per-minute counter if needed
+    // Snapshot the completed window BEFORE resetting the accumulator. Without the first
+    // line the counter was zeroed and then reported, so "matches/min" read 0 on every
+    // rollover and a partial count in between — it could never show a true rate.
+    // getNetworkStats and getPerformanceMetrics already do it this way.
     if (now - this.matchmakingMetrics.lastMinuteTimestamp > 60000) {
+      this.matchmakingMetrics.matchesPerMinute = this.matchmakingMetrics.matchesLastMinute;
       this.matchmakingMetrics.matchesLastMinute = 0;
       this.matchmakingMetrics.lastMinuteTimestamp = now;
     }
@@ -1461,7 +1581,10 @@ export class AdminHandler {
 
     return {
       totalMatches: this.matchmakingMetrics.totalMatches,
-      matchesPerMinute: this.matchmakingMetrics.matchesLastMinute,
+      // Report the last completed window; fall back to the in-progress count so a freshly
+      // started server shows activity instead of a flat zero for its first minute.
+      matchesPerMinute:
+        this.matchmakingMetrics.matchesPerMinute || this.matchmakingMetrics.matchesLastMinute,
       avgMatchTime: Math.round(avgMatchTime),
       failedMatches: this.matchmakingMetrics.failedMatches,
       successRate:
@@ -1471,7 +1594,9 @@ export class AdminHandler {
                 (this.matchmakingMetrics.totalMatches + this.matchmakingMetrics.failedMatches)) *
                 100
             )
-          : 100,
+          : // No matches yet means "no data", not "100% success". Reporting a perfect score
+            // for a server that has never matched anyone is actively misleading.
+            null,
     };
   }
 

@@ -6,7 +6,11 @@ import { MatchmakingService } from './services/matchmaking';
 import { RoomService } from './services/room';
 import { TurnService } from './services/turn';
 import { SocketIOManager } from './handlers/socketio';
-import { StatusScheduler } from './services/scheduler/statusScheduler';
+import {
+  StatusScheduler,
+  WINDOW_OPEN_HOUR,
+  WINDOW_CLOSE_HOUR,
+} from './services/scheduler/statusScheduler';
 import { config, configWarnings } from './config';
 import { logger } from './utils/logger';
 import { register, collectDefaultMetrics } from 'prom-client';
@@ -15,12 +19,14 @@ import { securityHeaders } from './middleware/security';
 import { requestLogger } from './middleware/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { internalApiKeyAuth } from './middleware/apiKey';
-import { requireAuth } from './middleware/auth';
+import { requireAuth, type AuthAdmin } from './middleware/auth';
 import { createRateLimiter } from './middleware/rateLimiter';
 import { requestTimeout } from './middleware/timeout';
 import { clientIpMiddleware } from './middleware/clientIp';
 import { edgeGuard } from './middleware/edgeGuard';
 import { v4 as uuidv4 } from 'uuid';
+import { maintenanceService } from './services/admin/maintenance.service';
+import { adminAuditService } from './services/admin/audit.service';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth';
 import adminRoutes from './routes/admin';
@@ -187,48 +193,91 @@ export class App {
     this.app.get('/status', async (req, res) => {
       try {
         const isRedisHealthy = await this.cachedRedisHealth();
+        const state = await maintenanceService.get();
         res.json({
-          status: this.systemStatus && isRedisHealthy,
-          adminStatus: this.systemStatus,
+          status: state.open && isRedisHealthy,
+          adminStatus: state.open,
           redisHealth: isRedisHealthy,
+          // The public site polls this to decide whether to show the maintenance page.
+          maintenance: !state.open,
+          message: state.message,
           timestamp: Date.now(),
         });
       } catch (error) {
+        // Fail OPEN. A status endpoint that errors must not strand every user on a
+        // maintenance page — the site being reachable is the safer default.
         res.json({
           status: false,
-          adminStatus: this.systemStatus,
+          adminStatus: true,
           redisHealth: false,
+          maintenance: false,
+          message: null,
           timestamp: Date.now(),
         });
       }
     });
 
     // Toggle system status (admin session required — not the public user API key)
-    this.app.post('/status', requireAuth, (req, res) => {
+    this.app.post('/status', requireAuth, async (req, res) => {
       try {
-        const { status } = req.body;
+        const { status, message } = req.body;
         if (typeof status !== 'boolean') {
           return res.status(400).json({
             error: 'Invalid status value. Must be boolean.',
           });
         }
 
-        this.systemStatus = status;
+        const actor = (req as unknown as { user?: AuthAdmin }).user;
+        const changedBy = actor?.email || actor?.uid || 'unknown admin';
 
-        // Broadcast status change to all admin clients
+        const state = await maintenanceService.set(
+          status,
+          typeof message === 'string' ? message : null,
+          changedBy
+        );
+        this.systemStatus = state.open;
+
         if (this.socketIOManager) {
-          this.socketIOManager.getAdminHandler().broadcastEvent({
-            type: 'system_status_changed',
-            data: { status: this.systemStatus, timestamp: Date.now() },
+          const adminHandler = this.socketIOManager.getAdminHandler();
+
+          // Direct event so dashboards update immediately. The client has always listened
+          // for `system_status`; the server previously only sent `admin_event`, so a toggle
+          // by one admin never reached the others.
+          adminHandler.broadcastSystemStatus({
+            status: state.open,
+            maintenance: !state.open,
+            message: state.message,
+            changedBy,
+            timestamp: state.changedAt,
           });
+
+          adminHandler.broadcastEvent({
+            type: 'system_status_changed',
+            data: { status: state.open, message: state.message, timestamp: state.changedAt },
+          });
+
+          // Actually take the product down / bring it back.
+          this.socketIOManager.applyMaintenanceState(state.open, state.message);
         }
 
-        logger.info(`System status changed to: ${status}`);
+        adminAuditService.track({
+          adminId: actor?.uid || 'unknown',
+          adminEmail: actor?.email,
+          action: state.open ? 'site_reopened' : 'site_maintenance_on',
+          target: 'site',
+          details: { message: state.message },
+        });
+
+        logger.warn(
+          `System status changed to ${state.open ? 'OPEN' : 'MAINTENANCE'} by ${changedBy}`
+        );
 
         res.json({
           success: true,
-          status: this.systemStatus,
-          timestamp: Date.now(),
+          status: state.open,
+          maintenance: !state.open,
+          message: state.message,
+          timestamp: state.changedAt,
         });
       } catch (error) {
         logger.error('Failed to update system status:', error);
@@ -359,11 +408,32 @@ export class App {
       // Initialize and start Status Scheduler (11 PM - 3 AM IST)
       this.statusScheduler = new StatusScheduler(
         (status: boolean) => {
+          // Route through the same persisted state the admin toggle uses, so a scheduled
+          // close actually stops users joining and survives a restart — rather than setting
+          // an in-memory flag nothing enforced.
           this.systemStatus = status;
+          void maintenanceService
+            .set(
+              status,
+              status ? null : 'The service is closed for the night. We reopen at 9 PM IST.',
+              'scheduler'
+            )
+            .then((state) => {
+              this.socketIOManager?.applyMaintenanceState(state.open, state.message);
+            })
+            .catch((error) => logger.error('[SCHEDULER] Failed to apply state:', error));
         },
         (status: boolean) => {
           if (this.socketIOManager) {
-            this.socketIOManager.getAdminHandler().broadcastEvent({
+            const adminHandler = this.socketIOManager.getAdminHandler();
+            adminHandler.broadcastSystemStatus({
+              status,
+              maintenance: !status,
+              message: null,
+              changedBy: 'scheduler',
+              timestamp: Date.now(),
+            });
+            adminHandler.broadcastEvent({
               type: 'system_status_changed',
               data: { status, timestamp: Date.now() },
             });
@@ -371,7 +441,9 @@ export class App {
         }
       );
       this.statusScheduler.start();
-      logger.info('✅ Status scheduler started (11 PM - 3 AM IST)');
+      logger.info(
+        `✅ Status scheduler started (${WINDOW_OPEN_HOUR}:00-${WINDOW_CLOSE_HOUR}:00 IST daily)`
+      );
 
       // Inject socketIOManager into admin routes
       const { setSocketIOManager } = await import('./routes/admin');
