@@ -68,7 +68,7 @@ export const WelcomeForm = () => {
 
     if (!isOnline) {
       setServiceAvailable(false);
-      setServiceMessage('Chat is closed right now. It opens daily from 11 PM to 3 AM IST.');
+      setServiceMessage('Chat is closed right now. It opens daily from 9 PM to 2 AM IST.');
       return;
     }
 
@@ -94,13 +94,6 @@ export const WelcomeForm = () => {
         <label htmlFor={nameId} className="text-text text-sm font-semibold">
           Your name
         </label>
-        <span className="text-text-3 inline-flex items-center gap-1.5 text-sm">
-          <span
-            className={cn('size-2 rounded-full', isOnline ? 'bg-green animate-live' : 'bg-red')}
-            aria-hidden
-          />
-          {isOnline ? 'Online' : 'Closed'}
-        </span>
       </div>
 
       <input

@@ -54,7 +54,7 @@ export default function MaintenancePage() {
             </div>
             <div className="flex justify-between">
               <span className="text-text-3">Hours</span>
-              <span className="text-text font-medium">11 PM to 3 AM IST</span>
+              <span className="text-text font-medium">9 PM to 2 AM IST</span>
             </div>
           </div>
 

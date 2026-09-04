@@ -24,7 +24,7 @@ export function ErrorState({ error, onGoBack, onRetry }: ErrorStateProps) {
 
         {isBackendDown && (
           <p className="bg-sky text-text-2 mt-5 rounded-2xl p-4 text-sm">
-            Chat opens daily from 11 PM to 3 AM IST. Come back then.
+            Chat opens daily from 9 PM to 2 AM IST. Come back then.
           </p>
         )}
 
