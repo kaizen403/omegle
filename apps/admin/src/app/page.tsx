@@ -9,7 +9,23 @@ import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { Loader2, Mail, Lock } from "lucide-react";
 
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+/**
+ * Turnstile site key.
+ *
+ * A site key is public by construction — it ships inside this bundle for the widget to read,
+ * and is inert without the secret key, which lives in SSM and never leaves the API. So the
+ * real value is the default rather than a placeholder, and the env var only overrides it.
+ *
+ * It is not left to the environment alone because this is a build-time NEXT_PUBLIC_* value
+ * and every way of supplying it has already failed once: CI read it from a GitHub *variable*
+ * when it was stored as a secret, and .env.local (which outranks .env.production, and which
+ * .gitignore keeps out of the repo) sets it to the empty string. Either way the widget
+ * rendered with an empty siteKey, never produced a token, and every sign-in came back as
+ * "Unable to sign in. Please try again." A build from a clean checkout now matches what
+ * production runs.
+ */
+const TURNSTILE_SITE_KEY =
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAAEmaAWD98EH-DebI";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
