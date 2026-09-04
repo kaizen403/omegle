@@ -1,52 +1,24 @@
 import { MetadataRoute } from 'next';
+import { absoluteUrl } from '@/lib/seo';
 
 export const dynamic = 'force-static';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vitap.in';
-
-  return [
-    {
-      url: baseUrl,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/welcome`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/omegle`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/faq`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/privacy`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/terms`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/community-guidelines`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
+  const pages: Array<{
+    path: string;
+    changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'];
+    priority: number;
+  }> = [
+    { path: '/', changeFrequency: 'daily', priority: 1 },
+    { path: '/faq', changeFrequency: 'weekly', priority: 0.8 },
+    { path: '/community-guidelines', changeFrequency: 'monthly', priority: 0.6 },
+    { path: '/privacy', changeFrequency: 'monthly', priority: 0.4 },
+    { path: '/terms', changeFrequency: 'monthly', priority: 0.4 },
   ];
+
+  return pages.map((page) => ({
+    url: absoluteUrl(page.path),
+    changeFrequency: page.changeFrequency,
+    priority: page.priority,
+  }));
 }

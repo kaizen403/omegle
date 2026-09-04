@@ -11,7 +11,7 @@ export {
 } from './MediaStateProvider';
 export { AnalyticsProvider } from './AnalyticsProvider';
 export { ToastProvider } from './ToastProvider';
-export { MaintenanceGuard } from './MaintenanceGuard';
+export { MaintenanceGuard, MaintenanceContext, type MaintenanceStatus } from './MaintenanceGuard';
 
 // Backward compatibility alias
 export { ToastProvider as HeroUIToastProvider } from './ToastProvider';

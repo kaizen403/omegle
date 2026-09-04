@@ -5,19 +5,8 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import PageHeader from "@/components/layout/PageHeader";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useState, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
+import { formatUptime } from "@/components/health/utils";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  StatCard,
   SystemStatusToggle,
   ConnectionBanner,
   SystemInfoCard,
@@ -25,14 +14,16 @@ import {
   ActivityOverview,
   GenderDistribution,
   SystemStatusModal,
+  AnalyticsOverview,
+  type LiveCounts,
 } from "@/components/dashboard";
 
 export default function HomePage() {
   const { logout } = useAuth();
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<boolean | null>(null);
-  const [showCircuitBreakerDialog, setShowCircuitBreakerDialog] =
-    useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState("");
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
 
   const {
     users,
@@ -40,68 +31,105 @@ export default function HomePage() {
     isConnected,
     queueStats,
     events,
-    resetCircuitBreaker,
     systemStatus,
+    maintenance,
+    analytics,
     toggleSystemStatus,
     systemHealth,
   } = useAdminSocketContext();
 
-  const formatUptime = useCallback((milliseconds: number) => {
-    const seconds = Math.floor(milliseconds / 1000);
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h}h ${m}m ${s}s`;
-  }, []);
-
-  const stats = useMemo(
-    () => ({
-      totalUsers: users.length,
-      idleUsers: users.filter((u) => u.state === "idle").length,
-      queueUsers: users.filter((u) => u.state === "queue").length,
-      activeUsers: users.filter((u) => u.state === "active").length,
+  // The server-pushed analytics snapshot is authoritative. The locally derived
+  // counts are only a fallback for the first couple of seconds after
+  // connecting, before the first `analytics` tick lands - they drift as
+  // individual user/room events are missed, which is what they were doing on
+  // this page before.
+  const live = useMemo<LiveCounts>(() => {
+    if (analytics) {
+      return {
+        connectedUsers: analytics.live.connectedUsers,
+        idle: analytics.live.idle,
+        queued: analytics.live.queued,
+        active: analytics.live.active,
+        activeRooms: analytics.live.activeRooms,
+        monitoredRooms: analytics.live.monitoredRooms,
+      };
+    }
+    return {
+      connectedUsers: users.length,
+      idle: users.filter((u) => u.state === "idle").length,
+      queued: users.filter((u) => u.state === "queue").length,
+      active: users.filter((u) => u.state === "active").length,
       activeRooms: rooms.length,
-      maleUsers: users.filter((u) => u.gender === "male").length,
-      femaleUsers: users.filter((u) => u.gender === "female").length,
-    }),
-    [users, rooms],
-  );
+      monitoredRooms: 0,
+    };
+  }, [analytics, users, rooms]);
+
+  const genderSplit = useMemo(() => {
+    if (analytics) {
+      return { male: analytics.live.male, female: analytics.live.female };
+    }
+    return {
+      male: users.filter((u) => u.gender === "male").length,
+      female: users.filter((u) => u.gender === "female").length,
+    };
+  }, [analytics, users]);
 
   const engagementRate =
-    stats.totalUsers > 0
-      ? Math.round((stats.activeUsers / stats.totalUsers) * 100)
+    live.connectedUsers > 0
+      ? Math.round((live.active / live.connectedUsers) * 100)
       : 0;
 
-  const handleSystemToggle = () => {
+  // Uptime now rides the 2s analytics stream instead of the single
+  // `system_health` reply that was fetched once at connect and never refreshed.
+  const uptimeLabel = analytics
+    ? formatUptime(analytics.health.uptimeSeconds * 1000)
+    : formatUptime(systemHealth?.uptime ?? 0);
+
+  // Same for the queue, which previously only moved after a `clear_queue`.
+  const queueTotal = analytics?.live.queued ?? queueStats?.total ?? 0;
+
+  const handleSystemToggle = useCallback(() => {
     setPendingStatus(!systemStatus);
+    // Pre-fill with the note currently shown to users so an admin editing an
+    // existing maintenance window does not have to retype it.
+    setMaintenanceMessage(maintenance.message ?? "");
     setShowStatusModal(true);
-  };
+  }, [systemStatus, maintenance.message]);
 
-  const handleStatusConfirm = async () => {
-    if (pendingStatus !== null) {
-      try {
-        await toggleSystemStatus(pendingStatus);
-      } catch {
-        // Error handled in toggleSystemStatus, operation continues
-      }
+  const handleStatusConfirm = useCallback(async () => {
+    if (pendingStatus === null) return;
+
+    setIsTogglingStatus(true);
+    try {
+      await toggleSystemStatus(pendingStatus, maintenanceMessage);
+    } finally {
+      // toggleSystemStatus reports its own failure via a toast and never
+      // rejects, so the dialog closes either way.
+      setIsTogglingStatus(false);
+      setShowStatusModal(false);
+      setPendingStatus(null);
     }
-    setShowStatusModal(false);
-    setPendingStatus(null);
-  };
+  }, [pendingStatus, maintenanceMessage, toggleSystemStatus]);
 
-  const handleStatusCancel = () => {
+  const handleStatusOpenChange = useCallback((open: boolean) => {
+    if (open) return;
     setShowStatusModal(false);
     setPendingStatus(null);
-  };
+  }, []);
 
   return (
     <AdminLayout onLogout={logout}>
       <PageHeader title="Dashboard" showConnectionStatus={true} />
 
       <div className="p-4 md:p-6">
-        {/* System Status Toggle */}
+        {/* Maintenance control - live state comes from the `system_status`
+            event, so another admin's toggle shows up here immediately. */}
         <SystemStatusToggle
           systemStatus={systemStatus}
+          maintenanceMessage={maintenance.message}
+          changedBy={maintenance.changedBy}
+          changedAt={maintenance.changedAt}
+          isBusy={isTogglingStatus}
           onToggle={handleSystemToggle}
         />
 
@@ -111,109 +139,47 @@ export default function HomePage() {
         {/* System Info Card */}
         <SystemInfoCard
           isConnected={isConnected}
-          uptime={formatUptime(systemHealth?.uptime || 0)}
+          uptime={uptimeLabel}
           eventsCount={events.length}
-          queueTotal={queueStats?.total || 0}
-          onResetCircuitBreaker={() => setShowCircuitBreakerDialog(true)}
+          queueTotal={queueTotal}
         />
 
-        {/* Statistics Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8"
-        >
-          <StatCard
-            title="Total Users"
-            value={stats.totalUsers}
-            subtitle="Connected now"
-            accentColor="blue"
-          />
-          <StatCard
-            title="Idle"
-            value={stats.idleUsers}
-            subtitle={`${stats.totalUsers > 0 ? Math.round((stats.idleUsers / stats.totalUsers) * 100) : 0}% of total`}
-            accentColor="zinc"
-          />
-          <StatCard
-            title="In Queue"
-            value={stats.queueUsers}
-            subtitle="Searching match"
-            accentColor="yellow"
-          />
-          <StatCard
-            title="Active"
-            value={stats.activeUsers}
-            subtitle="In conversation"
-            accentColor="green"
-          />
-          <StatCard
-            title="Rooms"
-            value={stats.activeRooms}
-            subtitle="Active chats"
-            accentColor="purple"
-          />
-        </motion.div>
+        {/* Real-time analytics */}
+        <AnalyticsOverview analytics={analytics} live={live} />
 
         {/* Visual Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <UserDistributionChart
-            idleUsers={stats.idleUsers}
-            queueUsers={stats.queueUsers}
-            activeUsers={stats.activeUsers}
-            totalUsers={stats.totalUsers}
+            idleUsers={live.idle}
+            queueUsers={live.queued}
+            activeUsers={live.active}
+            totalUsers={live.connectedUsers}
           />
           <ActivityOverview
-            totalUsers={stats.totalUsers}
-            activeRooms={stats.activeRooms}
+            totalUsers={live.connectedUsers}
+            activeRooms={live.activeRooms}
             engagementRate={engagementRate}
           />
         </div>
 
         {/* Gender Distribution */}
         <GenderDistribution
-          maleUsers={stats.maleUsers}
-          femaleUsers={stats.femaleUsers}
-          totalUsers={stats.totalUsers}
+          maleUsers={genderSplit.male}
+          femaleUsers={genderSplit.female}
+          totalUsers={live.connectedUsers}
         />
       </div>
 
-      {/* System Status Modal */}
+      {/* Maintenance confirmation */}
       <SystemStatusModal
         isOpen={showStatusModal}
         pendingStatus={pendingStatus}
-        onClose={handleStatusCancel}
+        message={maintenanceMessage}
+        isSubmitting={isTogglingStatus}
+        onMessageChange={setMaintenanceMessage}
+        onOpenChange={handleStatusOpenChange}
         onConfirm={handleStatusConfirm}
       />
-
-      {/* Circuit Breaker Reset Confirmation */}
-      <AlertDialog
-        open={showCircuitBreakerDialog}
-        onOpenChange={setShowCircuitBreakerDialog}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset Circuit Breaker</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will reset the Redis circuit breaker and retry failed Redis
-              operations. Are you sure you want to proceed?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                resetCircuitBreaker();
-                setShowCircuitBreakerDialog(false);
-              }}
-              className="bg-yellow-600 hover:bg-yellow-700"
-            >
-              Reset
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AdminLayout>
   );
 }

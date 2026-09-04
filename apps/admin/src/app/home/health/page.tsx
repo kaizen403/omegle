@@ -16,6 +16,7 @@ import {
   NetworkMetrics,
   ErrorTracking,
   PerformanceMetrics,
+  MatchmakingMetrics,
 } from "@/components/health";
 
 export default function HealthPage() {
@@ -95,6 +96,10 @@ export default function HealthPage() {
         <TurnHealth systemHealth={systemHealth} />
 
         <KubernetesHealth systemHealth={systemHealth} />
+
+        {/* systemHealth.matchmaking has shipped with every 3s health poll
+            all along; this is the panel that finally renders it. */}
+        <MatchmakingMetrics systemHealth={systemHealth} />
 
         <NetworkMetrics systemHealth={systemHealth} />
 

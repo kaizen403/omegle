@@ -1,26 +1,13 @@
-/**
- * Maintenance Page Layout
- *
- * @description Provides metadata for the maintenance page.
- * Using static metadata export instead of document.title manipulation
- * for proper SEO and browser tab display.
- */
+import { pageMetadata } from '@/lib/seo';
 
-import { Metadata } from 'next';
+export const metadata = pageMetadata({
+  title: 'Under maintenance',
+  description: 'Omegle VITAP is paused for maintenance. Chat will reopen shortly.',
+  path: '/maintenance',
+  index: false,
+  follow: false,
+});
 
-export const metadata: Metadata = {
-  title: 'Under Maintenance - Omegle',
-  description: 'Omegle is currently undergoing scheduled maintenance. Service will resume shortly.',
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
-
-interface MaintenanceLayoutProps {
-  children: React.ReactNode;
-}
-
-export default function MaintenanceLayout({ children }: MaintenanceLayoutProps) {
+export default function MaintenanceLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

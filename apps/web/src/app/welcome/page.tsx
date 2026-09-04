@@ -1,15 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
 import Link from 'next/link';
 import { WelcomeForm } from '@/components/welcome/WelcomeForm';
 import { Logo, BrandLockup } from '@/components/brand';
 
 export default function WelcomePage() {
-  useEffect(() => {
-    document.title = 'Omegle for VITAP students';
-  }, []);
-
   return (
     <div className="bg-sky bg-bubbles text-text flex min-h-screen flex-col">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-5">

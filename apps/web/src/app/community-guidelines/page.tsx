@@ -1,55 +1,23 @@
-import type { Metadata } from 'next';
+import { JsonLd } from '@/components/seo/JsonLd';
 import { DocSection, PageHeader, PageShell } from '@/components/site';
+import { pageMetadata, webPageJsonLd } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Community Guidelines - Safe Chat Rules | Omegle',
-  description:
-    "Community guidelines for safe random video chatting. Learn the do's and don'ts for a positive experience on Omegle. Zero tolerance for harassment.",
-  alternates: {
-    canonical: 'https://vitap.in/community-guidelines',
-  },
-  openGraph: {
-    title: 'Community Guidelines | Omegle',
-    description: 'Guidelines for safe and respectful random video chat on Omegle.',
-    url: 'https://vitap.in/community-guidelines',
-    type: 'website',
-  },
-};
+const TITLE = 'Community guidelines';
+const DESCRIPTION =
+  'Safety rules for Omegle VITAP: no nudity, no harassment, and how to report someone who breaks them.';
+
+export const metadata = pageMetadata({
+  title: TITLE,
+  description: DESCRIPTION,
+  path: '/community-guidelines',
+});
 
 const CAMPUSES = ['VIT-AP', 'SRM-AP', 'NID-AP'];
 
 export default function CommunityGuidelinesPage() {
-  const structuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: 'Community Guidelines',
-    description: 'Community guidelines for safe random video chatting on Omegle',
-    url: 'https://vitap.in/community-guidelines',
-    isPartOf: {
-      '@type': 'WebSite',
-      name: 'Omegle',
-      url: 'https://vitap.in',
-    },
-    breadcrumb: {
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://vitap.in' },
-        {
-          '@type': 'ListItem',
-          position: 2,
-          name: 'Community Guidelines',
-          item: 'https://vitap.in/community-guidelines',
-        },
-      ],
-    },
-  };
-
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      <JsonLd data={webPageJsonLd(TITLE, DESCRIPTION, '/community-guidelines')} />
       <PageShell>
         <PageHeader
           title="Community guidelines"

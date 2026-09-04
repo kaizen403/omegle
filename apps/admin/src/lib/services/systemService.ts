@@ -11,20 +11,29 @@ export interface SystemStatusResponse {
 
 export class SystemService {
   /**
-   * Toggle system status (enable/disable the service)
+   * Toggle system status (enable/disable the service).
+   *
+   * `status: false` puts the public site into maintenance mode. The optional
+   * `message` is shown to end users while the site is down; it is omitted from
+   * the request body entirely when blank so the backend can clear it.
    */
   static async toggleSystemStatus(
     status: boolean,
+    message?: string,
     signal?: AbortSignal,
   ): Promise<SystemStatusResponse> {
     try {
+      const trimmedMessage = message?.trim();
+
       const response = await fetch(`${API_BASE_URL}/status`, {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(
+          trimmedMessage ? { status, message: trimmedMessage } : { status },
+        ),
         signal,
       });
 

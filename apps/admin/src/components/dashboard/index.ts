@@ -6,3 +6,5 @@ export { UserDistributionChart } from "./UserDistributionChart";
 export { ActivityOverview } from "./ActivityOverview";
 export { GenderDistribution } from "./GenderDistribution";
 export { SystemStatusModal } from "./SystemStatusModal";
+export { AnalyticsOverview } from "./AnalyticsOverview";
+export type { LiveCounts } from "./AnalyticsOverview";

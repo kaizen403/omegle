@@ -7,6 +7,10 @@
   Cache-Control: public, max-age=86400
   Content-Type: image/png
 
+/opengraph-image.png
+  Cache-Control: public, max-age=86400
+  Content-Type: image/png
+
 # HTML pages should not be cached aggressively
 /*
   Cache-Control: public, max-age=0, must-revalidate

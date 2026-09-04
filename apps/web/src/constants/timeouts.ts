@@ -7,6 +7,7 @@
 export const RTC_INIT_TIMEOUT = 15000; // 15 seconds - RTC initialization
 export const SEARCH_TIMEOUT = 30000; // 30 seconds - Match search timeout
 export const BACKEND_CHECK_TIMEOUT = 5000; // 5 seconds - Backend status check
+export const MAINTENANCE_GATE_TIMEOUT = 2000; // 2 seconds - Max wait for the first maintenance check before rendering the app anyway
 export const REDIRECT_DELAY = 3000; // 3 seconds - Error redirect delay
 
 // Retry delays
@@ -25,6 +26,7 @@ export const ERROR_DEDUPE_WINDOW = 5000; // 5 seconds - Prevent duplicate error 
 
 // Polling intervals
 export const ONLINE_STATUS_CHECK_INTERVAL = 60000; // 1 minute - Backend status polling
+export const MAINTENANCE_POLL_INTERVAL = 15000; // 15 seconds - Runtime maintenance status polling
 export const DEVICE_UPDATE_INTERVAL = 2000; // 2 seconds - Update device IDs
 
 // User activity

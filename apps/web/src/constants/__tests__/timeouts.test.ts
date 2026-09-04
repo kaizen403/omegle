@@ -3,6 +3,7 @@ import {
   RTC_INIT_TIMEOUT,
   SEARCH_TIMEOUT,
   BACKEND_CHECK_TIMEOUT,
+  MAINTENANCE_GATE_TIMEOUT,
   REDIRECT_DELAY,
   RETRY_BASE_DELAY,
   TYPING_INDICATOR_TIMEOUT,
@@ -11,6 +12,7 @@ import {
   EMOJI_PICKER_HIDE_DELAY,
   ERROR_DEDUPE_WINDOW,
   ONLINE_STATUS_CHECK_INTERVAL,
+  MAINTENANCE_POLL_INTERVAL,
   DEVICE_UPDATE_INTERVAL,
   IDLE_TIMEOUT,
   LEAVE_DEBOUNCE_DELAY,
@@ -29,6 +31,10 @@ describe('Timeout Constants', () => {
 
     it('BACKEND_CHECK_TIMEOUT should be 5 seconds', () => {
       expect(BACKEND_CHECK_TIMEOUT).toBe(5000);
+    });
+
+    it('MAINTENANCE_GATE_TIMEOUT should be 2 seconds', () => {
+      expect(MAINTENANCE_GATE_TIMEOUT).toBe(2000);
     });
 
     it('REDIRECT_DELAY should be 3 seconds', () => {
@@ -71,6 +77,10 @@ describe('Timeout Constants', () => {
       expect(ONLINE_STATUS_CHECK_INTERVAL).toBe(60000);
     });
 
+    it('MAINTENANCE_POLL_INTERVAL should be 15 seconds', () => {
+      expect(MAINTENANCE_POLL_INTERVAL).toBe(15000);
+    });
+
     it('DEVICE_UPDATE_INTERVAL should be 2 seconds', () => {
       expect(DEVICE_UPDATE_INTERVAL).toBe(2000);
     });
@@ -97,6 +107,7 @@ describe('Timeout Constants', () => {
       RTC_INIT_TIMEOUT,
       SEARCH_TIMEOUT,
       BACKEND_CHECK_TIMEOUT,
+      MAINTENANCE_GATE_TIMEOUT,
       REDIRECT_DELAY,
       RETRY_BASE_DELAY,
       TYPING_INDICATOR_TIMEOUT,
@@ -105,6 +116,7 @@ describe('Timeout Constants', () => {
       EMOJI_PICKER_HIDE_DELAY,
       ERROR_DEDUPE_WINDOW,
       ONLINE_STATUS_CHECK_INTERVAL,
+      MAINTENANCE_POLL_INTERVAL,
       DEVICE_UPDATE_INTERVAL,
       IDLE_TIMEOUT,
       LEAVE_DEBOUNCE_DELAY,

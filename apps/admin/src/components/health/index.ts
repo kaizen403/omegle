@@ -8,4 +8,5 @@ export { KubernetesHealth } from "./KubernetesHealth";
 export { NetworkMetrics } from "./NetworkMetrics";
 export { ErrorTracking } from "./ErrorTracking";
 export { PerformanceMetrics } from "./PerformanceMetrics";
+export { MatchmakingMetrics } from "./MatchmakingMetrics";
 export { formatUptime, formatBytes } from "./utils";

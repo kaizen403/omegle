@@ -18,6 +18,8 @@ import type {
   Room,
   User,
   RoomMessage,
+  AnalyticsSnapshot,
+  MaintenanceState,
 } from "@/types/socket";
 
 // Re-export types for convenience
@@ -28,6 +30,8 @@ export type {
   SystemHealth,
   RedisMetrics,
   QueueStats,
+  AnalyticsSnapshot,
+  MaintenanceState,
 } from "@/types/socket";
 import type { Socket } from "socket.io-client";
 
@@ -43,7 +47,12 @@ interface AdminSocketContextType {
   systemHealth: SystemHealth | null;
   redisMetrics: RedisMetrics | null;
   events: SystemEvent[];
+  /** true = public site is live, false = maintenance mode */
   systemStatus: boolean;
+  /** Server-pushed real-time analytics, null until the first 2s tick lands. */
+  analytics: AnalyticsSnapshot | null;
+  /** Last known public-site status with attribution. */
+  maintenance: MaintenanceState;
   monitorRoom: (roomId: string) => void;
   unmonitorRoom: (roomId: string) => void;
   kickUser: (uid: number) => void;
@@ -55,8 +64,7 @@ interface AdminSocketContextType {
   getSystemHealth: () => void;
   getRedisMetrics: () => void;
   getRoomDetails: (roomId: string) => void;
-  resetCircuitBreaker: () => void;
-  toggleSystemStatus: (status: boolean) => Promise<boolean>;
+  toggleSystemStatus: (status: boolean, message?: string) => Promise<boolean>;
   refreshData: () => void;
 }
 

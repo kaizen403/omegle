@@ -1,12 +1,14 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
 import { PageHeader, PageShell } from '@/components/site';
+import { faqPageJsonLd, pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'FAQ - Random Video Chat Questions | Omegle',
+export const metadata = pageMetadata({
+  title: 'FAQ',
   description:
-    'Frequently asked questions about random video chat, stranger chat, and how to use Omegle for free anonymous chatting.',
-};
+    'Answers about how campus video chat works, privacy, safety, and what you need to get started on Omegle VITAP.',
+  path: '/faq',
+});
 
 export default function FAQPage() {
   const faqCategories = [
@@ -92,27 +94,9 @@ export default function FAQPage() {
     },
   ];
 
-  const structuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: faqCategories.flatMap((cat) =>
-      cat.questions.map((faq) => ({
-        '@type': 'Question',
-        name: faq.question,
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: faq.answer,
-        },
-      }))
-    ),
-  };
-
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      <JsonLd data={faqPageJsonLd(faqCategories.flatMap((category) => category.questions))} />
       <PageShell width="wide">
         <PageHeader
           align="center"

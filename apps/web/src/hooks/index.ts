@@ -6,6 +6,7 @@
 // Context hooks
 export { useUser } from './useUser';
 export { useMediaState } from './useMediaState';
+export { useMaintenanceStatus } from './useMaintenanceStatus';
 
 // Feature hooks
 export { useVideoChat } from './useVideoChat';

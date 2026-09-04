@@ -1,12 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { LogoMark } from '@/components/brand';
 import { SiteNav, SiteFooter } from '@/components/site';
-
-const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+import { useMaintenanceStatus } from '@/hooks';
 
 const LINKS = [
   { href: '/terms', label: 'Terms' },
@@ -17,24 +14,14 @@ const LINKS = [
 /**
  * Maintenance Page Component
  *
- * @description Displays a maintenance notice when NEXT_PUBLIC_MAINTENANCE_MODE is 'true'.
- * Automatically redirects to welcome page when maintenance mode is disabled.
+ * @description Shown while the site is paused. Whether it is paused is decided at runtime by
+ * MaintenanceGuard, which polls the backend's /status endpoint; the guard also sends people
+ * back to /welcome once the switch is flipped off, so this page does not redirect itself.
+ * The operator's note from the admin dashboard is rendered when there is one.
  * Page title is set in layout.tsx using Next.js metadata API.
  */
 export default function MaintenancePage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    // If maintenance mode is off, redirect immediately
-    if (!MAINTENANCE_MODE) {
-      router.replace('/welcome');
-    }
-  }, [router]);
-
-  // Don't render content if maintenance mode is off
-  if (!MAINTENANCE_MODE) {
-    return null;
-  }
+  const { message } = useMaintenanceStatus();
 
   return (
     <div className="bg-sky bg-bubbles text-text flex min-h-screen flex-col">
@@ -46,6 +33,16 @@ export default function MaintenancePage() {
           <p className="text-text-2 mt-3">
             We&apos;re doing a bit of maintenance. Chat will reopen shortly.
           </p>
+
+          {/* The note arrives with the first poll, so announce it politely when it lands. */}
+          {message && (
+            <p
+              aria-live="polite"
+              className="bg-blue-softer text-blue-dark mt-6 rounded-2xl px-4 py-3 text-sm leading-relaxed"
+            >
+              {message}
+            </p>
+          )}
 
           <div className="bg-sky mt-7 space-y-2 rounded-2xl p-4 text-sm">
             <div className="flex justify-between">

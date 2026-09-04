@@ -4,10 +4,12 @@ import { motion } from "framer-motion";
 
 interface SystemInfoCardProps {
   isConnected: boolean;
+  /** Pre-formatted server uptime, refreshed by the analytics stream. */
   uptime: string;
+  /** Events received by THIS browser tab since it connected - not a total. */
   eventsCount: number;
+  /** Users currently waiting to be matched. */
   queueTotal: number;
-  onResetCircuitBreaker: () => void;
 }
 
 export function SystemInfoCard({
@@ -15,7 +17,6 @@ export function SystemInfoCard({
   uptime,
   eventsCount,
   queueTotal,
-  onResetCircuitBreaker,
 }: SystemInfoCardProps) {
   return (
     <motion.div
@@ -24,14 +25,8 @@ export function SystemInfoCard({
       transition={{ delay: 0.05 }}
       className="mb-6 p-3 sm:p-4 bg-gradient-to-r from-sky-50 to-[#e8f4f8] border border-sky-100 rounded-lg"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+      <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-600">System Status</h3>
-        <button
-          onClick={onResetCircuitBreaker}
-          className="px-3 py-1.5 text-xs bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors whitespace-nowrap self-start sm:self-auto"
-        >
-          ⚡ Reset Circuit Breaker
-        </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div>
@@ -50,11 +45,13 @@ export function SystemInfoCard({
           <div className="text-sm font-semibold">{uptime}</div>
         </div>
         <div>
-          <div className="text-xs text-slate-500 mb-1">Total Events</div>
+          {/* Renamed from "Total Events": this only counts what this tab has
+              seen since it connected, and resets on every reload. */}
+          <div className="text-xs text-slate-500 mb-1">Events (this tab)</div>
           <div className="text-sm font-semibold">{eventsCount}</div>
         </div>
         <div>
-          <div className="text-xs text-slate-500 mb-1">Queue Total</div>
+          <div className="text-xs text-slate-500 mb-1">Users In Queue</div>
           <div className="text-sm font-semibold">{queueTotal}</div>
         </div>
       </div>

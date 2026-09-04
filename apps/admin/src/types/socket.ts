@@ -199,3 +199,69 @@ export interface RoomMessage {
   };
   sender?: string;
 }
+
+/**
+ * Real-time analytics snapshot pushed on the `/admin` namespace every 2s.
+ * No request is needed - the server sends it unprompted once authenticated.
+ *
+ * `live.*` describes the current instant, `cumulative.*` are durable counters
+ * that survive API restarts (so they are deployment totals, not session
+ * totals), and `rates.*` are server-computed per-minute rates.
+ */
+export interface AnalyticsSnapshot {
+  live: {
+    connectedUsers: number;
+    idle: number;
+    queued: number;
+    active: number;
+    activeRooms: number;
+    male: number;
+    female: number;
+    monitoredRooms: number;
+  };
+  cumulative: {
+    roomsCreatedTotal: number;
+    roomsCreatedToday: number;
+    matchesTotal: number;
+    messagesTotal: number;
+    peakConcurrentUsers: number;
+    visitsToday: number;
+  };
+  rates: {
+    matchesPerMinute: number;
+    connectionsPerMinute: number;
+    messagesPerMinute: number;
+  };
+  health: {
+    uptimeSeconds: number;
+    redisHealthy: boolean;
+    memoryMB: number;
+    errorsLast5Min: number;
+  };
+  timestamp: number;
+}
+
+/**
+ * Payload of the `system_status` event. `status: true` means the public site
+ * is live; `maintenance: true` is its inverse and means the site is down.
+ */
+export interface SystemStatusEvent {
+  status: boolean;
+  maintenance: boolean;
+  message: string | null;
+  changedBy: string;
+  timestamp: number;
+}
+
+/**
+ * Dashboard-side mirror of the last known public-site status, including who
+ * changed it, so a toggle by another admin is attributable in the UI.
+ */
+export interface MaintenanceState {
+  /** true = public site is live, false = maintenance mode */
+  status: boolean;
+  /** Optional note shown to end users while the site is down. */
+  message: string | null;
+  changedBy: string | null;
+  changedAt: number | null;
+}

@@ -1,54 +1,21 @@
-import type { Metadata } from 'next';
+import { JsonLd } from '@/components/seo/JsonLd';
 import { DocSection, PageHeader, PageShell } from '@/components/site';
+import { pageMetadata, webPageJsonLd } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy - Your Data & Anonymity | Omegle',
-  description:
-    'Read our privacy policy to understand how Omegle protects your data. Anonymous random video chat with no personal data required. Your privacy is our priority.',
-  alternates: {
-    canonical: 'https://vitap.in/privacy',
-  },
-  openGraph: {
-    title: 'Privacy Policy | Omegle',
-    description:
-      'Learn how we protect your privacy during anonymous random video chat. No personal data required.',
-    url: 'https://vitap.in/privacy',
-    type: 'website',
-  },
-};
+const TITLE = 'Privacy policy';
+const DESCRIPTION =
+  'How Omegle VITAP handles IP logs, session data, and analytics for anonymous campus chat.';
+
+export const metadata = pageMetadata({
+  title: TITLE,
+  description: DESCRIPTION,
+  path: '/privacy',
+});
 
 export default function PrivacyPage() {
-  const structuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: 'Privacy Policy',
-    description: 'Privacy policy for Omegle random video chat platform',
-    url: 'https://vitap.in/privacy',
-    isPartOf: {
-      '@type': 'WebSite',
-      name: 'Omegle',
-      url: 'https://vitap.in',
-    },
-    breadcrumb: {
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://vitap.in' },
-        {
-          '@type': 'ListItem',
-          position: 2,
-          name: 'Privacy Policy',
-          item: 'https://vitap.in/privacy',
-        },
-      ],
-    },
-  };
-
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      <JsonLd data={webPageJsonLd(TITLE, DESCRIPTION, '/privacy')} />
       <PageShell>
         <PageHeader
           title="Privacy policy"

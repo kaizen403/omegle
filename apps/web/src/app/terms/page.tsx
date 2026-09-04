@@ -1,53 +1,21 @@
-import type { Metadata } from 'next';
+import { JsonLd } from '@/components/seo/JsonLd';
 import { DocSection, PageHeader, PageShell } from '@/components/site';
+import { pageMetadata, webPageJsonLd } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Terms of Service - Rules & Guidelines | Omegle',
-  description:
-    'Read the terms of service for Omegle random video chat platform. Understand our rules, eligibility requirements, and user conduct guidelines.',
-  alternates: {
-    canonical: 'https://vitap.in/terms',
-  },
-  openGraph: {
-    title: 'Terms of Service | Omegle',
-    description: 'Terms and conditions for using Omegle random video chat platform.',
-    url: 'https://vitap.in/terms',
-    type: 'website',
-  },
-};
+const TITLE = 'Terms of service';
+const DESCRIPTION =
+  'Eligibility, conduct, and liability rules for using Omegle VITAP campus video chat.';
+
+export const metadata = pageMetadata({
+  title: TITLE,
+  description: DESCRIPTION,
+  path: '/terms',
+});
 
 export default function TermsPage() {
-  const structuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: 'Terms of Service',
-    description: 'Terms of service for Omegle random video chat platform',
-    url: 'https://vitap.in/terms',
-    isPartOf: {
-      '@type': 'WebSite',
-      name: 'Omegle',
-      url: 'https://vitap.in',
-    },
-    breadcrumb: {
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://vitap.in' },
-        {
-          '@type': 'ListItem',
-          position: 2,
-          name: 'Terms of Service',
-          item: 'https://vitap.in/terms',
-        },
-      ],
-    },
-  };
-
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      <JsonLd data={webPageJsonLd(TITLE, DESCRIPTION, '/terms')} />
       <PageShell>
         <PageHeader
           title="Terms of service"

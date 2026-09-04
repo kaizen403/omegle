@@ -14,8 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Admin Portal - Omegle",
-  description: "Admin portal for Omegle management",
+  title: {
+    default: "Sign in | Omegle Admin",
+    template: "%s | Omegle Admin",
+  },
+  description: "Private admin console for Omegle VITAP.",
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
 };
 
 export default function RootLayout({

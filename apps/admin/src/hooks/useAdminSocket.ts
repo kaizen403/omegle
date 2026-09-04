@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { SystemService } from "@/lib/services/systemService";
 import { storage, STORAGE_KEYS } from "@/lib/storage";
+import { useToast } from "@/contexts/ToastProvider";
 import type {
   User,
   Room,
@@ -10,6 +11,9 @@ import type {
   SystemHealth,
   RedisMetrics,
   SystemEvent,
+  AnalyticsSnapshot,
+  SystemStatusEvent,
+  MaintenanceState,
 } from "@/types/socket";
 
 // Re-export types for backward compatibility
@@ -19,13 +23,33 @@ export type {
   RedisMetrics,
   SystemEvent,
   RoomMessage,
+  AnalyticsSnapshot,
+  MaintenanceState,
 } from "@/types/socket";
 
 // Stale threshold - users/rooms not updated for this long are considered stale
 // Increased to 2 minutes to prevent premature removal of legitimately idle users
 const STALE_THRESHOLD_MS = 120000;
 
+// A bulk kick can target hundreds of users; only list this many UIDs in a
+// notification before collapsing the rest into a "+N more".
+const MAX_UIDS_IN_TOAST = 10;
+
+// The server broadcasts `system_status` to every admin, including the one who
+// just flipped it over HTTP. Within this window the echo is treated as our own
+// change so we do not tell an admin that "another admin" did what they did.
+const SELF_TOGGLE_ECHO_MS = 5000;
+
+const formatUidList = (uids: number[]): string => {
+  if (uids.length <= MAX_UIDS_IN_TOAST) return uids.join(", ");
+  return `${uids.slice(0, MAX_UIDS_IN_TOAST).join(", ")} +${uids.length - MAX_UIDS_IN_TOAST} more`;
+};
+
+const pluralizeUsers = (count: number): string =>
+  `${count} user${count === 1 ? "" : "s"}`;
+
 export function useAdminSocket(token: string | null) {
+  const { toast } = useToast();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -40,6 +64,13 @@ export function useAdminSocket(token: string | null) {
   const [redisMetrics, setRedisMetrics] = useState<RedisMetrics | null>(null);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [systemStatus, setSystemStatus] = useState<boolean>(true);
+  const [analytics, setAnalytics] = useState<AnalyticsSnapshot | null>(null);
+  const [maintenance, setMaintenance] = useState<MaintenanceState>({
+    status: true,
+    message: null,
+    changedBy: null,
+    changedAt: null,
+  });
 
   const socketRef = useRef<Socket | null>(null);
   const isMountedRef = useRef(true);
@@ -50,6 +81,9 @@ export function useAdminSocket(token: string | null) {
   const monitoredRoomsRef = useRef<Map<string, RoomMessage[]>>(new Map());
   // Prevent multiple connection attempts
   const isConnectingRef = useRef(false);
+  // Timestamp of our own last successful status toggle, used to suppress the
+  // "changed by another admin" notice for the echoed broadcast.
+  const selfToggledAtRef = useRef(0);
 
   // Initialize lastSyncRef on mount
   useEffect(() => {
@@ -200,8 +234,13 @@ export function useAdminSocket(token: string | null) {
         }
         if (data.rooms) setRooms(data.rooms);
         if (data.queueStats) setQueueStats(data.queueStats);
-        if (typeof data.systemStatus === "boolean")
-          setSystemStatus(data.systemStatus);
+        if (typeof data.systemStatus === "boolean") {
+          const isLive = data.systemStatus;
+          setSystemStatus(isLive);
+          // Seed the maintenance banner on connect. The message/attribution
+          // stay empty until the first `system_status` push carries them.
+          setMaintenance((prev) => ({ ...prev, status: isLive }));
+        }
         lastSyncRef.current = serverTime;
 
         socket.emit("get_system_health");
@@ -423,10 +462,44 @@ export function useAdminSocket(token: string | null) {
     );
 
     // System events
-    socket.on("system_status", (data: { status?: boolean }) => {
-      if (isMountedRef.current && typeof data?.status === "boolean") {
-        setSystemStatus(data.status);
+    socket.on("system_status", (data: Partial<SystemStatusEvent>) => {
+      if (!isMountedRef.current || !data) return;
+
+      // `status` is authoritative; `maintenance` is its inverse. Fall back to
+      // `maintenance` so a partial payload still moves us off a wrong state.
+      const isLive =
+        typeof data.status === "boolean"
+          ? data.status
+          : typeof data.maintenance === "boolean"
+            ? !data.maintenance
+            : null;
+      if (isLive === null) return;
+
+      setSystemStatus(isLive);
+      setMaintenance({
+        status: isLive,
+        message: data.message ?? null,
+        changedBy: data.changedBy ?? null,
+        changedAt: data.timestamp ?? Date.now(),
+      });
+
+      // Taking the public site up or down is the single most consequential
+      // change on this dashboard, so announce it when someone else does it.
+      if (Date.now() - selfToggledAtRef.current > SELF_TOGGLE_ECHO_MS) {
+        const by = data.changedBy ? ` by ${data.changedBy}` : "";
+        toast({
+          variant: isLive ? "info" : "warning",
+          title: isLive
+            ? `Public site brought back online${by}`
+            : `Public site put into maintenance${by}`,
+          description: data.message ?? undefined,
+        });
       }
+    });
+
+    // Real-time analytics snapshot, pushed every 2s without being requested.
+    socket.on("analytics", (data: AnalyticsSnapshot) => {
+      if (isMountedRef.current && data?.live) setAnalytics(data);
     });
 
     socket.on("queue_stats", (data: QueueStats) => {
@@ -469,9 +542,175 @@ export function useAdminSocket(token: string | null) {
       }
     });
 
+    // --- Admin action acknowledgements -------------------------------------
+    // The server confirms every admin action with a `*_response` event and
+    // reports refusals (not found, not permitted, not authenticated) through
+    // the generic `error` event below. Without these listeners a failed kick or
+    // room close looked exactly like a successful one.
+
+    socket.on(
+      "kick_response",
+      (data: { success?: boolean; uid?: number; message?: string }) => {
+        if (!isMountedRef.current) return;
+        const target = data?.uid !== undefined ? `UID ${data.uid}` : undefined;
+        toast(
+          data?.success === false
+            ? {
+                variant: "error",
+                title: "Kick failed",
+                description: data.message || target,
+              }
+            : { variant: "success", title: "User kicked", description: target },
+        );
+      },
+    );
+
+    socket.on(
+      "bulk_kick_response",
+      (data: { success?: number[]; failed?: number[] }) => {
+        if (!isMountedRef.current) return;
+
+        const succeeded = Array.isArray(data?.success) ? data.success : [];
+        const failed = Array.isArray(data?.failed) ? data.failed : [];
+        const total = succeeded.length + failed.length;
+
+        if (failed.length === 0) {
+          toast({
+            variant: "success",
+            title: `Kicked ${pluralizeUsers(succeeded.length)}`,
+          });
+        } else if (succeeded.length === 0) {
+          toast({
+            variant: "error",
+            title: `Failed to kick ${pluralizeUsers(failed.length)}`,
+            description: `No longer connected? UIDs: ${formatUidList(failed)}`,
+          });
+        } else {
+          // Partial success is reported as such rather than as a plain
+          // "done" - the admin needs to know which users are still online.
+          toast({
+            variant: "warning",
+            title: `Kicked ${succeeded.length} of ${total} users`,
+            description: `Failed UIDs: ${formatUidList(failed)}`,
+          });
+        }
+      },
+    );
+
+    socket.on(
+      "disconnect_response",
+      (data: { success?: boolean; uid?: number; message?: string }) => {
+        if (!isMountedRef.current) return;
+        const target = data?.uid !== undefined ? `UID ${data.uid}` : undefined;
+        toast(
+          data?.success === false
+            ? {
+                variant: "error",
+                title: "Disconnect failed",
+                description: data.message || target,
+              }
+            : {
+                variant: "success",
+                title: "User disconnected",
+                description: target,
+              },
+        );
+      },
+    );
+
+    socket.on(
+      "close_room_response",
+      (data: { success?: boolean; roomId?: string; message?: string }) => {
+        if (!isMountedRef.current) return;
+        const target = data?.roomId ? `Room ${data.roomId}` : undefined;
+        toast(
+          data?.success === false
+            ? {
+                variant: "error",
+                title: "Could not close room",
+                description: data.message || target,
+              }
+            : { variant: "success", title: "Room closed", description: target },
+        );
+      },
+    );
+
+    socket.on(
+      "clear_queue_response",
+      (data: { success?: boolean; gender?: string; message?: string }) => {
+        if (!isMountedRef.current) return;
+        const scope =
+          !data?.gender || data.gender === "all"
+            ? "All queues cleared"
+            : `${data.gender} queue cleared`;
+        toast(
+          data?.success === false
+            ? {
+                variant: "error",
+                title: "Could not clear queue",
+                description: data.message,
+              }
+            : { variant: "success", title: scope },
+        );
+      },
+    );
+
+    socket.on(
+      "monitor_room_response",
+      (data: { success?: boolean; roomId?: string; message?: string }) => {
+        if (!isMountedRef.current) return;
+        if (data?.success === false) {
+          toast({
+            variant: "error",
+            title: "Could not start monitoring",
+            description: data.message || data.roomId,
+          });
+          return;
+        }
+        // Short-lived and low-key: opening a monitor already shows its own UI,
+        // this only confirms the server accepted the subscription.
+        toast({
+          variant: "info",
+          title: "Monitoring started",
+          description: data?.roomId ? `Room ${data.roomId}` : undefined,
+          duration: 2500,
+        });
+      },
+    );
+
+    socket.on(
+      "unmonitor_room_response",
+      (data: { success?: boolean; roomId?: string; message?: string }) => {
+        if (!isMountedRef.current) return;
+        if (data?.success === false) {
+          toast({
+            variant: "error",
+            title: "Could not stop monitoring",
+            description: data.message || data.roomId,
+          });
+          return;
+        }
+        toast({
+          variant: "info",
+          title: "Monitoring stopped",
+          description: data?.roomId ? `Room ${data.roomId}` : undefined,
+          duration: 2500,
+        });
+      },
+    );
+
     socket.on("error", (err: { message?: string }) => {
       if (isMountedRef.current) {
-        setError(err.message || "Backend connection issue");
+        const message = err.message || "Backend connection issue";
+        setError(message);
+        // Server-side refusals for admin actions ("User not found",
+        // "Insufficient permissions", ...) arrive here; surface them instead of
+        // leaving them in a state field no page renders.
+        toast({
+          variant: "error",
+          title: "Action failed",
+          description: message,
+        });
       }
     });
 
@@ -492,7 +731,9 @@ export function useAdminSocket(token: string | null) {
 
     socketRef.current = socket;
     setSocket(socket);
-  }, [token]); // Only depend on token - use refs for other values to prevent reconnection loops
+    // `toast` is stable (useCallback with no changing deps), so including it
+    // here does not cause reconnection loops.
+  }, [token, toast]); // Otherwise only depend on token - use refs for other values
 
   const disconnect = useCallback(() => {
     // Reset connecting flag
@@ -519,6 +760,10 @@ export function useAdminSocket(token: string | null) {
       // Clear state to prevent memory leaks
       setMonitoredRooms(new Map());
       setEvents([]);
+      // Drop the last analytics snapshot too: once the socket is gone those
+      // numbers are history, and showing them as live is what this dashboard
+      // was doing wrong before.
+      setAnalytics(null);
       userTimestampsRef.current.clear();
     }
   }, []);
@@ -595,11 +840,8 @@ export function useAdminSocket(token: string | null) {
     }
   }, []);
 
-  const resetCircuitBreaker = useCallback(() => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit("reset_circuit_breaker");
-    }
-  }, []);
+  // NOTE: `reset_circuit_breaker` was removed. The server has no handler for
+  // that event, so emitting it did nothing while looking like it worked.
 
   // Manual refresh - force sync users and rooms from server
   const refreshData = useCallback(() => {
@@ -616,21 +858,53 @@ export function useAdminSocket(token: string | null) {
     }
   }, []);
 
-  // Use SystemService for HTTP calls
+  /**
+   * Take the public site up or down over HTTP (POST /status).
+   * `status: false` = maintenance mode. The optional `message` is shown to end
+   * users while the site is down. Resolves to the status actually in effect.
+   */
   const toggleSystemStatus = useCallback(
-    async (status: boolean) => {
+    async (status: boolean, message?: string) => {
       try {
-        const result = await SystemService.toggleSystemStatus(status);
+        const result = await SystemService.toggleSystemStatus(status, message);
+        selfToggledAtRef.current = Date.now();
+
         if (isMountedRef.current) {
           setSystemStatus(result.status);
+          // Optimistic local mirror; the `system_status` broadcast follows
+          // within milliseconds and fills in who made the change.
+          setMaintenance({
+            status: result.status,
+            message: message?.trim() || null,
+            changedBy: null,
+            changedAt: Date.now(),
+          });
         }
+
+        toast({
+          variant: result.status ? "success" : "warning",
+          title: result.status
+            ? "Public site is live"
+            : "Maintenance mode enabled",
+          description: result.status
+            ? "Users can connect again."
+            : "The public site is now down for users.",
+        });
+
         return result.status;
-      } catch {
-        // Silently handle error, return current status as fallback
+      } catch (err) {
+        // Previously swallowed: the toggle could fail and the admin would
+        // never know the site was still in the old state.
+        toast({
+          variant: "error",
+          title: "Could not change site status",
+          description:
+            err instanceof Error ? err.message : "The request failed.",
+        });
         return systemStatus;
       }
     },
-    [systemStatus],
+    [systemStatus, toast],
   );
 
   // Connect on mount and token change
@@ -703,6 +977,8 @@ export function useAdminSocket(token: string | null) {
     redisMetrics,
     events,
     systemStatus,
+    analytics,
+    maintenance,
     monitorRoom,
     unmonitorRoom,
     kickUser,
@@ -714,7 +990,6 @@ export function useAdminSocket(token: string | null) {
     getSystemHealth,
     getRedisMetrics,
     getRoomDetails,
-    resetCircuitBreaker,
     toggleSystemStatus,
     refreshData,
   };

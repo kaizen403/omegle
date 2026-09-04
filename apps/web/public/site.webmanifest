@@ -1,7 +1,7 @@
 {
   "name": "Omegle VITAP",
   "short_name": "Omegle",
-  "description": "Talk to strangers. Video and text chat for VITAP students.",
+  "description": "Anonymous video and text chat for campus. No sign up, no history.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#eef5ff",
