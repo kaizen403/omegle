@@ -146,9 +146,27 @@ export class RtcService {
   }
 
   playRemoteVideo(_participant: RtcParticipant, elementId: string): void {
-    const videoTrack = this.state.peerConnection
-      ?.getReceivers()
-      .find((receiver) => receiver.track?.kind === 'video')?.track;
+    // Use the track `ontrack` actually handed us rather than re-deriving it.
+    //
+    // This used to take the first receiver of kind 'video', which is not necessarily the one
+    // carrying media: a PeerConnection can hold receivers belonging to transceivers that were
+    // never negotiated, and their tracks are live-but-silent placeholders. Picking one of
+    // those overwrote the real remote track on the <video> element milliseconds after
+    // `ontrack` had attached it correctly, leaving a permanently black remote tile
+    // (videoWidth 0) while `inbound-rtp` showed frames decoding.
+    const videoTrack =
+      this.peerManager.getRemoteVideoTrack() ??
+      this.state.peerConnection
+        ?.getTransceivers()
+        .find(
+          (transceiver) =>
+            transceiver.mid !== null &&
+            transceiver.receiver.track?.kind === 'video' &&
+            transceiver.currentDirection !== null &&
+            transceiver.currentDirection !== 'inactive' &&
+            transceiver.currentDirection !== 'sendonly'
+        )?.receiver.track;
+
     if (videoTrack) {
       attachRemoteVideo(videoTrack, elementId);
     }

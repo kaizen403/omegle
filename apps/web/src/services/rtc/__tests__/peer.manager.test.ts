@@ -31,18 +31,29 @@ function createMockPc() {
     ontrack: null as ((ev: RTCTrackEvent) => void) | null,
     oniceconnectionstatechange: null as (() => void) | null,
     onconnectionstatechange: null as (() => void) | null,
-    addTransceiver(kind: string) {
+    addTransceiver(kind: string, init?: { direction?: string }) {
       const transceiver = {
         sender: {
-          replaceTrack: vi.fn().mockResolvedValue(undefined),
+          track: null as unknown,
+          replaceTrack: vi.fn().mockImplementation(async (t: unknown) => {
+            transceiver.sender.track = t;
+          }),
           getParameters: () => ({ encodings: [{}] }),
           setParameters: vi.fn().mockResolvedValue(undefined),
         },
-        receiver: { track: null },
+        // A transceiver created locally has no mid until it has been negotiated. That is
+        // exactly what made the old answerer path broken and invisible.
+        mid: null as string | null,
+        direction: init?.direction ?? 'sendrecv',
+        currentDirection: null as string | null,
+        receiver: { track: { kind } },
         kind,
       };
       this.transceivers.push(transceiver);
       return transceiver;
+    },
+    getTransceivers() {
+      return pc.transceivers;
     },
     createOffer: vi.fn().mockResolvedValue({ type: 'offer', sdp: 'offer-sdp' }),
     createAnswer: vi.fn().mockResolvedValue({ type: 'answer', sdp: 'answer-sdp' }),
@@ -51,6 +62,16 @@ function createMockPc() {
     }),
     setRemoteDescription: vi.fn().mockImplementation(async (desc: RTCSessionDescriptionInit) => {
       pc.remoteDescription = desc;
+      if (desc.type !== 'offer') return;
+      // Chrome does not associate an incoming offer's m-sections with transceivers created
+      // by a bare addTransceiver(); it appends new ones, reciprocal to the offer. Modelling
+      // that here is the whole point of this mock.
+      ['audio', 'video'].forEach((kind, index) => {
+        const transceiver = pc.addTransceiver(kind, { direction: 'recvonly' }) as unknown as {
+          mid: string | null;
+        };
+        transceiver.mid = String(index);
+      });
     }),
     addIceCandidate: vi.fn().mockImplementation(async (c: RTCIceCandidateInit) => {
       addedCandidates.push(c);
@@ -111,6 +132,108 @@ describe('PeerManager', () => {
 
     await offerer.leave();
     await answerer.leave();
+  });
+
+  it('answerer answers sendrecv and attaches its own tracks to the negotiated transceivers', async () => {
+    // Regression: the answerer used to pre-create transceivers with addTransceiver(). Chrome
+    // ignored them when applying the offer, so the answer went out as recvonly and this side
+    // never sent a packet — the partner saw a black tile and heard nothing, while the call
+    // still reported itself connected.
+    const { pc } = createMockPc();
+    const send = vi.fn();
+    const manager = new PeerManager(createState(), {}, () => pc as unknown as RTCPeerConnection);
+
+    const micTrack = { kind: 'audio' } as unknown as MediaStreamTrack;
+    const cameraTrack = { kind: 'video' } as unknown as MediaStreamTrack;
+
+    await manager.join({ ...joinConfig, isOfferer: false }, send, cameraTrack, micTrack);
+
+    // Nothing is created before the offer arrives: the offer decides the m-line layout.
+    expect(pc.transceivers).toHaveLength(0);
+
+    await manager.handleSignal({ type: 'offer', sdp: 'offer-sdp' });
+
+    const negotiated = pc.transceivers as unknown as Array<{
+      mid: string | null;
+      direction: string;
+      kind: string;
+      sender: { track: unknown };
+    }>;
+    expect(negotiated).toHaveLength(2);
+    expect(negotiated.every((t) => t.mid !== null)).toBe(true);
+    expect(negotiated.map((t) => t.direction)).toEqual(['sendrecv', 'sendrecv']);
+    expect(negotiated.find((t) => t.kind === 'audio')?.sender.track).toBe(micTrack);
+    expect(negotiated.find((t) => t.kind === 'video')?.sender.track).toBe(cameraTrack);
+    expect(send).toHaveBeenCalledWith({ type: 'answer', sdp: 'answer-sdp' });
+
+    await manager.leave();
+  });
+
+  it('applies a camera toggle that lands before the offer does', async () => {
+    // The answerer has no transceiver to replace a track on until the offer arrives, so the
+    // track has to be remembered and attached at adoption time.
+    const { pc } = createMockPc();
+    const manager = new PeerManager(createState(), {}, () => pc as unknown as RTCPeerConnection);
+
+    await manager.join({ ...joinConfig, isOfferer: false }, vi.fn(), null, null);
+
+    const lateCamera = { kind: 'video' } as unknown as MediaStreamTrack;
+    await manager.replaceVideoTrack(lateCamera);
+
+    await manager.handleSignal({ type: 'offer', sdp: 'offer-sdp' });
+
+    const video = (
+      pc.transceivers as unknown as Array<{ kind: string; sender: { track: unknown } }>
+    ).find((t) => t.kind === 'video');
+    expect(video?.sender.track).toBe(lateCamera);
+
+    await manager.leave();
+  });
+
+  it('offerer still creates its transceivers up front', async () => {
+    const { pc } = createMockPc();
+    const manager = new PeerManager(createState(), {}, () => pc as unknown as RTCPeerConnection);
+    const micTrack = { kind: 'audio' } as unknown as MediaStreamTrack;
+    const cameraTrack = { kind: 'video' } as unknown as MediaStreamTrack;
+
+    await manager.join({ ...joinConfig, isOfferer: true }, vi.fn(), cameraTrack, micTrack);
+
+    expect(pc.transceivers).toHaveLength(2);
+    expect(pc.transceivers.map((t) => (t as unknown as { kind: string }).kind)).toEqual([
+      'audio',
+      'video',
+    ]);
+    expect((pc.transceivers[0] as unknown as { sender: { track: unknown } }).sender.track).toBe(
+      micTrack
+    );
+
+    await manager.leave();
+  });
+
+  it('exposes the remote video track from ontrack rather than guessing a receiver', async () => {
+    const { pc } = createMockPc();
+    const manager = new PeerManager(createState(), {}, () => pc as unknown as RTCPeerConnection);
+
+    await manager.join({ ...joinConfig, isOfferer: false }, vi.fn(), null, null);
+    expect(manager.getRemoteVideoTrack()).toBeNull();
+
+    const listeners: Record<string, () => void> = {};
+    const track = {
+      kind: 'video',
+      muted: true,
+      readyState: 'live',
+      addEventListener: (event: string, cb: () => void) => {
+        listeners[event] = cb;
+      },
+    };
+    pc.ontrack?.({ track } as unknown as RTCTrackEvent);
+
+    expect(manager.getRemoteVideoTrack()).toBe(track);
+
+    listeners.ended?.();
+    expect(manager.getRemoteVideoTrack()).toBeNull();
+
+    await manager.leave();
   });
 
   it('queues ICE candidates until remote description is set', async () => {
