@@ -13,8 +13,14 @@ import { RoomService } from '../../services/room';
 import { TurnService } from '../../services/turn';
 import { RedisClient } from '../../services/redis';
 import { config } from '../../config';
+import { isOriginAllowed } from '../../middleware/cors';
+import { BoundedRateLimiter } from '../../utils/boundedRateLimiter';
+import { PendingSessionRegistry, DEFAULT_GRACE_MS } from '../../services/chat/sessionResume';
+import { botManager } from '../../services/bots';
+import { isOffererUid } from '../../services/turn';
 import { socketLogger } from '../../utils/logger';
 import { DisconnectReason } from '../../models';
+import { registerRuntimeMetrics } from '../../services/admin/runtimeMetrics';
 
 /**
  * Socket.IO Manager - Main orchestrator for all Socket.IO operations
@@ -35,6 +41,39 @@ export class SocketIOManager {
   private cleanupInterval: NodeJS.Timeout;
   private systemStatusGetter?: () => boolean;
 
+  /**
+   * Per-IP event budgets.
+   *
+   * Every other limiter in this codebase is keyed on `uid`, which the client chooses for
+   * itself — so rotating the uid resets the limit and makes those budgets advisory. These
+   * limiters key on the resolved client IP, which the client cannot pick, and are the ones
+   * that actually bound the cost an attacker can impose (Redis writes, Neon inserts, LLM
+   * calls, S3 operations).
+   */
+  private ipJoinLimiter = new BoundedRateLimiter({
+    capacity: Math.max(5, config.limits.joinsPerIpPerMinute),
+    refillPerSecond: Math.max(1, config.limits.joinsPerIpPerMinute) / 60,
+    maxKeys: 50_000,
+  });
+  /**
+   * Sessions held open across a dropped transport.
+   *
+   * A mobile handover or a lift closes the socket for a couple of seconds. Treating that as
+   * "the stranger left" ends a live conversation and kills the video call, which is the most
+   * common way this product breaks for a real user. Held sessions get a grace window to come
+   * back into the same room.
+   */
+  private pendingSessions = new PendingSessionRegistry();
+
+  /** Set during shutdown so a drop is torn down immediately instead of held for a return. */
+  private isShuttingDown = false;
+
+  private ipMessageLimiter = new BoundedRateLimiter({
+    capacity: Math.max(10, config.limits.messagesPerIpPerMinute),
+    refillPerSecond: Math.max(1, config.limits.messagesPerIpPerMinute) / 60,
+    maxKeys: 50_000,
+  });
+
   constructor(
     server: HTTPServer,
     matchmaking: MatchmakingService,
@@ -44,12 +83,24 @@ export class SocketIOManager {
   ) {
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: config.allowedOrigins,
+        // Explicit allowlist with the same subdomain-boundary rules as the HTTP CORS layer.
+        origin: (origin, callback) => {
+          if (!origin || isOriginAllowed(origin, config.allowedOrigins)) {
+            callback(null, true);
+            return;
+          }
+          callback(new Error('Origin not allowed'));
+        },
         methods: ['GET', 'POST'],
         credentials: true,
       },
       transports: ['websocket', 'polling'],
-      pingTimeout: 60000,
+      // Default is 1MB per frame. Nothing we accept is anywhere near that, and a large cap
+      // lets a handful of sockets pin memory with oversized payloads.
+      maxHttpBufferSize: 64 * 1024,
+      // Drop half-open handshakes rather than holding them for the default 45s.
+      connectTimeout: 10000,
+      pingTimeout: 20000,
       pingInterval: 25000,
       // Enable compression for WebSocket and HTTP transports
       perMessageDeflate: {
@@ -111,6 +162,8 @@ export class SocketIOManager {
       RedisClient.getInstance(),
       this.systemStatusGetter
     );
+
+    registerRuntimeMetrics(this.adminHandler);
 
     // Link admin handler to other handlers
     this.matchHandler.setAdminHandler(this.adminHandler);
@@ -174,12 +227,18 @@ export class SocketIOManager {
   private setupEventHandlers(): void {
     // Middleware for authentication
     this.io.use((socket, next) => {
-      const authenticated = this.connectionHandler.authenticate(socket);
-      if (!authenticated) {
-        return next(new Error('Authentication failed'));
+      const result = this.connectionHandler.authenticate(socket);
+      if (!result.ok) {
+        // Give the client the real reason: "at capacity" and "bad key" need different
+        // handling, and during an incident the logs must distinguish them.
+        return next(new Error(result.reason));
       }
       next();
     });
+
+    // Let the connection handler ask whether a presented resume token refers to a session
+    // we are actually still holding.
+    this.connectionHandler.isResumable = (uid: number) => this.pendingSessions.has(uid);
 
     // Main connection handler
     this.io.on('connection', (socket: ExtendedSocket) => {
@@ -189,6 +248,11 @@ export class SocketIOManager {
       // Setup event listeners
       this.setupSocketEventListeners(socket);
 
+      // A resumed socket goes straight back into its room before anything else runs.
+      if (socket.isReconnection && socket.uid) {
+        void this.restoreSession(socket);
+      }
+
       // Handle disconnection
       socket.on('disconnect', (reason) => {
         this.handleDisconnection(socket, reason);
@@ -197,43 +261,93 @@ export class SocketIOManager {
   }
 
   /**
-   * Setup event listeners for individual socket
+   * Run a socket's state-changing operations strictly in order.
+   *
+   * Socket.IO delivers events as they arrive and each handler is async, so two events sent
+   * back-to-back interleave. "Next" is exactly that: the UI emits `leave` and `join` in the
+   * same breath, and the join was reaching the room check before the leave had released the
+   * room — so it was rejected with "You are already in an active chat" and the user was left
+   * idle, staring at a dead screen, with nothing retrying.
+   *
+   * Chaining per socket makes the ordering match the user's intent. It is per-socket, so one
+   * user's queue never blocks another's.
    */
+  private serialize(socket: ExtendedSocket, fn: () => Promise<void>): void {
+    const previous = socket._opChain ?? Promise.resolve();
+    socket._opChain = previous
+      .catch(() => undefined)
+      .then(fn)
+      .catch((error) => {
+        socketLogger.error(`[SOCKET OP] UID ${socket.uid ?? 'unknown'} failed:`, error);
+      });
+  }
+
   private setupSocketEventListeners(socket: ExtendedSocket): void {
-    // Match events
-    socket.on('join', async (data) => {
+    const ip = socket.clientIP || 'unknown';
+
+    socket.on('join', (data) => {
+      // Per-IP budget first: reject before touching Redis, Neon, or the geolocation API.
+      if (!this.ipJoinLimiter.tryConsume(ip)) {
+        this.connectionHandler.sendError(socket, 'Too many requests. Please slow down.');
+        return;
+      }
+
+      this.serialize(socket, async () => {
+
       const validation = this.connectionHandler.validateJoinRequest(data);
       if (!validation.valid) {
         this.connectionHandler.sendError(socket, validation.error!);
         return;
       }
 
-      // Register connection
-      this.connectionHandler.registerConnection(socket, data.uid, data.name, data.gender);
+      // Registration must gate the join, not run alongside it.
+      const registration = this.connectionHandler.registerConnection(
+        socket,
+        data.name,
+        data.gender
+      );
+      if (!registration.ok) {
+        this.connectionHandler.sendError(socket, registration.error);
+        return;
+      }
 
-      // Handle join
-      await this.matchHandler.handleJoin(socket, data);
+        // Use the sanitized values the server stored, not the raw client payload.
+        await this.matchHandler.handleJoin(socket, {
+          uid: socket.uid!,
+          name: socket.name!,
+          gender: socket.gender!,
+        });
+      });
     });
 
-    socket.on('cancel', async () => {
-      await this.matchHandler.handleCancel(socket);
+    socket.on('cancel', () => {
+      this.serialize(socket, () => this.matchHandler.handleCancel(socket));
     });
 
-    // Room events
-    socket.on('leave', async () => {
-      await this.roomHandler.handleLeave(socket);
+    // Room events. Serialised with join so "Next" (leave immediately followed by join)
+    // always applies in the order the user meant.
+    socket.on('leave', () => {
+      this.serialize(socket, async () => {
+        await this.roomHandler.handleLeave(socket);
+        if (socket.uid) {
+          this.signalHandler.reset(socket.uid);
+        }
+      });
     });
 
     // Chat events
     socket.on('message', async (data) => {
+      if (!this.ipMessageLimiter.tryConsume(ip)) {
+        socket.emit('error', { message: 'Rate limit exceeded. Please slow down.' });
+        return;
+      }
       await this.chatHandler.handleMessage(socket, data);
     });
 
-    socket.on('file_message', async (data) => {
-      await this.chatHandler.handleFileMessage(socket, data);
-    });
-
     socket.on('typing', async (data) => {
+      if (!this.ipMessageLimiter.tryConsume(ip)) {
+        return;
+      }
       await this.chatHandler.handleTyping(socket, data);
     });
 
@@ -241,8 +355,11 @@ export class SocketIOManager {
       this.signalHandler.handleSignal(socket, data);
     });
 
-    // Ping/pong for keepalive
+    // Ping/pong for keepalive. Charged so it cannot be used as a free flood channel.
     socket.on('ping', () => {
+      if (!this.ipMessageLimiter.tryConsume(ip)) {
+        return;
+      }
       socket.emit('pong');
     });
   }
@@ -250,28 +367,170 @@ export class SocketIOManager {
   /**
    * Handle socket disconnection
    */
+  /**
+   * Put a returning user back into the room they dropped out of.
+   *
+   * Restores the identity and room membership, re-mints ICE so video can renegotiate, and
+   * tells the partner the stranger is back — the partner's UI never had to end the chat.
+   */
+  private async restoreSession(socket: ExtendedSocket): Promise<void> {
+    const uid = socket.uid;
+    if (!uid) {
+      return;
+    }
+
+    const held = this.pendingSessions.claim(uid);
+    if (!held) {
+      // The grace window closed between the handshake and here; treat it as a fresh session.
+      socket.isReconnection = false;
+      return;
+    }
+
+    socket.name = held.name;
+    socket.gender = held.gender;
+    this.connections.set(uid, socket);
+
+    if (!held.roomId) {
+      socket.state = 'idle';
+      return;
+    }
+
+    const room = await this.roomService.getRoom(held.roomId);
+    if (!room) {
+      // Room expired or was closed while they were away.
+      socket.state = 'idle';
+      socket.emit('match', { status: 'partner_left', message: 'Session ended' });
+      return;
+    }
+
+    socket.state = 'active';
+    socket.roomId = held.roomId;
+    socket.partnerId = held.partnerId;
+    socket.join(held.roomId);
+
+    const partnerUid = held.partnerId;
+    const partnerIsBot = partnerUid !== undefined && botManager.isBot(partnerUid);
+    const rtcEnabled = partnerUid !== undefined && !partnerIsBot;
+
+    const ice = rtcEnabled
+      ? await this.turnService.mintIceConfig(uid, 3600)
+      : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+
+    socket.emit('reconnected', {
+      status: 'reconnected',
+      roomId: room.roomId,
+      channelName: room.channelName,
+      partnerUid,
+      isOfferer: partnerUid !== undefined ? isOffererUid(uid, partnerUid) : false,
+      iceServers: ice.iceServers,
+      rtcEnabled,
+      expiresAt: ice.expiresAt,
+      message: 'Reconnected to your chat',
+    });
+
+    if (partnerUid !== undefined) {
+      const partnerSocket = this.connections.get(partnerUid);
+      if (partnerSocket?.connected) {
+        partnerSocket.emit('partner_reconnected', { partnerUid: uid });
+      }
+    }
+
+    socketLogger.info(
+      `[SESSION RESTORED] UID: ${uid} back in room ${room.roomId} after ${Date.now() - held.droppedAt}ms`
+    );
+  }
+
+  /**
+   * Reasons that mean "the network dropped", as opposed to the user leaving on purpose.
+   * Only these earn a grace window.
+   */
+  private isTransportDrop(reason: string): boolean {
+    return (
+      reason === 'transport close' ||
+      reason === 'transport error' ||
+      reason === 'ping timeout'
+    );
+  }
+
   private async handleDisconnection(socket: ExtendedSocket, reason: string): Promise<void> {
+    const snapshot = {
+      uid: socket.uid,
+      name: socket.name,
+      gender: socket.gender,
+      state: socket.state,
+      roomId: socket.roomId,
+      partnerId: socket.partnerId,
+    };
+
     this.connectionHandler.handleDisconnection(socket, reason);
 
-    // Note: File cleanup is handled in cleanupUserOnDisconnect when room is deleted
-    // This ensures all files from both users are cleaned up together
-
-    // Cleanup user if they were authenticated
-    if (socket.uid && socket.gender) {
-      let disconnectReason = DisconnectReason.CLIENT_CLOSED;
-
-      if (reason === 'transport close') disconnectReason = DisconnectReason.NETWORK_ERROR;
-      else if (reason === 'ping timeout') disconnectReason = DisconnectReason.TIMEOUT;
-      else if (reason === 'server namespace disconnect')
-        disconnectReason = DisconnectReason.SERVER_SHUTDOWN;
-
-      await this.roomHandler.cleanupUserOnDisconnect(
-        socket.uid,
-        socket.gender,
-        disconnectReason,
-        this.matchmaking
-      );
+    if (socket.uid) {
+      this.signalHandler.reset(socket.uid);
     }
+
+    if (!snapshot.uid || !snapshot.gender) {
+      return;
+    }
+
+    let disconnectReason = DisconnectReason.CLIENT_CLOSED;
+    if (reason === 'transport close') disconnectReason = DisconnectReason.NETWORK_ERROR;
+    else if (reason === 'ping timeout') disconnectReason = DisconnectReason.TIMEOUT;
+    else if (reason === 'server namespace disconnect')
+      disconnectReason = DisconnectReason.SERVER_SHUTDOWN;
+
+    const uid = snapshot.uid;
+    const gender = snapshot.gender;
+
+    // Hold an in-progress chat open across a transport blip rather than ending it. Anything
+    // else — an explicit leave, a server-side disconnect, a shutdown — tears down at once.
+    const worthHolding =
+      this.isTransportDrop(reason) &&
+      snapshot.state === 'active' &&
+      Boolean(snapshot.roomId) &&
+      !this.isShuttingDown;
+
+    if (worthHolding) {
+      this.pendingSessions.hold(
+        {
+          uid,
+          name: snapshot.name,
+          gender: snapshot.gender,
+          roomId: snapshot.roomId,
+          partnerId: snapshot.partnerId,
+        },
+        () => {
+          socketLogger.info(`[GRACE EXPIRED] UID: ${uid} did not return; tearing down`);
+          void this.roomHandler.cleanupUserOnDisconnect(
+            uid,
+            gender,
+            disconnectReason,
+            this.matchmaking
+          );
+        }
+      );
+
+      // Tell the partner it is a blip, not a departure, so their UI can wait instead of
+      // ending the conversation.
+      if (snapshot.partnerId !== undefined) {
+        const partnerSocket = this.connections.get(snapshot.partnerId);
+        if (partnerSocket?.connected) {
+          partnerSocket.emit('partner_reconnecting', {
+            partnerUid: uid,
+            graceMs: DEFAULT_GRACE_MS,
+          });
+        }
+      }
+
+      socketLogger.info(`[GRACE HELD] UID: ${uid} dropped (${reason}); holding room`);
+      return;
+    }
+
+    await this.roomHandler.cleanupUserOnDisconnect(
+      uid,
+      gender,
+      disconnectReason,
+      this.matchmaking
+    );
   }
 
   /**
@@ -300,6 +559,7 @@ export class SocketIOManager {
    */
   public async shutdown(): Promise<void> {
     socketLogger.info('Shutting down Socket.IO Manager...');
+    this.isShuttingDown = true;
 
     // 1. Stop periodic cleanup interval
     clearInterval(this.cleanupInterval);
@@ -313,6 +573,12 @@ export class SocketIOManager {
     if (this.signalHandler) {
       this.signalHandler.destroy();
     }
+
+    this.ipJoinLimiter.destroy();
+    this.ipMessageLimiter.destroy();
+    this.connectionHandler.destroy();
+    // Held sessions cannot be resumed across a restart; drop their timers.
+    this.pendingSessions.destroy();
 
     // 3. Broadcast shutdown to admin clients
     if (this.adminHandler) {

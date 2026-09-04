@@ -12,10 +12,11 @@ export interface ExtendedSocket extends Socket {
   roomId?: string;
   partnerId?: number;
   isReconnection?: boolean;
+  /** Serialises this socket's state-changing operations; see SocketIOManager.serialize. */
+  _opChain?: Promise<void>;
   clientIP?: string;
   userAgent?: string;
   joinedAt?: number;
-  uploadedFiles?: string[]; // Array of file paths for cleanup on disconnect
   _disconnectSnapshot?: {
     uid: number;
     name?: string;
@@ -34,6 +35,10 @@ export interface AdminSocket extends Socket {
   isAuthenticated?: boolean;
   connectedAt?: number;
   idToken?: string;
+  /** Cached from the authenticated session so role checks need no extra DB round-trip. */
+  adminRole?: 'admin' | 'super-admin';
+  adminEmail?: string;
+  clientIp?: string;
   heartbeatInterval?: NodeJS.Timeout;
   approvalTimeout?: NodeJS.Timeout;
 }

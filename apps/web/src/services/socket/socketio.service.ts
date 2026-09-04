@@ -82,6 +82,24 @@ export class SocketIOService implements ISocketService {
   private socket: Socket | null = null;
   private url: string;
   private apiKey: string;
+  /**
+   * Session id assigned by the server on connect.
+   *
+   * The client used to generate this itself from `Date.now()`, and the server stored whatever
+   * arrived — so ids were guessable and a peer could claim someone else's session. Identity is
+   * now issued server-side; this is only a cache of what we were told.
+   */
+  private sessionUid: number | null = null;
+
+  /**
+   * Token that lets a dropped connection re-enter the same chat.
+   *
+   * Socket.IO reconnects by opening a fresh connection, which would otherwise be a brand new
+   * anonymous session — the room is gone, the video call is dead, and the partner is told the
+   * stranger left. Presenting this on reconnect puts us back in the room we were already in,
+   * provided the server is still holding it.
+   */
+  private resumeToken: string | null = null;
   private messageHandlers: Set<MessageHandler> = new Set();
   private errorHandlers: Set<ErrorHandler> = new Set();
   private closeHandlers: Set<CloseHandler> = new Set();
@@ -120,7 +138,9 @@ export class SocketIOService implements ISocketService {
     try {
       this.socket = io(this.url, {
         transports: ['websocket', 'polling'],
-        auth: { apiKey: this.apiKey },
+        auth: this.resumeToken
+          ? { apiKey: this.apiKey, resumeToken: this.resumeToken }
+          : { apiKey: this.apiKey },
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: 1000,
@@ -141,6 +161,9 @@ export class SocketIOService implements ISocketService {
 
       this.socket.on('disconnect', (reason) => {
         this.isConnecting = false;
+        // Deliberately keep resumeToken: it is the only thing that can restore this chat
+        // when the socket comes back. sessionUid is re-issued by the server on connect.
+        this.sessionUid = null;
         if (!this.isIntentionalClose) {
           this.closeHandlers.forEach((handler) => handler());
           // Attempt manual reconnection for certain disconnect reasons
@@ -175,6 +198,21 @@ export class SocketIOService implements ISocketService {
           eventName === 'connect_error'
         ) {
           return;
+        }
+
+        if (eventName === 'connected') {
+          const payload = args[0] as { uid?: unknown; resumeToken?: unknown } | undefined;
+          const uid = payload?.uid;
+          this.sessionUid = typeof uid === 'number' && Number.isInteger(uid) ? uid : null;
+
+          if (typeof payload?.resumeToken === 'string') {
+            this.resumeToken = payload.resumeToken;
+            // Socket.IO reuses this object for every reconnect attempt, so updating it in
+            // place is what actually carries the token back to the server.
+            if (this.socket) {
+              this.socket.auth = { apiKey: this.apiKey, resumeToken: this.resumeToken };
+            }
+          }
         }
 
         const message = {
@@ -287,6 +325,21 @@ export class SocketIOService implements ISocketService {
   onOpen(handler: OpenHandler): () => void {
     this.openHandlers.add(handler);
     return () => this.openHandlers.delete(handler);
+  }
+
+  /**
+   * The server-assigned session id, or null before the `connected` event arrives.
+   */
+  getSessionUid(): number | null {
+    return this.sessionUid;
+  }
+
+  /** Clear resume state — call when the user intentionally ends their session. */
+  clearResumeToken(): void {
+    this.resumeToken = null;
+    if (this.socket) {
+      this.socket.auth = { apiKey: this.apiKey };
+    }
   }
 
   /**

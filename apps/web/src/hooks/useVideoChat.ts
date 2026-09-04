@@ -49,7 +49,6 @@ import { useRtc } from './useRtc';
 import { useChat } from './useChat';
 import { getSocketIOService } from '@/services/socket';
 import { showError, showInfo, ErrorCode } from '@/lib';
-import { useUser } from './useUser';
 import { RETRY_BASE_DELAY, FIND_NEXT_DEBOUNCE_DELAY } from '@/constants';
 import type { MatchDataMatched } from '@/types/matchmaking';
 
@@ -78,9 +77,10 @@ interface UseVideoChatOptions {
 export function useVideoChat(options: UseVideoChatOptions) {
   const { localVideoElementId, remoteVideoElementId, isChatOpen = true } = options;
 
-  const { uid: contextUID } = useUser();
-
-  const currentUidRef = useRef<string>(contextUID.toString());
+  // Identity is issued by the server on connect and read back from the socket. The client no
+  // longer mints its own id: the old scheme was derived from Date.now(), so ids were
+  // guessable and another peer could claim an active session.
+  const currentUidRef = useRef<string>('');
   const currentMatchRef = useRef<MatchDataMatched | null>(null);
   const userDataRef = useRef<{ name: string; gender: 'male' | 'female' | 'other' } | null>(null);
   const isLeavingRef = useRef(false);
@@ -88,6 +88,14 @@ export function useVideoChat(options: UseVideoChatOptions) {
   const endSessionRef = useRef<(() => Promise<void>) | null>(null);
 
   const [isInSession, setIsInSession] = useState(false);
+
+  const syncSessionUid = useCallback((): number | null => {
+    const sessionUid = getSocketIOService().getSessionUid();
+    if (sessionUid !== null) {
+      currentUidRef.current = String(sessionUid);
+    }
+    return sessionUid;
+  }, []);
   const [isSearching, setIsSearching] = useState(false);
   const isFindingNextRef = useRef(false);
 
@@ -100,6 +108,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
     localNetworkQuality,
     remoteNetworkQuality,
     initializeRTC,
+    prepareLocalMedia,
     toggleCamera,
     toggleMicrophone,
     switchCamera,
@@ -140,6 +149,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
           const uid = currentUidRef.current;
 
           await initializeRTC(matchData, uid, localVideoElementId, remoteVideoElementId);
+          resumeRemoteAudio();
           return;
         } catch (error) {
           lastError = error;
@@ -209,7 +219,14 @@ export function useVideoChat(options: UseVideoChatOptions) {
         // Don't end session - text chat can still work
       }
     },
-    [initializeRTC, leaveRTC, localVideoElementId, remoteVideoElementId, isRTCInitialized]
+    [
+      initializeRTC,
+      leaveRTC,
+      localVideoElementId,
+      remoteVideoElementId,
+      isRTCInitialized,
+      resumeRemoteAudio,
+    ]
   );
 
   const handleMatchmakingError = useCallback((error: string) => {
@@ -228,6 +245,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
     matchData,
     error: matchmakingError,
     isMatched,
+    isPartnerReconnecting,
     join,
     leaveRoom,
     cancelSearch,
@@ -244,16 +262,11 @@ export function useVideoChat(options: UseVideoChatOptions) {
     messages,
     isPartnerTyping,
     sendMessage,
-    sendFileMessage,
     sendTypingIndicator,
     clearMessages,
-    totalUploadedSize,
-    maxTotalSize,
   } = useChat({
     ws: getSocketIOService(),
     isInSession,
-    roomId: matchData?.roomId,
-    uid: parseInt(currentUidRef.current, 10),
     onMessageReceived: () => {},
     onTypingIndicator: () => {},
     isChatOpen,
@@ -271,10 +284,13 @@ export function useVideoChat(options: UseVideoChatOptions) {
         return;
       }
 
-      const uid = parseInt(currentUidRef.current, 10);
+      if (syncSessionUid() === null) {
+        showError('Still connecting. Please try again in a moment.', ErrorCode.CONNECTION_TIMEOUT);
+        return;
+      }
 
+      // uid is intentionally absent: the server uses the socket's own identity.
       const authData = {
-        uid,
         name: userData.name.trim(),
         gender: userData.gender.toLowerCase() as 'male' | 'female' | 'other',
       };
@@ -284,9 +300,10 @@ export function useVideoChat(options: UseVideoChatOptions) {
         gender: authData.gender,
       };
 
+      await prepareLocalMedia();
       join(authData);
     },
-    [join]
+    [join, prepareLocalMedia, syncSessionUid]
   );
 
   const stopSearch = useCallback(async () => {
@@ -366,16 +383,15 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      const uid = parseInt(currentUidRef.current, 10);
+      await prepareLocalMedia();
+
+      syncSessionUid();
 
       if (userDataRef.current) {
-        const authData = {
-          uid,
+        join({
           name: userDataRef.current.name,
           gender: userDataRef.current.gender,
-        };
-
-        join(authData);
+        });
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -399,13 +415,11 @@ export function useVideoChat(options: UseVideoChatOptions) {
       } else {
         showInfo('Retrying search...');
         if (userDataRef.current) {
-          const uid = parseInt(currentUidRef.current, 10);
-          const authData = {
-            uid,
+          syncSessionUid();
+          join({
             name: userDataRef.current.name,
             gender: userDataRef.current.gender,
-          };
-          join(authData);
+          });
         }
       }
     } finally {
@@ -414,7 +428,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
         isFindingNextRef.current = false;
       }, FIND_NEXT_DEBOUNCE_DELAY);
     }
-  }, [leaveRoom, leaveRTC, join, clearMessages]);
+  }, [leaveRoom, leaveRTC, join, clearMessages, prepareLocalMedia, syncSessionUid]);
 
   // Store cleanup functions in refs to avoid stale closure issues
   const clearMessagesRef = useRef(clearMessages);
@@ -450,6 +464,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
     connectionState,
     matchData,
     isMatched,
+    isPartnerReconnecting,
     isInSession,
     isSearching,
     matchmakingError,
@@ -476,9 +491,6 @@ export function useVideoChat(options: UseVideoChatOptions) {
       resumeRemoteAudio();
       sendMessage(text);
     },
-    sendFileMessage,
     sendTypingIndicator,
-    totalUploadedSize,
-    maxTotalSize,
   };
 }

@@ -94,6 +94,8 @@ interface UseMatchmakingReturn {
   isAuthenticated: boolean;
   isWaiting: boolean;
   isMatched: boolean;
+  /** Partner's transport dropped; the server is holding their seat. Not a departure. */
+  isPartnerReconnecting: boolean;
   join: (userData: UserData) => void;
   leaveRoom: () => void;
   cancelSearch: () => void;
@@ -113,6 +115,8 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [matchData, setMatchData] = useState<MatchDataMatched | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** True while the partner's transport is down but the server is still holding their seat. */
+  const [isPartnerReconnecting, setIsPartnerReconnecting] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const wsRef = useRef<SocketIOService | null>(null);
@@ -133,8 +137,14 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
   const handleMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
-        case 'match':
-          if (message.data.status === 'waiting') {
+        // The server multiplexes several outcomes onto the `match` event. Every status it
+        // can emit is handled here: an unhandled one leaves the UI frozen on whatever it was
+        // showing — a dead video after the partner left, or "Searching..." forever after a
+        // rejected join.
+        case 'match': {
+          const status = message.data.status as string;
+
+          if (status === 'waiting' || status === 'searching') {
             setIsAuthenticated(true);
             setConnectionState('waiting');
             setError(null);
@@ -151,10 +161,47 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
             setConnectionState('matched');
             setMatchData(message.data);
             setError(null);
+            setIsPartnerReconnecting(false);
             isJoiningRef.current = false;
             onMatched?.(message.data);
+          } else if (
+            status === 'partner_disconnected' ||
+            status === 'partner_left' ||
+            status === 'left'
+          ) {
+            // The other side is gone for good. Tear the session down so the user is returned
+            // to a usable state instead of watching a frozen frame.
+            if (searchTimeoutRef.current) {
+              clearTimeout(searchTimeoutRef.current);
+              searchTimeoutRef.current = null;
+            }
+            setConnectionState('connected');
+            setMatchData(null);
+            setIsPartnerReconnecting(false);
+            setError(null);
+            isJoiningRef.current = false;
+            onPartnerLeft?.();
+          } else if (status === 'cancelled') {
+            setConnectionState('connected');
+            setMatchData(null);
+            setIsPartnerReconnecting(false);
+            isJoiningRef.current = false;
+          } else if (status === 'error') {
+            // Join was refused (rate limited, already in a room, transient failure). Without
+            // this the user sits on "Searching..." indefinitely with no way forward.
+            if (searchTimeoutRef.current) {
+              clearTimeout(searchTimeoutRef.current);
+              searchTimeoutRef.current = null;
+            }
+            setConnectionState('connected');
+            isJoiningRef.current = false;
+            setError(
+              ('message' in message.data && (message.data as { message?: string }).message) ||
+                'Could not start a chat. Please try again.'
+            );
           }
           break;
+        }
 
         case 'reconnected':
           setConnectionState('connected');
@@ -182,6 +229,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
         case 'session_expired':
           setConnectionState('connected');
           setMatchData(null);
+          setIsPartnerReconnecting(false);
           setError('Session expired. Please join again.');
           break;
 
@@ -189,7 +237,18 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           setConnectionState('connected');
           setMatchData(null);
           setError(null);
+          setIsPartnerReconnecting(false);
           onPartnerLeft?.();
+          break;
+
+        // The partner's network dropped. The server is holding their seat, so the chat and
+        // the peer connection stay up — surface it as a transient state, never as a leave.
+        case 'partner_reconnecting':
+          setIsPartnerReconnecting(true);
+          break;
+
+        case 'partner_reconnected':
+          setIsPartnerReconnecting(false);
           break;
 
         case 'kicked':
@@ -514,6 +573,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     isAuthenticated,
     isWaiting: connectionState === 'waiting',
     isMatched: connectionState === 'matched',
+    isPartnerReconnecting,
     join,
     leaveRoom,
     cancelSearch,

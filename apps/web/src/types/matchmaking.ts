@@ -15,6 +15,8 @@ export type ServerMessageType =
   | 'leave'
   | 'cancel'
   | 'partner_left'
+  | 'partner_reconnecting'
+  | 'partner_reconnected'
   | 'error'
   | 'message'
   | 'typing'
@@ -27,16 +29,16 @@ export type MatchStatus = 'idle' | 'searching' | 'active';
 // User State
 export type UserState = 'idle' | 'searching' | 'active';
 
-// User Data
+// User Data.
+// `uid` is deliberately absent: the server assigns session identity on connect and reads it
+// from the socket, so the client neither generates nor sends one.
 export interface UserData {
-  uid: number;
   name: string;
   gender: 'male' | 'female' | 'other';
 }
 
 // Join Data (for join message)
 export interface JoinData {
-  uid: number;
   name: string;
   gender: 'male' | 'female' | 'other';
 }
@@ -49,6 +51,22 @@ export interface PartnerInfo {
 }
 
 // Match Data - Waiting status
+/**
+ * Statuses the server multiplexes onto the `match` event.
+ *
+ * Keep this in sync with what the handlers emit — an unlisted status silently does nothing
+ * on the client, which is how a departed partner used to leave the UI frozen.
+ */
+export type MatchStatusKind =
+  | 'waiting'
+  | 'searching'
+  | 'matched'
+  | 'partner_disconnected'
+  | 'partner_left'
+  | 'left'
+  | 'cancelled'
+  | 'error';
+
 export interface MatchDataWaiting {
   status: 'waiting';
   message: string;
@@ -123,10 +141,6 @@ export interface MessageData {
   from: number;
   text: string;
   timestamp: number;
-  fileUrl?: string;
-  fileName?: string;
-  mimeType?: string;
-  fileSize?: number;
 }
 
 // Signal Response (WebRTC signaling from partner)
@@ -177,18 +191,6 @@ export interface ChatMessage {
   };
 }
 
-export interface FileMessage {
-  type: 'file_message';
-  data: {
-    text: string;
-    fileUrl: string;
-    fileName: string;
-    mimeType: string;
-    fileSize: number;
-    filePath: string;
-  };
-}
-
 export interface SignalMessage {
   type: 'signal';
   data: RTCSignal;
@@ -211,7 +213,6 @@ export type ClientMessage =
   | LeaveMessage
   | CancelMessage
   | ChatMessage
-  | FileMessage
   | TypingIndicatorMessage
   | SignalMessage
   | PingMessage;
@@ -245,6 +246,21 @@ export interface ServerCancelMessage {
 export interface PartnerLeftMessage {
   type: 'partner_left';
   data: PartnerLeftData;
+}
+
+/**
+ * The partner's transport dropped, but the server is holding their seat in the room for
+ * `graceMs`. This is not a departure — the chat and the peer connection stay up.
+ */
+export interface PartnerReconnectingMessage {
+  type: 'partner_reconnecting';
+  data: { partnerUid: number; graceMs: number };
+}
+
+/** The partner came back inside the grace window. */
+export interface PartnerReconnectedMessage {
+  type: 'partner_reconnected';
+  data: { partnerUid: number };
 }
 
 export interface ErrorMessage {
@@ -295,6 +311,8 @@ export type ServerMessage =
   | ServerLeaveMessage
   | ServerCancelMessage
   | PartnerLeftMessage
+  | PartnerReconnectingMessage
+  | PartnerReconnectedMessage
   | ErrorMessage
   | IncomingChatMessage
   | IncomingTypingIndicatorMessage
