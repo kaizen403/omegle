@@ -328,8 +328,12 @@ PY
       --target "$target"
   fi
 }
-create_schedule omegle-api-start "cron(0 15 * * ? *)" startInstances
-create_schedule omegle-api-stop "cron(0 23 * * ? *)" stopInstances
+# Nightly operating window: 9 PM to 2 AM IST. These cron expressions are evaluated in
+# Asia/Kolkata (set in create_schedule) and MUST stay in sync with WINDOW_OPEN_HOUR /
+# WINDOW_CLOSE_HOUR in apps/api/src/services/scheduler/statusScheduler.ts — this pair stops
+# and starts the instance itself, so it is what actually takes the server down.
+create_schedule omegle-api-start "cron(0 21 * * ? *)" startInstances
+create_schedule omegle-api-stop "cron(0 2 * * ? *)" stopInstances
 
 echo "INSTANCE_ID=${INSTANCE_ID}"
 echo "EIP=${EIP}"
