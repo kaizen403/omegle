@@ -3,9 +3,9 @@ main = "worker.js"
 compatibility_date = "2026-09-03"
 workers_dev = true
 
-routes = [
-  { pattern = "api.vitap.in/*", zone_name = "vitap.in" }
-]
-
 [vars]
 ORIGIN = "http://13.207.9.86.sslip.io"
+
+# EDGE_SECRET is a secret, not a var. Set it with:
+#   wrangler secret put EDGE_SECRET
+# and store the same value at SSM /omegle/prod/EDGE_SECRET so the origin requires it.

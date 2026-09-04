@@ -2,7 +2,20 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # A hard memory ceiling with an eviction policy. Queues and rooms are attacker-influenced,
+    # so without a cap a flood of joins can push Redis into the OOM killer and take the whole
+    # box down. allkeys-lru degrades matchmaking gracefully instead.
+    #
+    # 1gb sized for ~1,000 concurrent users: rooms, presence, and capped chat history are a
+    # few KB per pair, so this leaves a wide margin on the t3.xlarge's 16GB.
+    command:
+      [
+        "redis-server",
+        "--save", "",
+        "--appendonly", "no",
+        "--maxmemory", "1gb",
+        "--maxmemory-policy", "allkeys-lru"
+      ]
     expose:
       - "6379"
     healthcheck:
@@ -14,6 +27,24 @@ services:
   api:
     image: ${API_IMAGE}
     restart: unless-stopped
+    # File descriptors.
+    #
+    # Every WebSocket is an fd, plus the Redis and Postgres pools. Docker's default soft
+    # limit is commonly 1024, so a 1,000-user event would hit EMFILE and kill the process
+    # right at peak. This is the hard ceiling the app's MAX_TOTAL_SOCKETS sits under.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Block privilege escalation inside the container.
+    security_opt:
+      - no-new-privileges:true
+    # Bound log growth so a log flood cannot fill the instance disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     env_file:
       - .env
     environment:
@@ -37,10 +68,31 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    # Bind address for the public listeners.
+    #
+    # When a Cloudflare Tunnel is configured, deploy.sh sets CADDY_BIND=127.0.0.1 so these
+    # ports are reachable only from the host. cloudflared then runs with --network host and
+    # dials 127.0.0.1, which means:
+    #   * the origin has no public listener at all, so the CDN cannot be bypassed by
+    #     connecting to the instance address; and
+    #   * the edge-to-origin leg is the tunnel's outbound TLS connection rather than
+    #     plaintext HTTP across the public internet.
+    # Without a tunnel this falls back to 0.0.0.0 and the security group is the only barrier.
     ports:
-      - "80:80"
+      - "${CADDY_BIND:-0.0.0.0}:80:80"
+      - "${CADDY_BIND:-0.0.0.0}:443:443"
+    environment:
+      EDGE_SECRET: ${EDGE_SECRET:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
     depends_on:
       api:
         condition: service_healthy

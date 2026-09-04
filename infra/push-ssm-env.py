@@ -21,6 +21,13 @@ KEEP_FROM_LOCAL = {
     "JWT_EXPIRES_IN",
     "TURNSTILE_SECRET_KEY",
     "PORT",
+    # Real secrets — never hardcode these below. TURN_AUTH_SECRET in particular must be a
+    # working Cloudflare `{keyId}:{apiToken}` pair: without a colon the backend silently
+    # falls back to STUN-only, and every user behind CGNAT (most Indian mobile networks)
+    # gets no video at all, with no error shown.
+    "TURN_AUTH_SECRET",
+    "EDGE_SECRET",
+    "INTERNAL_API_KEY",
 }
 
 PROD = {
@@ -38,13 +45,21 @@ PROD = {
     "REDIS_HOST": "redis",
     "REDIS_PORT": "6379",
     "REDIS_TLS": "false",
-    "AWS_REGION": REGION,
-    "S3_BUCKET": f"omegle-vitap-uploads-{ACCOUNT}",
-    "S3_PUBLIC_BASE_URL": f"https://omegle-vitap-uploads-{ACCOUNT}.s3.{REGION}.amazonaws.com",
+    # Behind Cloudflare -> Caddy. `private` covers the Caddy sidecar, which is the peer the
+    # API actually sees; the Worker sets CF-Connecting-IP from Cloudflare's own value.
+    "TRUSTED_PROXIES": "private",
+    # Capacity. Per-IP caps are deliberately loose: the campus NATs its whole user base
+    # behind a handful of addresses, so MAX_TOTAL_SOCKETS is the real protection.
+    "MAX_TOTAL_SOCKETS": "6000",
+    "MAX_SOCKETS_PER_IP": "3000",
+    "MAX_HANDSHAKES_PER_IP_PER_MIN": "4000",
+    "MAX_JOINS_PER_IP_PER_MIN": "1500",
+    "MAX_MESSAGES_PER_IP_PER_MIN": "6000",
+    "MATCHMAKER_TICK_MS": "1000",
+    "MATCHMAKER_BATCH": "150",
     "TURN_HOST": "turn.cloudflare.com",
     "TURN_PORT": "3478",
     "TURN_TLS_PORT": "0",
-    "TURN_AUTH_SECRET": "unconfigured-cloudflare-turn",
     "TURN_REALM": "omegle",
     "STUN_URLS": "stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302",
 }

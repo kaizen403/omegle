@@ -2,6 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "GitHubActionsMainBranchAndProdEnvironment",
       "Effect": "Allow",
       "Principal": {
         "Federated": "arn:aws:iam::162668739040:oidc-provider/token.actions.githubusercontent.com"
@@ -12,7 +13,10 @@
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:kaizen403/omegle:*"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:kaizen403/omegle:ref:refs/heads/main",
+            "repo:kaizen403/omegle:environment:production"
+          ]
         }
       }
     }

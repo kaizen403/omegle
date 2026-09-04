@@ -10,7 +10,6 @@ VPC="vpc-008a1e85aef7a392c"
 SUBNET="subnet-0e62195f458cad888"
 AMI="ami-094210f044117049d"
 INSTANCE_TYPE="t3.xlarge"
-UPLOADS_BUCKET="omegle-vitap-uploads-${ACCOUNT}"
 OPS_BUCKET="omegle-vitap-ops-${ACCOUNT}"
 ECR_REPO="omegle-api"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -57,35 +56,17 @@ for id in i-09492fefee6f382bf i-06207864d6fd06fcf; do
 done
 
 echo "== buckets =="
-ensure_bucket "$UPLOADS_BUCKET"
+# The chat file-attachment feature has been removed, so there is no uploads bucket. The
+# previous configuration created one with BlockPublicPolicy=false and a
+# `"Principal": "*"` s3:GetObject policy — a world-writable-by-proxy, world-readable file
+# host attached to this AWS account. Nothing recreates it here.
+#
+# If an uploads bucket still exists from an earlier deploy, lock it down and empty it:
+#   aws s3api put-public-access-block --bucket <bucket> --public-access-block-configuration \
+#     'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
+#   aws s3api delete-bucket-policy --bucket <bucket>
+#   aws s3 rm "s3://<bucket>/chat-files" --recursive
 ensure_bucket "$OPS_BUCKET"
-
-aws s3api put-public-access-block --bucket "$UPLOADS_BUCKET" --public-access-block-configuration \
-  'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false'
-aws s3api put-bucket-policy --bucket "$UPLOADS_BUCKET" --policy "$(cat <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Sid": "PublicReadUploads",
-    "Effect": "Allow",
-    "Principal": "*",
-    "Action": "s3:GetObject",
-    "Resource": "arn:aws:s3:::${UPLOADS_BUCKET}/*"
-  }]
-}
-EOF
-)"
-aws s3api put-bucket-cors --bucket "$UPLOADS_BUCKET" --cors-configuration "$(cat <<EOF
-{
-  "CORSRules": [{
-    "AllowedOrigins": ["https://vitap.in", "https://www.vitap.in", "https://admin.vitap.in", "https://omegle-web.pages.dev", "https://omegle-admin.pages.dev"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "MaxAgeSeconds": 3600
-  }]
-}
-EOF
-)"
 aws s3api put-public-access-block --bucket "$OPS_BUCKET" --public-access-block-configuration \
   'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
 aws s3 cp "${ROOT}/infra/compose.yml" "s3://${OPS_BUCKET}/compose.yml"
@@ -113,6 +94,12 @@ fi
 echo "== iam roles =="
 if ! aws iam get-role --role-name omegle-gha >/dev/null 2>&1; then
   aws iam create-role --role-name omegle-gha --assume-role-policy-document "file://${ROOT}/infra/iam/gha-trust.json" >/dev/null
+else
+  # Always re-apply the trust policy. Creating it only when the role is absent means a
+  # tightened condition (e.g. restricting `sub` to refs/heads/main) never reaches a role that
+  # already exists, so the original permissive policy silently stays in force.
+  aws iam update-assume-role-policy --role-name omegle-gha \
+    --policy-document "file://${ROOT}/infra/iam/gha-trust.json" >/dev/null
 fi
 aws iam put-role-policy --role-name omegle-gha --policy-name omegle-gha --policy-document "$(cat <<EOF
 {
@@ -199,14 +186,6 @@ aws iam put-role-policy --role-name omegle-ec2 --policy-name omegle-ec2 --policy
     },
     {
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::${UPLOADS_BUCKET}",
-        "arn:aws:s3:::${UPLOADS_BUCKET}/*"
-      ]
-    },
-    {
-      "Effect": "Allow",
       "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"],
       "Resource": "arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/omegle/prod*"
     }
@@ -231,9 +210,43 @@ if [[ "$SG_ID" == "None" || -z "$SG_ID" ]]; then
     --tag-specifications "ResourceType=security-group,Tags=[{$(tag Project "$PROJECT")},{$(tag Name omegle-api)}]" \
     --query GroupId --output text)"
 fi
+# Ingress is restricted to Cloudflare's published edge ranges.
+#
+# Opening 80/443 to 0.0.0.0/0 (as this previously did) leaves the origin IP directly
+# reachable, so Cloudflare's WAF, bot management, and rate limiting can all be skipped by
+# talking to the instance address. Combined with the origin's EDGE_SECRET check this gives
+# two independent barriers against origin-direct traffic.
+#
+# Refresh the list with:
+#   curl -s https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6
+CF_IPV4=(
+  173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22
+  141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20
+  197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13
+  104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+)
+CF_IPV6=(
+  2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32
+  2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+)
+
+# Drop any pre-existing world-open rules from earlier runs of this script.
 for port in 80 443; do
-  aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions \
-    "IpProtocol=tcp,FromPort=${port},ToPort=${port},IpRanges=[{CidrIp=0.0.0.0/0,Description=http}]" 2>/dev/null || true
+  aws ec2 revoke-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions \
+    "IpProtocol=tcp,FromPort=${port},ToPort=${port},IpRanges=[{CidrIp=0.0.0.0/0}]" 2>/dev/null || true
+  aws ec2 revoke-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions \
+    "IpProtocol=tcp,FromPort=${port},ToPort=${port},Ipv6Ranges=[{CidrIpv6=::/0}]" 2>/dev/null || true
+done
+
+for port in 80 443; do
+  for cidr in "${CF_IPV4[@]}"; do
+    aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions \
+      "IpProtocol=tcp,FromPort=${port},ToPort=${port},IpRanges=[{CidrIp=${cidr},Description=cloudflare}]" 2>/dev/null || true
+  done
+  for cidr in "${CF_IPV6[@]}"; do
+    aws ec2 authorize-security-group-ingress --region "$REGION" --group-id "$SG_ID" --ip-permissions \
+      "IpProtocol=tcp,FromPort=${port},ToPort=${port},Ipv6Ranges=[{CidrIpv6=${cidr},Description=cloudflare}]" 2>/dev/null || true
+  done
 done
 
 echo "== eip =="
@@ -322,7 +335,6 @@ echo "INSTANCE_ID=${INSTANCE_ID}"
 echo "EIP=${EIP}"
 echo "SG_ID=${SG_ID}"
 echo "ALLOC_ID=${ALLOC_ID}"
-echo "UPLOADS_BUCKET=${UPLOADS_BUCKET}"
 echo "OPS_BUCKET=${OPS_BUCKET}"
 echo "ECR=${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO}"
 echo "GHA_ROLE=arn:aws:iam::${ACCOUNT}:role/omegle-gha"
