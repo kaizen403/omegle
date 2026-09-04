@@ -84,3 +84,4 @@ CLAUDE.md
 .claude/
 .omo/
 .wrangler/
+*.rdb
