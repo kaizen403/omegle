@@ -50,14 +50,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # OIDC, not long-lived keys. Static AWS_ACCESS_KEY_ID/SECRET stored as repo secrets
-      # never expire and grant production shell access to anyone who can read them or land a
-      # workflow change; the omegle-gha role plus `id-token: write` already exist for exactly
-      # this. Credentials are now short-lived and scoped to this repo's main branch.
+      # Static deploy-user keys.
+      #
+      # OIDC is the better credential here and the workflow is ready for it, but the
+      # `omegle-gha` role's trust policy in AWS does not currently permit this repo's token —
+      # `infra/iam/gha-trust.json` is only applied when bootstrap-aws.sh is run, and it has
+      # not been. Switching to OIDC before that failed every deploy with
+      # "Not authorized to perform sts:AssumeRoleWithWebIdentity".
+      #
+      # TO MOVE TO OIDC: run `infra/bootstrap-aws.sh` (it now re-applies the trust policy on
+      # every run, scoped to refs/heads/main and environment:production), set the
+      # AWS_DEPLOY_ROLE_ARN repo variable, then swap the two `with:` blocks below and delete
+      # the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY repo secrets.
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          role-session-name: omegle-api-deploy-${{ github.run_id }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: aws-actions/amazon-ecr-login@v2
