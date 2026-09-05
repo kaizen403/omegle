@@ -13,8 +13,8 @@ export interface RtcSignal {
   /**
    * Peer-connection generation, chosen by the clients. Relayed untouched so both sides can
    * tell a signal for the connection they are on from one for a connection they have already
-   * replaced (after a reconnect or an ICE failure). Absent from older clients, which is read
-   * as generation 0.
+   * replaced (after a reconnect or an ICE failure). Absent from older clients; the receiver
+   * treats a missing epoch as its current generation, not as 0.
    */
   epoch?: number;
 }

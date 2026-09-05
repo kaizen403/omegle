@@ -338,8 +338,11 @@ export class PeerManager {
   private async processSignal(signal: RtcSignal): Promise<void> {
     if (!this.state.isJoined || this.state.isLeaving) return;
 
-    const epoch = signal.epoch ?? 0;
-    if (epoch < this.state.epoch) return; // From a generation we already replaced.
+    // Older clients and older relays omit epoch. Treat that as "this generation" so a
+    // resume that has already advanced past 0 can still apply their answer and candidates.
+    // Only an explicit older number is a signal for a connection we have already replaced.
+    const epoch = signal.epoch ?? this.state.epoch;
+    if (epoch < this.state.epoch) return;
     if (epoch > this.state.epoch) {
       // The partner rebuilt; follow them before applying anything they sent. Their first
       // signal on a new generation is the offer that lays it out, so we answer rather than

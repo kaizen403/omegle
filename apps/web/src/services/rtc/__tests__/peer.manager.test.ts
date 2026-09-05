@@ -430,6 +430,33 @@ describe('PeerManager', () => {
     await answerer.manager.leave();
   });
 
+  it('applies epoch-less answers and candidates to the current generation', async () => {
+    // Mixed rollout: we rebuilt after a resume, the partner is still on the old client
+    // (or an old relay stripped the field). Their answer must not be read as generation 0.
+    const offerer = createManager();
+    await offerer.manager.join({ ...joinConfig, isOfferer: true }, offerer.send, null, null);
+    await offerer.manager.rebuild(5);
+    expect(offerer.manager.getEpoch()).toBe(5);
+    expect(offerer.pc().signalingState).toBe('have-local-offer');
+
+    await offerer.manager.handleSignal({ type: 'answer', sdp: 'answer-from-old-client' });
+    expect(offerer.pc().signalingState).toBe('stable');
+    expect(offerer.pc().setRemoteDescription).toHaveBeenCalledWith({
+      type: 'answer',
+      sdp: 'answer-from-old-client',
+    });
+
+    await offerer.manager.handleSignal({
+      type: 'candidate',
+      candidate: 'candidate:9 1 UDP 1 9.9.9.9 9 typ host',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    });
+    expect(offerer.pc().addedCandidates).toHaveLength(1);
+
+    await offerer.manager.leave();
+  });
+
   it('rebuild() starts a new generation, re-attaches tracks, and is a no-op when not newer or when healthy', async () => {
     const states: string[] = [];
     const offerer = createManager({ onConnectionState: (s) => states.push(s) });
