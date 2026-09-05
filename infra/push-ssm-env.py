@@ -32,6 +32,7 @@ KEEP_FROM_LOCAL = {
 
 PROD = {
     "NODE_ENV": "production",
+    "LOG_LEVEL": "debug",
     "BETTER_AUTH_URL": "https://api.vitap.in",
     "ALLOWED_ORIGINS": ",".join(
         [

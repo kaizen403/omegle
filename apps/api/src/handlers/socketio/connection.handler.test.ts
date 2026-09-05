@@ -169,3 +169,46 @@ describe('ConnectionHandler.validateJoinRequest', () => {
     expect(handler.validateJoinRequest('join').valid).toBe(false);
   });
 });
+
+describe('ConnectionHandler.authenticate', () => {
+  let handler: ConnectionHandler;
+
+  beforeEach(() => {
+    handler = new ConnectionHandler({} as never, new Map());
+  });
+
+  afterEach(() => {
+    handler.destroy();
+  });
+
+  function authSocket(auth: Record<string, unknown> = {}) {
+    return {
+      id: 's-auth',
+      handshake: {
+        headers: {},
+        auth,
+        query: {},
+        address: '203.0.113.5',
+      },
+      conn: { remoteAddress: '203.0.113.5' },
+    } as never;
+  }
+
+  it('accepts the configured API key', () => {
+    expect(handler.authenticate(authSocket({ apiKey: 'test-api-key' }))).toEqual({ ok: true });
+  });
+
+  it('rejects a missing key with the client-visible auth error', () => {
+    expect(handler.authenticate(authSocket())).toEqual({
+      ok: false,
+      reason: 'Authentication failed',
+    });
+  });
+
+  it('rejects a wrong key with the client-visible auth error', () => {
+    expect(handler.authenticate(authSocket({ apiKey: 'wrong-key' }))).toEqual({
+      ok: false,
+      reason: 'Authentication failed',
+    });
+  });
+});

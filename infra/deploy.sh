@@ -67,6 +67,9 @@ printf 'CADDY_BIND=%s\n' "$CADDY_BIND" >> "${APP_DIR}/.image.env"
 if grep -q '^EDGE_SECRET=' "${APP_DIR}/.env"; then
   grep '^EDGE_SECRET=' "${APP_DIR}/.env" >> "${APP_DIR}/.image.env"
 fi
+if grep -q '^LOG_LEVEL=' "${APP_DIR}/.env"; then
+  grep '^LOG_LEVEL=' "${APP_DIR}/.env" >> "${APP_DIR}/.image.env"
+fi
 
 docker compose --env-file "${APP_DIR}/.image.env" -f "${APP_DIR}/compose.yml" pull
 docker compose --env-file "${APP_DIR}/.image.env" -f "${APP_DIR}/compose.yml" up -d --remove-orphans

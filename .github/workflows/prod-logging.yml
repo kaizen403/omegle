@@ -1,0 +1,124 @@
+name: Prod logging
+
+# Apply LOG_LEVEL on the live API box and print redacted auth/join lines.
+# Does not rebuild the image. Shares the deploy-api-prod lock with Deploy API.
+on:
+  workflow_dispatch:
+    inputs:
+      log_level:
+        description: Winston LOG_LEVEL for the API container
+        type: choice
+        options: [debug, info, warn]
+        default: debug
+
+concurrency:
+  group: deploy-api-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  apply:
+    name: Set LOG_LEVEL and read auth logs
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fingerprint Pages NEXT_PUBLIC_API_KEY
+        env:
+          NEXT_PUBLIC_API_KEY: ${{ secrets.NEXT_PUBLIC_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, os
+          val = os.environ.get("NEXT_PUBLIC_API_KEY") or ""
+          digest = hashlib.sha256(val.encode()).hexdigest()[:12] if val else "missing"
+          print(f"pages_api_key_fingerprint={digest} len={len(val)} set={'yes' if bool(val) else 'no'}")
+          PY
+
+      - name: Upload compose with LOG_LEVEL
+        run: aws s3 cp infra/compose.yml "s3://${{ vars.OPS_BUCKET }}/compose.yml"
+
+      - name: Apply LOG_LEVEL and fetch auth logs
+        env:
+          LOG_LEVEL: ${{ inputs.log_level }}
+          OPS_BUCKET: ${{ vars.OPS_BUCKET }}
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+        run: |
+          SCRIPT="$(mktemp)"
+          cat > "$SCRIPT" <<EOF
+          set -euo pipefail
+          APP_DIR=/opt/omegle
+          cd "\$APP_DIR"
+          LEVEL='${LOG_LEVEL}'
+          if grep -q '^LOG_LEVEL=' .env; then
+            sed -i "s/^LOG_LEVEL=.*/LOG_LEVEL=\${LEVEL}/" .env
+          else
+            printf 'LOG_LEVEL=%s\n' "\${LEVEL}" >> .env
+          fi
+          if grep -q '^LOG_LEVEL=' .image.env; then
+            sed -i "s/^LOG_LEVEL=.*/LOG_LEVEL=\${LEVEL}/" .image.env
+          else
+            printf 'LOG_LEVEL=%s\n' "\${LEVEL}" >> .image.env
+          fi
+          aws s3 cp "s3://${OPS_BUCKET}/compose.yml" "\${APP_DIR}/compose.yml"
+          docker compose --env-file "\${APP_DIR}/.image.env" -f "\${APP_DIR}/compose.yml" up -d --force-recreate --no-deps api
+          for _ in \$(seq 1 30); do
+            if curl -fsS http://127.0.0.1/health >/dev/null; then
+              echo "API healthy"
+              break
+            fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import hashlib, pathlib
+          text = pathlib.Path("/opt/omegle/.env").read_text()
+          values = {}
+          for line in text.splitlines():
+              if "=" in line and not line.startswith("#"):
+                  key, value = line.split("=", 1)
+                  values[key] = value
+          api_key = values.get("API_KEY", "")
+          digest = hashlib.sha256(api_key.encode()).hexdigest()[:12] if api_key else "missing"
+          print(f"server_api_key_fingerprint={digest} len={len(api_key)} set={'yes' if bool(api_key) else 'no'}")
+          print(f"log_level_env={values.get('LOG_LEVEL', 'unset')}")
+          PY
+          echo "container_LOG_LEVEL=\$(docker compose --env-file "\${APP_DIR}/.image.env" -f "\${APP_DIR}/compose.yml" exec -T api printenv LOG_LEVEL || true)"
+          echo "----- recent auth/join logs -----"
+          docker compose --env-file "\${APP_DIR}/.image.env" -f "\${APP_DIR}/compose.yml" logs --tail 250 api \\
+            | grep -E 'AUTH REJECTED|RATE LIMIT|CAPACITY|PER-IP CAP|JOIN |Logger initialized|SOCKET.IO CONNECTED|SOCKET.IO DISCONNECTED' \\
+            || echo "(no matching lines in last 250)"
+          EOF
+
+          PARAMS="$(python3 -c 'import json,sys; print(json.dumps({"commands":[open(sys.argv[1]).read()]}))' "$SCRIPT")"
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name AWS-RunShellScript \
+            --comment "omegle-prod-logging ${GITHUB_SHA}" \
+            --timeout-seconds 180 \
+            --parameters "$PARAMS" \
+            --query 'Command.CommandId' \
+            --output text)"
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "${INSTANCE_ID}"
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${INSTANCE_ID}" \
+            --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
+            --output json
+          STATUS="$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${INSTANCE_ID}" \
+            --query 'Status' \
+            --output text)"
+          test "$STATUS" = "Success"

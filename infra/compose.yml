@@ -53,6 +53,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_TLS: "false"
+      # Console is docker json-file. Handshake rejects already log at warn; debug adds
+      # join/match traces. Read with: docker compose --env-file .image.env logs -f api
+      # Interpolated from .image.env (copied from SSM .env by deploy.sh). Default debug.
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
     expose:
       - "8080"
     depends_on:
