@@ -1,4 +1,33 @@
-import { isOriginAllowed } from './cors';
+import { Request, Response } from 'express';
+import { corsMiddleware, isOriginAllowed } from './cors';
+
+type HeaderBag = Record<string, string>;
+
+function mockResponse(): Response & { headers: HeaderBag; statusCode: number } {
+  const headers: HeaderBag = {};
+  const res = {
+    headers,
+    statusCode: 0,
+    header(name: string, value: string) {
+      headers[name.toLowerCase()] = value;
+      return res;
+    },
+    status(code: number) {
+      res.statusCode = code;
+      return res;
+    },
+    send() {
+      return res;
+    },
+    end() {
+      return res;
+    },
+    json() {
+      return res;
+    },
+  };
+  return res as unknown as Response & { headers: HeaderBag; statusCode: number };
+}
 
 describe('isOriginAllowed', () => {
   const patterns = ['https://omegle.example.com', '*.pages.dev', 'http://localhost:3000'];
@@ -57,5 +86,22 @@ describe('isOriginAllowed', () => {
   it('rejects unparseable input', () => {
     expect(isOriginAllowed('not a url', patterns)).toBe(false);
     expect(isOriginAllowed('', patterns)).toBe(false);
+  });
+});
+
+describe('corsMiddleware', () => {
+  it('lists user-agent on OPTIONS so Better Auth fetch is not blocked', () => {
+    const req = {
+      method: 'OPTIONS',
+      headers: { origin: 'https://omegle.example.com' },
+    } as Request;
+    const res = mockResponse();
+    const next = jest.fn();
+
+    corsMiddleware(req, res, next);
+
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-headers'].toLowerCase()).toContain('user-agent');
+    expect(next).not.toHaveBeenCalled();
   });
 });
