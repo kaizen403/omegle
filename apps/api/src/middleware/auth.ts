@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getAdminFromHeaders, AuthAdmin } from '../lib/session';
+import { getAdminFromHeaders, isFullAdmin, AuthAdmin } from '../lib/session';
 
 export type { AuthAdmin };
 
@@ -48,7 +48,12 @@ export function requireRole(...allowedRoles: string[]) {
       });
     }
 
-    if (!allowedRoles.includes(user.role)) {
+    const allowed = new Set(allowedRoles);
+    const granted =
+      allowed.has(user.role) ||
+      (isFullAdmin(user.role) && (allowed.has('admin') || allowed.has('super-admin')));
+
+    if (!granted) {
       return res.status(403).json({
         success: false,
         message: 'Insufficient permissions',

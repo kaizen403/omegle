@@ -12,6 +12,11 @@ export interface AuthAdmin {
   twoFactorEnabled: boolean;
 }
 
+/** Any signed-in admin has full console access. Leftover `super-admin` rows stay valid. */
+export function isFullAdmin(role: string | undefined | null): boolean {
+  return role === 'admin' || role === 'super-admin';
+}
+
 function toAuthAdmin(session: { user: Record<string, unknown> }): AuthAdmin | null {
   const user = session.user;
   if (user.isActive === false) {
