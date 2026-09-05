@@ -10,6 +10,10 @@ on:
         type: choice
         options: [debug, info, warn]
         default: debug
+      deploy_web_with_server_key:
+        description: Rebuild vitap.in with the SSM API_KEY so user sockets authenticate
+        type: boolean
+        default: true
 
 concurrency:
   group: deploy-api-prod
@@ -122,3 +126,68 @@ jobs:
             --query 'Status' \
             --output text)"
           test "$STATUS" = "Success"
+
+  deploy-web-with-server-key:
+    name: Rebuild Pages with SSM API_KEY
+    if: ${{ inputs.deploy_web_with_server_key }}
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Load API_KEY from SSM
+        working-directory: .
+        run: |
+          KEY="$(aws ssm get-parameter --name /omegle/prod/API_KEY --with-decryption --query Parameter.Value --output text)"
+          KEY="$(printf '%s' "$KEY" | tr -d '\r\n')"
+          if [ -z "$KEY" ]; then
+            echo "SSM API_KEY is empty" >&2
+            exit 1
+          fi
+          echo "::add-mask::$KEY"
+          echo "NEXT_PUBLIC_API_KEY=$KEY" >> "$GITHUB_ENV"
+          KEY="$KEY" python3 -c 'import hashlib,os; k=os.environ["KEY"]; print(f"ssm_api_key_fingerprint={hashlib.sha256(k.encode()).hexdigest()[:12]} len={len(k)}")'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Get pnpm store directory
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-web-${{ hashFiles('apps/web/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-web-
+
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - run: pnpm run build
+        env:
+          NEXT_PUBLIC_MAINTENANCE_MODE: ${{ vars.NEXT_PUBLIC_MAINTENANCE_MODE }}
+          NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
+          NEXT_PUBLIC_API_KEY: ${{ env.NEXT_PUBLIC_API_KEY }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/out --project-name=omegle-web --commit-dirty=true
