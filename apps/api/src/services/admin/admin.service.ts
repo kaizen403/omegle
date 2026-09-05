@@ -42,7 +42,7 @@ export class AdminService {
 
   async verifySuperAdmin(uid: string): Promise<boolean> {
     const admin = await this.getAdminById(uid);
-    return admin?.role === 'super-admin';
+    return Boolean(admin && (admin.role === 'admin' || admin.role === 'super-admin'));
   }
 
   async createAdmin(data: {

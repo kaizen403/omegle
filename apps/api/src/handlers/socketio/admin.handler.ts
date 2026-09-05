@@ -320,7 +320,6 @@ export class AdminHandler {
     );
     socket.on('close_room', (data: any) => this.handleCloseRoom(socket, data));
     socket.on('clear_queue', (data: any) => this.handleClearQueue(socket, data));
-    // Room monitoring - super-admin only
     socket.on('monitor_room', async (data: any) => await this.handleMonitorRoom(socket, data));
     socket.on('unmonitor_room', (data: any) => this.handleUnmonitorRoom(socket, data));
     socket.on('ping', () => socket.emit('pong'));
@@ -1074,18 +1073,6 @@ export class AdminHandler {
       return;
     }
 
-    // Check if admin has permission (super-admin only)
-    const admin = await adminService.getAdminById(socket.adminId);
-    if (!admin || admin.role !== 'super-admin') {
-      socket.emit('error', {
-        message: 'Insufficient permissions. Only super-admins can monitor rooms.',
-      });
-      logger.warn(
-        `[ADMIN] Admin ${socket.adminId} (${admin?.role}) attempted to monitor room without permission`
-      );
-      return;
-    }
-
     const roomId = data?.roomId;
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
@@ -1145,13 +1132,6 @@ export class AdminHandler {
   private async handleUnmonitorRoom(socket: AdminSocket, data: any): Promise<void> {
     if (!socket.isAuthenticated || !socket.adminId) {
       socket.emit('error', { message: 'Not authenticated' });
-      return;
-    }
-
-    // Check if admin has permission (super-admin only)
-    const admin = await adminService.getAdminById(socket.adminId);
-    if (!admin || admin.role !== 'super-admin') {
-      socket.emit('error', { message: 'Insufficient permissions' });
       return;
     }
 
