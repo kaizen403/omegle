@@ -68,7 +68,7 @@ export const WelcomeForm = () => {
 
     if (!isOnline) {
       setServiceAvailable(false);
-      setServiceMessage('Chat is closed right now. It opens daily from 9 PM to 2 AM IST.');
+      setServiceMessage('Chat is closed right now.');
       return;
     }
 

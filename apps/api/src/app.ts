@@ -10,6 +10,7 @@ import {
   StatusScheduler,
   WINDOW_OPEN_HOUR,
   WINDOW_CLOSE_HOUR,
+  istHour,
 } from './services/scheduler/statusScheduler';
 import { config, configWarnings } from './config';
 import { logger } from './utils/logger';
@@ -236,6 +237,7 @@ export class App {
           changedBy
         );
         this.systemStatus = state.open;
+        this.statusScheduler?.noteExternalChange(state.open);
 
         if (this.socketIOManager) {
           const adminHandler = this.socketIOManager.getAdminHandler();
@@ -405,7 +407,25 @@ export class App {
 
       logger.info('✅ Socket.IO initialized with namespaces: / and /admin');
 
-      // Initialize and start Status Scheduler (11 PM - 3 AM IST)
+      const restored = await maintenanceService.init();
+      this.systemStatus = restored.open;
+
+      // The old scheduler forced the site closed any time it was not 9 PM–2 AM, which
+      // overwrote the admin toggle. A leftover daytime close from that logic should not
+      // keep the product down — the dashboard is in charge until 2 AM.
+      if (
+        !restored.open &&
+        restored.changedBy === 'scheduler' &&
+        istHour() !== WINDOW_CLOSE_HOUR
+      ) {
+        const reopened = await maintenanceService.set(true, null, 'scheduler');
+        this.systemStatus = reopened.open;
+        this.socketIOManager.applyMaintenanceState(true, null);
+        logger.warn(
+          '[SCHEDULER] Reopened a daytime auto-close. Admin toggle is in charge until 2 AM IST.'
+        );
+      }
+
       this.statusScheduler = new StatusScheduler(
         (status: boolean) => {
           // Route through the same persisted state the admin toggle uses, so a scheduled
@@ -415,7 +435,7 @@ export class App {
           void maintenanceService
             .set(
               status,
-              status ? null : 'The service is closed for the night. We reopen at 9 PM IST.',
+              status ? null : 'The service is closed for the night.',
               'scheduler'
             )
             .then((state) => {
@@ -440,9 +460,10 @@ export class App {
           }
         }
       );
+      this.statusScheduler.noteExternalChange(this.systemStatus);
       this.statusScheduler.start();
       logger.info(
-        `✅ Status scheduler started (${WINDOW_OPEN_HOUR}:00-${WINDOW_CLOSE_HOUR}:00 IST daily)`
+        `✅ Status scheduler started (auto-close ${WINDOW_CLOSE_HOUR}:00 IST; box up from ${WINDOW_OPEN_HOUR}:00)`
       );
 
       // Inject socketIOManager into admin routes

@@ -1,23 +1,14 @@
 /**
- * Status Scheduler Service
+ * Nightly auto-close.
  *
- * Opens the service for the nightly peak window and closes it outside of it. The window is
- * 9 PM to 2 AM IST, which CROSSES MIDNIGHT — the previous 3 PM to 11 PM window did not, and
- * the old hour-equality logic could not express one that does.
+ * The admin dashboard toggle is the source of truth while the box is up. This
+ * scheduler only does one thing: at 2:00 IST it takes the public site down.
+ * It does not force the site closed all afternoon, and it does not undo an
+ * admin who just opened (or closed) the product.
  *
- * Two bugs came out of that old approach and are fixed here:
- *
- * 1. It only acted on the exact hour a boundary was crossed. A process that started at
- *    11 PM — inside the window — sat closed until the next 9 PM, because no boundary fired
- *    while it was running. State is now derived from the current time on every tick, so
- *    booting mid-window opens immediately.
- *
- * 2. It set an in-memory flag that nothing enforced and nothing persisted. It now goes
- *    through the same maintenance state as the admin toggle, so a scheduled close actually
- *    stops users joining and survives a restart.
- *
- * The EC2 instance itself is started and stopped by EventBridge on the same schedule
- * (see infra/bootstrap-aws.sh); these hours must be kept in sync with those cron rules.
+ * The EC2 instance itself is still started and stopped by EventBridge
+ * (see infra/bootstrap-aws.sh). WINDOW_OPEN_HOUR is when the box comes up;
+ * WINDOW_CLOSE_HOUR is when this process closes the site and the box stops.
  */
 
 import { logger } from '../../utils/logger';
@@ -54,39 +45,61 @@ export function istHour(now: number = Date.now()): number {
   return new Date(now + IST_OFFSET_MS).getUTCHours();
 }
 
+/** The one hour this scheduler is allowed to force the site down. */
+export function isAutoCloseHour(hour: number, closeHour = WINDOW_CLOSE_HOUR): boolean {
+  return hour === closeHour;
+}
+
 export class StatusScheduler {
   private statusSetter: (status: boolean) => void;
   private broadcastStatus: (status: boolean) => void;
   private schedulerInterval: NodeJS.Timeout | null = null;
+  private readonly now: () => number;
 
-  /** Last state this scheduler applied, so it only acts on an actual change. */
+  /**
+   * Last state this scheduler applied. `null` means it has not forced anything
+   * this process — an admin toggle is in charge.
+   */
   private lastApplied: boolean | null = null;
 
-  constructor(statusSetter: (status: boolean) => void, broadcastStatus: (status: boolean) => void) {
+  constructor(
+    statusSetter: (status: boolean) => void,
+    broadcastStatus: (status: boolean) => void,
+    now: () => number = Date.now
+  ) {
     this.statusSetter = statusSetter;
     this.broadcastStatus = broadcastStatus;
+    this.now = now;
     logger.info(
-      `[SCHEDULER] Initialized - open ${WINDOW_OPEN_HOUR}:00 to ${WINDOW_CLOSE_HOUR}:00 IST daily`
+      `[SCHEDULER] Initialized — auto-close at ${WINDOW_CLOSE_HOUR}:00 IST; admin toggle otherwise`
     );
   }
 
-  private checkSchedule(): void {
-    const hour = istHour();
-    const shouldBeOpen = isWithinWindow(hour);
+  /** Keep the 2 AM close from fighting a toggle the admin just made. */
+  noteExternalChange(open: boolean): void {
+    this.lastApplied = open;
+  }
 
-    // Idempotent: derive the desired state and only act when it differs from what we last
-    // applied, rather than firing on an exact boundary hour and hoping we were running.
-    if (this.lastApplied === shouldBeOpen) {
+  /** Exposed for tests. */
+  tick(): void {
+    this.checkSchedule();
+  }
+
+  private checkSchedule(): void {
+    const hour = istHour(this.now());
+    if (!isAutoCloseHour(hour)) {
+      return;
+    }
+    if (this.lastApplied === false) {
       return;
     }
 
     logger.warn(
-      `[SCHEDULER] ${hour}:00 IST - turning system ${shouldBeOpen ? 'ON' : 'OFF'} ` +
-        `(window ${WINDOW_OPEN_HOUR}:00-${WINDOW_CLOSE_HOUR}:00 IST)`
+      `[SCHEDULER] ${hour}:00 IST — scheduled close. Admin can reopen from the dashboard until the box stops.`
     );
-    this.lastApplied = shouldBeOpen;
-    this.statusSetter(shouldBeOpen);
-    this.broadcastStatus(shouldBeOpen);
+    this.lastApplied = false;
+    this.statusSetter(false);
+    this.broadcastStatus(false);
   }
 
   public start(): void {
