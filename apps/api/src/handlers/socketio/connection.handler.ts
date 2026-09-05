@@ -58,7 +58,21 @@ export class ConnectionHandler {
     const clientIP = this.getClientIP(socket);
 
     if (typeof apiKey !== 'string' || !config.apiKey || !safeEqual(apiKey, config.apiKey)) {
-      socketLogger.warn(`[AUTH REJECTED] ${clientIP} - Invalid or missing API key`);
+      // Lengths and cause only — never the key itself. This is how we tell "Pages
+      // NEXT_PUBLIC_API_KEY drifted from API_KEY" apart from an empty client bundle.
+      const receivedLen = typeof apiKey === 'string' ? apiKey.length : 0;
+      const expectedLen = config.apiKey.length;
+      const cause = !config.apiKey
+        ? 'server_key_unset'
+        : typeof apiKey !== 'string' || apiKey.length === 0
+          ? 'client_key_missing'
+          : receivedLen !== expectedLen
+            ? 'length_mismatch'
+            : 'value_mismatch';
+      socketLogger.warn(
+        `[AUTH REJECTED] ${clientIP} - Invalid or missing API key ` +
+          `(cause=${cause} receivedLen=${receivedLen} expectedLen=${expectedLen})`
+      );
       return { ok: false, reason: 'Authentication failed' };
     }
 

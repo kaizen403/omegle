@@ -296,6 +296,9 @@ export class SocketIOManager {
       // able to connect, match and chat.
       if (!maintenanceService.isOpen()) {
         const note = maintenanceService.snapshot().message;
+        socketLogger.warn(
+          `[JOIN REJECTED] UID: ${socket.uid ?? 'unregistered'} IP: ${ip} - site closed`
+        );
         socket.emit('maintenance', { maintenance: true, message: note });
         socket.emit('match', {
           status: 'error',
@@ -306,6 +309,7 @@ export class SocketIOManager {
 
       // Per-IP budget first: reject before touching Redis, Neon, or the geolocation API.
       if (!this.ipJoinLimiter.tryConsume(ip)) {
+        socketLogger.warn(`[JOIN RATE LIMITED] UID: ${socket.uid ?? 'unregistered'} IP: ${ip}`);
         this.connectionHandler.sendError(socket, 'Too many requests. Please slow down.');
         return;
       }

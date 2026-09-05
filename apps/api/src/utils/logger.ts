@@ -6,20 +6,53 @@ import path from 'path';
 const isDevelopment = config.nodeEnv === 'development';
 const isProduction = config.nodeEnv === 'production';
 
+const SENSITIVE_META_KEY = /key|token|secret|password|authorization|cookie|passwd|credential/i;
+
+/**
+ * Strip secrets from structured log metadata before they hit stdout or rotating files.
+ * Values are replaced with a length marker so we can still see "empty vs set" mismatches.
+ */
+export function redactLogMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  const skip = new Set(['level', 'message', 'timestamp', 'splat']);
+
+  const redact = (key: string, value: unknown, depth: number): unknown => {
+    if (SENSITIVE_META_KEY.test(key)) {
+      if (typeof value === 'string') {
+        return `[redacted len=${value.length}]`;
+      }
+      return value == null ? value : '[redacted]';
+    }
+    if (Array.isArray(value)) {
+      return depth >= 3 ? '[truncated]' : value.map((item, i) => redact(String(i), item, depth + 1));
+    }
+    if (value && typeof value === 'object' && depth < 4) {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([nestedKey, nestedValue]) => [
+          nestedKey,
+          redact(nestedKey, nestedValue, depth + 1),
+        ])
+      );
+    }
+    return value;
+  };
+
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (skip.has(key) || value === undefined || value === null) {
+      continue;
+    }
+    out[key] = redact(key, value, 0);
+  }
+  return out;
+}
+
 // Custom format for detailed logging
 const detailedFormat = winston.format.printf(({ level, message, timestamp, ...metadata }) => {
   let msg = `${timestamp} [${level.toUpperCase()}]: ${message}`;
 
-  // Add metadata if present
-  if (Object.keys(metadata).length > 0) {
-    // Filter out empty objects and format nicely
-    const filteredMetadata = Object.entries(metadata)
-      .filter(([_, value]) => value !== undefined && value !== null)
-      .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
-
-    if (Object.keys(filteredMetadata).length > 0) {
-      msg += ` | ${JSON.stringify(filteredMetadata)}`;
-    }
+  const filteredMetadata = redactLogMetadata(metadata as Record<string, unknown>);
+  if (Object.keys(filteredMetadata).length > 0) {
+    msg += ` | ${JSON.stringify(filteredMetadata)}`;
   }
 
   return msg;
