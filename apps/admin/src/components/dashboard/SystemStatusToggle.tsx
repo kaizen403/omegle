@@ -78,8 +78,8 @@ export function SystemStatusToggle({
             </div>
             <div className="mt-0.5 text-xs text-slate-500 sm:text-sm">
               {systemStatus
-                ? "Users can connect and start chats normally."
-                : "The public site is down. Nobody can connect."}
+                ? "Users can connect and start chats normally. Auto-closes at 2 AM IST."
+                : "The public site is down. Nobody can connect. This switch reopens it."}
               {attribution && (
                 <span className="text-slate-400"> ({attribution})</span>
               )}

@@ -37,7 +37,7 @@ export const JoinButton: React.FC<JoinButtonProps> = ({
         className={cn(base, 'bg-sky text-text-3 h-auto flex-col py-3')}
       >
         <span className="text-text text-[15px] font-semibold">Chat is closed</span>
-        <span className="text-sm font-normal">Open 9 PM to 2 AM IST</span>
+        <span className="text-sm font-normal">Check back soon</span>
       </button>
     );
   }

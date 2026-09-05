@@ -1,4 +1,11 @@
-import { isWithinWindow, istHour, WINDOW_OPEN_HOUR, WINDOW_CLOSE_HOUR } from './statusScheduler';
+import {
+  isWithinWindow,
+  isAutoCloseHour,
+  istHour,
+  StatusScheduler,
+  WINDOW_OPEN_HOUR,
+  WINDOW_CLOSE_HOUR,
+} from './statusScheduler';
 
 /**
  * The operating window is 21:00-02:00 IST, which wraps past midnight. The previous
@@ -54,6 +61,65 @@ describe('isWithinWindow (21:00 - 02:00 IST)', () => {
   it('uses the configured constants', () => {
     expect(WINDOW_OPEN_HOUR).toBe(21);
     expect(WINDOW_CLOSE_HOUR).toBe(2);
+  });
+});
+
+describe('isAutoCloseHour', () => {
+  it('is only 02:00 IST', () => {
+    expect(isAutoCloseHour(2)).toBe(true);
+    expect(isAutoCloseHour(1)).toBe(false);
+    expect(isAutoCloseHour(17)).toBe(false);
+    expect(isAutoCloseHour(21)).toBe(false);
+  });
+});
+
+describe('StatusScheduler', () => {
+  it('does not close the site during the afternoon — admin is in charge', () => {
+    const applied: boolean[] = [];
+    // 12:00 UTC = 17:30 IST
+    const now = Date.parse('2026-09-04T12:00:00Z');
+    const scheduler = new StatusScheduler(
+      (status) => applied.push(status),
+      () => undefined,
+      () => now
+    );
+    scheduler.noteExternalChange(true);
+    scheduler.start();
+    expect(applied).toEqual([]);
+    scheduler.stop();
+  });
+
+  it('closes at 02:00 IST and does not fire again', () => {
+    const applied: boolean[] = [];
+    // 20:30 UTC = 02:00 IST
+    const now = Date.parse('2026-09-04T20:30:00Z');
+    const scheduler = new StatusScheduler(
+      (status) => applied.push(status),
+      () => undefined,
+      () => now
+    );
+    scheduler.noteExternalChange(true);
+    scheduler.start();
+    expect(applied).toEqual([false]);
+    scheduler.tick();
+    expect(applied).toEqual([false]);
+    scheduler.stop();
+  });
+
+  it('does not undo an admin who reopened after the scheduled close hour passed', () => {
+    const applied: boolean[] = [];
+    // 12:00 UTC = 17:30 IST — not the close hour
+    const now = Date.parse('2026-09-04T12:00:00Z');
+    const scheduler = new StatusScheduler(
+      (status) => applied.push(status),
+      () => undefined,
+      () => now
+    );
+    scheduler.start();
+    scheduler.noteExternalChange(true);
+    scheduler.tick();
+    expect(applied).toEqual([]);
+    scheduler.stop();
   });
 });
 
