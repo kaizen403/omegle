@@ -46,10 +46,10 @@ describe('RTC Config', () => {
   describe('getVideoSettingsForNetwork', () => {
     it('should return excellent settings for excellent quality', () => {
       expect(getVideoSettingsForNetwork('excellent')).toEqual({
-        width: 1920,
-        height: 1080,
+        width: 1280,
+        height: 720,
         frameRate: 30,
-        maxBitrate: 2500000,
+        maxBitrate: 1_500_000,
       });
     });
 
@@ -58,7 +58,7 @@ describe('RTC Config', () => {
         width: 1280,
         height: 720,
         frameRate: 30,
-        maxBitrate: 1500000,
+        maxBitrate: 900_000,
       });
     });
 
@@ -66,15 +66,15 @@ describe('RTC Config', () => {
       expect(getVideoSettingsForNetwork('poor')).toEqual({
         width: 640,
         height: 360,
-        frameRate: 24,
-        maxBitrate: 500000,
+        frameRate: 15,
+        maxBitrate: 350_000,
       });
     });
   });
 
   describe('getAudioSettingsForNetwork', () => {
     it('should return excellent settings for excellent quality', () => {
-      expect(getAudioSettingsForNetwork('excellent')).toEqual({ maxBitrate: 64000 });
+      expect(getAudioSettingsForNetwork('excellent')).toEqual({ maxBitrate: 48000 });
     });
   });
 

@@ -23,6 +23,12 @@ export class TrackManager {
     if (!track) {
       throw new Error('DEVICE_NOT_FOUND: No camera device found');
     }
+    try {
+      // A talking head: keep motion smooth under a tight bitrate rather than chasing detail.
+      track.contentHint = 'motion';
+    } catch {
+      // Not supported
+    }
     return track;
   }
 

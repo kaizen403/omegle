@@ -20,11 +20,14 @@ export const RTC_CONFIG = {
       height: 720,
       frameRate: 30,
     },
+    // Bitrate caps sized for a face-to-face chat, not a broadcast. 720p talking-head video
+    // looks fine at ~900 kbps; the previous 1.2-2.5 Mbps caps stalled on mobile data and every
+    // relayed byte is paid TURN egress.
     presets: {
-      excellent: { width: 1920, height: 1080, frameRate: 30, maxBitrate: 2500000 },
-      good: { width: 1280, height: 720, frameRate: 30, maxBitrate: 1500000 },
-      poor: { width: 640, height: 360, frameRate: 24, maxBitrate: 500000 },
-      unknown: { width: 1280, height: 720, frameRate: 30, maxBitrate: 1200000 },
+      excellent: { width: 1280, height: 720, frameRate: 30, maxBitrate: 1_500_000 },
+      good: { width: 1280, height: 720, frameRate: 30, maxBitrate: 900_000 },
+      poor: { width: 640, height: 360, frameRate: 15, maxBitrate: 350_000 },
+      unknown: { width: 1280, height: 720, frameRate: 30, maxBitrate: 800_000 },
     },
   },
 
@@ -33,14 +36,29 @@ export const RTC_CONFIG = {
     noiseSuppression: true,
     autoGainControl: true,
     presets: {
-      excellent: { maxBitrate: 64000 },
-      good: { maxBitrate: 48000 },
-      poor: { maxBitrate: 24000 },
-      unknown: { maxBitrate: 48000 },
+      excellent: { maxBitrate: 48000 },
+      good: { maxBitrate: 32000 },
+      poor: { maxBitrate: 20000 },
+      unknown: { maxBitrate: 32000 },
     },
   },
 
-  ICE_DISCONNECT_MS: 2500,
+  /** How long ICE may sit in `disconnected` before we ask for an ICE restart. */
+  ICE_DISCONNECT_MS: 3000,
+  /** Minimum gap between ICE restarts on one connection. */
+  ICE_RESTART_MIN_INTERVAL_MS: 4000,
+  /** How long after ICE `failed` (and a restart) we wait before rebuilding the connection. */
+  ICE_FAILED_REBUILD_MS: 8000,
+  /**
+   * How long a new connection may take to reach `connected` before we rebuild it.
+   *
+   * Covers the cases ICE events cannot: an offer or answer lost in the relay leaves the
+   * connection in `new` forever, gathering nothing and firing no failure — the user just
+   * watches "Connecting video" until they give up.
+   */
+  CONNECT_WATCHDOG_MS: 20000,
+  /** Consecutive rebuilds that never reached `connected` before we give up on video. */
+  MAX_CONSECUTIVE_REBUILDS: 3,
   STATS_INTERVAL_MS: 2000,
 } as const;
 

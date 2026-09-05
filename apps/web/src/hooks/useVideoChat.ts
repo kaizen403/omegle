@@ -3,45 +3,18 @@
  * Manages the complete video chat session including matchmaking, RTC, and messaging
  *
  * @description This is the main orchestration hook that combines:
- * - `useMatchmaking` - WebSocket connection and partner matching
+ * - `useMatchmaking` - Socket.IO connection and partner matching
  * - `useRtc` - P2P WebRTC video/audio
  * - `useChat` - Text messaging and typing indicators
  *
- * The hook provides a unified API for the entire video chat experience:
  * 1. **Search Phase**: User starts search → joins matchmaking queue
  * 2. **Match Phase**: Server finds partner → establishes WebRTC connection
  * 3. **Session Phase**: Video/audio streaming + text chat with partner
  * 4. **End Phase**: User leaves or partner disconnects → cleanup
  *
- * Key features:
- * - Automatic retry logic for RTC connection failures
- * - Camera/microphone toggle and device switching
- * - Network quality indicators for both users
- * - "Find Next" to quickly match with new partner
- * - Proper cleanup on unmount to prevent memory leaks
- *
- * @example
- * ```tsx
- * function VideoChatPage() {
- *   const {
- *     connectionState,
- *     isInSession,
- *     isCameraOn,
- *     isMicOn,
- *     messages,
- *     startSearch,
- *     stopSearch,
- *     endSession,
- *     findNext,
- *     toggleCamera,
- *     toggleMicrophone,
- *     sendMessage,
- *   } = useVideoChat({
- *     localVideoElementId: 'local-video',
- *     remoteVideoElementId: 'remote-video',
- *   });
- *
- *   return (\n *     <div>\n *       <video id=\"local-video\" />\n *       <video id=\"remote-video\" />\n *       <MediaControls \n *         onToggleCamera={toggleCamera}\n *         onToggleMic={toggleMicrophone}\n *       />\n *       <ChatPanel \n *         messages={messages}\n *         onSend={sendMessage}\n *       />\n *       {isInSession ? (\n *         <button onClick={findNext}>Next</button>\n *       ) : (\n *         <button onClick={() => startSearch({ name: 'User', gender: 'male' })}>\n *           Start\n *         </button>\n *       )}\n *     </div>\n *   );\n * }\n * ```\n */
+ * A dropped socket on either side does not end the session: the server holds the room, the
+ * socket resumes, and the peer connection is rebuilt only if it did not survive the blip.
+ */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useMatchmaking } from './useMatchmaking';
@@ -52,35 +25,15 @@ import { showError, showInfo, ErrorCode } from '@/lib';
 import { RETRY_BASE_DELAY, FIND_NEXT_DEBOUNCE_DELAY } from '@/constants';
 import type { MatchDataMatched } from '@/types/matchmaking';
 
-/**
- * Configuration options for the useVideoChat hook
- *
- * @property localVideoElementId - DOM element ID for local video feed
- * @property remoteVideoElementId - DOM element ID for remote video feed
- */
 interface UseVideoChatOptions {
   localVideoElementId: string;
   remoteVideoElementId: string;
   isChatOpen?: boolean; // For mobile: whether chat section is currently visible
 }
 
-/**
- * Main hook for managing complete video chat sessions
- *
- * @param options - Configuration options including video element IDs
- * @returns Complete video chat state and control functions
- *
- * @see {@link useMatchmaking} for matchmaking functionality
- * @see {@link useRtc} for WebRTC functionality
- * @see {@link useChat} for messaging functionality
- */
 export function useVideoChat(options: UseVideoChatOptions) {
   const { localVideoElementId, remoteVideoElementId, isChatOpen = true } = options;
 
-  // Identity is issued by the server on connect and read back from the socket. The client no
-  // longer mints its own id: the old scheme was derived from Date.now(), so ids were
-  // guessable and another peer could claim an active session.
-  const currentUidRef = useRef<string>('');
   const currentMatchRef = useRef<MatchDataMatched | null>(null);
   const userDataRef = useRef<{ name: string; gender: 'male' | 'female' | 'other' } | null>(null);
   const isLeavingRef = useRef(false);
@@ -88,14 +41,6 @@ export function useVideoChat(options: UseVideoChatOptions) {
   const endSessionRef = useRef<(() => Promise<void>) | null>(null);
 
   const [isInSession, setIsInSession] = useState(false);
-
-  const syncSessionUid = useCallback((): number | null => {
-    const sessionUid = getSocketIOService().getSessionUid();
-    if (sessionUid !== null) {
-      currentUidRef.current = String(sessionUid);
-    }
-    return sessionUid;
-  }, []);
   const [isSearching, setIsSearching] = useState(false);
   const isFindingNextRef = useRef(false);
 
@@ -105,9 +50,12 @@ export function useVideoChat(options: UseVideoChatOptions) {
     isRTCInitialized,
     isRemoteCameraOn,
     isRemoteMicOn,
+    remoteCameraStatus,
+    rtcConnectionState,
     localNetworkQuality,
     remoteNetworkQuality,
     initializeRTC,
+    rebuildRTC,
     prepareLocalMedia,
     toggleCamera,
     toggleMicrophone,
@@ -117,11 +65,12 @@ export function useVideoChat(options: UseVideoChatOptions) {
     reattachLocalVideo,
     resumeRemoteAudio,
     leaveRTC,
-  } = useRtc({
-    onRemoteVideoReady: () => {},
-    // ICE/PC close is not the partner leaving. Chat stays on Socket.IO.
-    onRemoteUserLeft: () => {},
-  });
+  } = useRtc();
+
+  const isRTCInitializedRef = useRef(isRTCInitialized);
+  useEffect(() => {
+    isRTCInitializedRef.current = isRTCInitialized;
+  }, [isRTCInitialized]);
 
   const handleMatched = useCallback(
     async (matchData: MatchDataMatched) => {
@@ -137,7 +86,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
         return;
       }
 
-      if (isRTCInitialized) {
+      if (isRTCInitializedRef.current) {
         await leaveRTC();
       }
 
@@ -146,13 +95,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-          // Refresh from the socket here: by match time the `connected` event has certainly
-          // arrived, and this is the only place the id is consumed. Note useRtc prefers the
-          // server-sent `isOfferer`, so this is a fallback rather than load-bearing.
-          syncSessionUid();
-          const uid = currentUidRef.current;
-
-          await initializeRTC(matchData, uid, localVideoElementId, remoteVideoElementId);
+          await initializeRTC(matchData, localVideoElementId, remoteVideoElementId);
           resumeRemoteAudio();
           return;
         } catch (error) {
@@ -172,7 +115,6 @@ export function useVideoChat(options: UseVideoChatOptions) {
       const errorMsg = lastError instanceof Error ? lastError.message : 'Unknown error';
       const errorLower = errorMsg.toLowerCase();
 
-      // Only show error and end session for critical failures
       if (
         errorMsg.includes('PERMISSION_DENIED') ||
         errorLower.includes('permission') ||
@@ -182,13 +124,11 @@ export function useVideoChat(options: UseVideoChatOptions) {
           'Camera/microphone permission denied. Text chat is still available.',
           ErrorCode.CAMERA_PERMISSION_DENIED
         );
-        // Don't end session - text chat can still work
       } else if (errorMsg.includes('DEVICE_NOT_FOUND') || errorLower.includes('not found')) {
         showError(
           'Camera or microphone not found. Text chat is still available.',
           ErrorCode.MEDIA_DEVICE_NOT_FOUND
         );
-        // Don't end session - text chat can still work
       } else if (
         errorMsg.includes('DEVICE_IN_USE') ||
         errorLower.includes('in use') ||
@@ -198,13 +138,11 @@ export function useVideoChat(options: UseVideoChatOptions) {
           'Camera or microphone is being used by another app. Text chat is still available.',
           ErrorCode.CAMERA_IN_USE
         );
-        // Don't end session - text chat can still work
       } else if (errorLower.includes('timeout') || errorLower.includes('timed out')) {
         showError(
           'Video connection timeout. Text chat is still available.',
           ErrorCode.CONNECTION_TIMEOUT
         );
-        // Don't end session - text chat can still work
       } else if (errorLower.includes('token') || errorLower.includes('invalid')) {
         showError('Session token expired. Please try again.', ErrorCode.AUTH_FAILED);
         await endSessionRef.current?.();
@@ -215,23 +153,46 @@ export function useVideoChat(options: UseVideoChatOptions) {
         );
         await endSessionRef.current?.();
       } else {
-        // For other errors, keep text chat working
         showError(
           'Video unavailable. Text chat is still available.',
           ErrorCode.CHANNEL_JOIN_FAILED
         );
-        // Don't end session - text chat can still work
       }
     },
-    [
-      syncSessionUid,
-      initializeRTC,
-      leaveRTC,
-      localVideoElementId,
-      remoteVideoElementId,
-      isRTCInitialized,
-      resumeRemoteAudio,
-    ]
+    [initializeRTC, leaveRTC, localVideoElementId, remoteVideoElementId, resumeRemoteAudio]
+  );
+
+  /** Our socket resumed into the same room: keep the session, refresh the peer connection. */
+  const handleReconnected = useCallback(
+    async (matchData: MatchDataMatched) => {
+      if (isLeavingRef.current) {
+        return;
+      }
+      currentMatchRef.current = matchData;
+      setIsInSession(true);
+
+      if (!matchData.rtcEnabled) {
+        return;
+      }
+      if (!isRTCInitializedRef.current) {
+        // Video never came up before the drop; treat it as a fresh join.
+        await handleMatched(matchData);
+        return;
+      }
+      await rebuildRTC(matchData.rtcEpoch);
+    },
+    [handleMatched, rebuildRTC]
+  );
+
+  /** The partner's socket resumed. Rebuild only if our side of the call did not survive. */
+  const handlePartnerReconnected = useCallback(
+    (rtcEpoch?: number) => {
+      if (isLeavingRef.current || !currentMatchRef.current?.rtcEnabled) {
+        return;
+      }
+      void rebuildRTC(rtcEpoch);
+    },
+    [rebuildRTC]
   );
 
   const handleMatchmakingError = useCallback((error: string) => {
@@ -250,6 +211,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
     matchData,
     error: matchmakingError,
     isMatched,
+    isReconnecting,
     isPartnerReconnecting,
     join,
     leaveRoom,
@@ -257,8 +219,14 @@ export function useVideoChat(options: UseVideoChatOptions) {
   } = useMatchmaking({
     autoConnect: false,
     onMatched: handleMatched,
+    onReconnected: handleReconnected,
+    onPartnerReconnected: handlePartnerReconnected,
     onPartnerLeft: () => {
       handlePartnerLeftRef.current?.();
+    },
+    onSessionLost: () => {
+      // The message has already been shown; just clean up.
+      void endSessionRef.current?.();
     },
     onError: handleMatchmakingError,
   });
@@ -284,10 +252,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
       }
 
       // No connection check here. `join` already handles a cold socket: it stores the
-      // request in pendingJoinRef, calls connect(), and replays it once the socket is up.
-      // Blocking on a session id before calling join was a deadlock — joining is what
-      // opens the connection that produces the id, so Start could never succeed on a
-      // freshly loaded page.
+      // request, calls connect(), and replays it once the socket is up.
       //
       // uid is intentionally absent: the server uses the socket's own identity.
       const authData = {
@@ -324,11 +289,9 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
     clearMessages();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
     await leaveRTC();
 
-    await leaveRoom();
+    leaveRoom();
 
     isLeavingRef.current = false;
   }, [leaveRTC, leaveRoom, clearMessages]);
@@ -373,19 +336,19 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
       clearMessages();
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      await leaveRoom();
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Next is the button people press hundreds of times a night, so nothing here waits on
+      // a timer. This used to sleep 100ms, 300ms and 200ms between the steps below — 600ms
+      // of dead time on every skip — to paper over a race the two sides now handle properly:
+      // the server serialises this socket's leave and join in the order they arrive, and the
+      // peer connection is torn down synchronously here rather than settling in the
+      // background.
+      //
+      // The local camera and mic deliberately stay live across the skip. Re-acquiring them
+      // costs a getUserMedia round trip and blinks the camera indicator, and the next call
+      // wants the very same tracks.
+      leaveRoom();
 
       await leaveRTC();
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      await prepareLocalMedia();
-
-      syncSessionUid();
 
       if (userDataRef.current) {
         join({
@@ -415,7 +378,6 @@ export function useVideoChat(options: UseVideoChatOptions) {
       } else {
         showInfo('Retrying search...');
         if (userDataRef.current) {
-          syncSessionUid();
           join({
             name: userDataRef.current.name,
             gender: userDataRef.current.gender,
@@ -428,14 +390,13 @@ export function useVideoChat(options: UseVideoChatOptions) {
         isFindingNextRef.current = false;
       }, FIND_NEXT_DEBOUNCE_DELAY);
     }
-  }, [leaveRoom, leaveRTC, join, clearMessages, prepareLocalMedia, syncSessionUid]);
+  }, [leaveRoom, leaveRTC, join, clearMessages]);
 
   // Store cleanup functions in refs to avoid stale closure issues
   const clearMessagesRef = useRef(clearMessages);
   const leaveRTCRef = useRef(leaveRTC);
   const leaveRoomRef = useRef(leaveRoom);
 
-  // Keep refs up to date
   useEffect(() => {
     clearMessagesRef.current = clearMessages;
     leaveRTCRef.current = leaveRTC;
@@ -445,7 +406,6 @@ export function useVideoChat(options: UseVideoChatOptions) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Use refs to get latest function references
       const cleanup = async () => {
         try {
           clearMessagesRef.current();
@@ -464,6 +424,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
     connectionState,
     matchData,
     isMatched,
+    isReconnecting,
     isPartnerReconnecting,
     isInSession,
     isSearching,
@@ -473,6 +434,8 @@ export function useVideoChat(options: UseVideoChatOptions) {
     isRTCInitialized,
     isRemoteCameraOn,
     isRemoteMicOn,
+    remoteCameraStatus,
+    rtcConnectionState,
     localNetworkQuality,
     remoteNetworkQuality,
     messages,

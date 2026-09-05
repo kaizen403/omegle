@@ -2,6 +2,17 @@ import { ReactNode, memo } from 'react';
 import { User, VideoOff, MicOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+/**
+ * What the remote tile says about the partner's video while a session is on.
+ * `null` means "show whatever the <video> is rendering".
+ */
+export type RemoteVideoStatus =
+  | 'connecting'
+  | 'camera-off'
+  | 'reconnecting'
+  | 'partner-reconnecting'
+  | 'failed';
+
 interface VideoDisplayProps {
   id: string;
   label: string;
@@ -12,6 +23,7 @@ interface VideoDisplayProps {
   isMicOn?: boolean;
   partnerGender?: 'male' | 'female' | 'other';
   userGender?: 'male' | 'female' | 'other';
+  status?: RemoteVideoStatus | null;
   children?: ReactNode;
 }
 
@@ -38,6 +50,18 @@ const TINT = {
   pink: { surface: 'bg-pink-soft', ring: 'bg-pink/15 text-pink', text: 'text-pink' },
 } as const;
 
+const STATUS_COPY: Record<RemoteVideoStatus, { title: string; hint: string; spinner?: boolean }> = {
+  connecting: { title: 'Connecting video', hint: 'Just a second', spinner: true },
+  reconnecting: { title: 'Reconnecting video', hint: 'Hold on, getting you back', spinner: true },
+  'partner-reconnecting': {
+    title: 'They are reconnecting',
+    hint: 'Their connection dropped for a moment',
+    spinner: true,
+  },
+  'camera-off': { title: 'Camera is off', hint: 'They turned their camera off' },
+  failed: { title: "Video couldn't connect", hint: 'Text chat still works' },
+};
+
 const VideoDisplayComponent = ({
   id,
   label,
@@ -48,16 +72,18 @@ const VideoDisplayComponent = ({
   isMicOn = true,
   partnerGender,
   userGender,
+  status = null,
   children,
 }: VideoDisplayProps) => {
   const isLocalVideo = id === 'local-video';
   const tint = TINT[getTint(partnerGender, userGender, isConnected, isLocalVideo)];
 
   // Local: hide the preview when this user turned the camera off.
-  // Remote: keep the <video> visible after match. WebRTC tracks start muted,
-  // so a "camera off" flag must not cover a live feed with the avatar overlay.
+  // Remote: keep the <video> mounted after match; the status overlay covers it when there
+  // is nothing worth showing (still connecting, partner's camera off, reconnecting).
   const showPlaceholder = isLocalVideo ? !isCameraOn : !isConnected;
   const showSearching = isSearching && !isLocalVideo;
+  const statusCopy = !isLocalVideo && isConnected && status ? STATUS_COPY[status] : null;
 
   return (
     <div
@@ -109,6 +135,27 @@ const VideoDisplayComponent = ({
           <div className="text-center">
             <p className="text-text font-semibold">Looking for someone</p>
             <p className="text-text-3 mt-0.5 text-sm">Hang tight, this is usually quick</p>
+          </div>
+        </div>
+      )}
+
+      {/* Session status over the remote feed */}
+      {statusCopy && (
+        <div
+          className="bg-text pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3.5 text-white"
+          data-status={status}
+          role="status"
+        >
+          {statusCopy.spinner ? (
+            <div className="ring-spinner ring-spinner-light size-11" aria-hidden />
+          ) : (
+            <div className="flex size-16 items-center justify-center rounded-full bg-white/10">
+              <VideoOff className="size-8" strokeWidth={2} aria-hidden />
+            </div>
+          )}
+          <div className="text-center">
+            <p className="font-semibold">{statusCopy.title}</p>
+            <p className="mt-0.5 text-sm text-white/60">{statusCopy.hint}</p>
           </div>
         </div>
       )}

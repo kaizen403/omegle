@@ -35,3 +35,6 @@ export const IDLE_TIMEOUT = 300000; // 5 minutes - User idle detection
 // Session cleanup
 export const LEAVE_DEBOUNCE_DELAY = 500; // 500ms - Prevent rapid leave actions
 export const FIND_NEXT_DEBOUNCE_DELAY = 500; // 500ms - Prevent rapid next actions
+
+// Session resume
+export const SESSION_RECONNECT_GRACE = 30000; // 30 seconds - How long a dropped socket may take to resume the chat (the server holds the room for 25s)

@@ -1,39 +1,12 @@
 /**
  * useMatchmaking Hook
- * Manages WebSocket connection and matchmaking flow
+ * Manages the Socket.IO connection and the matchmaking flow.
  *
- * @description Provides complete matchmaking functionality including:
- * - WebSocket connection management with automatic reconnection
- * - Join/leave/cancel queue operations
- * - Connection state tracking (disconnected → connecting → connected → waiting → matched)
- * - Error handling with user-friendly messages
- * - Search timeout handling with analytics
- * - Partner left detection and cleanup
- *
- * The hook manages the entire matchmaking lifecycle:
- * 1. User connects to WebSocket server
- * 2. User joins queue with their profile data
- * 3. Server matches two compatible users
- * 4. Users receive match data including room ID and tokens
- * 5. Users can leave room or disconnect
- *
- * @example
- * ```tsx
- * function MatchmakingComponent() {
- *   const {
- *     connectionState,
- *     matchData,
- *     isWaiting,
- *     isMatched,
- *     join,
- *     leaveRoom,
- *     cancelSearch,
- *   } = useMatchmaking({
- *     onMatched: (match) => console.log('Matched with:', match.partnerName),
- *     onPartnerLeft: () => console.log('Partner left'),
- *   });
- *
- *   if (isWaiting) return <SearchingUI onCancel={cancelSearch} />;\n *   if (isMatched) return <ChatUI match={matchData} onLeave={leaveRoom} />;\n *   \n *   return (\n *     <button onClick={() => join({ uid: 1, name: 'User', gender: 'male' })}>\n *       Find Partner\n *     </button>\n *   );\n * }\n * ```\n */
+ * Connection state runs disconnected → connecting → connected → waiting → matched. A dropped
+ * transport mid-chat is not a departure: the server holds the room for a grace window and the
+ * socket reconnects with a resume token, so the session stays on screen as "reconnecting"
+ * until the server either puts us back (`reconnected`) or tells us it gave up.
+ */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
@@ -43,7 +16,12 @@ import {
 } from '@/services/socket';
 import { showError, ErrorCode } from '@/lib/toast';
 import { analytics } from '@/services/analytics';
-import { SEARCH_TIMEOUT, ERROR_DEDUPE_WINDOW, LEAVE_DEBOUNCE_DELAY } from '@/constants';
+import {
+  SEARCH_TIMEOUT,
+  ERROR_DEDUPE_WINDOW,
+  LEAVE_DEBOUNCE_DELAY,
+  SESSION_RECONNECT_GRACE,
+} from '@/constants/timeouts';
 import { clearRtcSignalInbox, enqueueRtcSignal } from '@/services/rtc/signal-inbox';
 import type {
   ConnectionState,
@@ -52,40 +30,21 @@ import type {
   ServerMessage,
 } from '@/types/matchmaking';
 
-/**
- * Configuration options for the useMatchmaking hook
- *
- * @property autoConnect - Whether to connect immediately on mount (default: false)
- * @property userData - Pre-filled user data for auto-joining
- * @property onAuthenticated - Callback when user is authenticated and in queue
- * @property onMatched - Callback when matched with another user
- * @property onPartnerLeft - Callback when chat partner leaves
- * @property onError - Callback when an error occurs
- */
 interface UseMatchmakingOptions {
   autoConnect?: boolean;
   userData?: UserData;
   onAuthenticated?: () => void;
   onMatched?: (matchData: MatchDataMatched) => void;
+  /** Our own socket resumed into the room we were already in. */
+  onReconnected?: (matchData: MatchDataMatched) => void;
+  /** The partner's socket resumed; `rtcEpoch` is the connection generation the server assigned. */
+  onPartnerReconnected?: (rtcEpoch?: number) => void;
   onPartnerLeft?: () => void;
+  /** Our socket could not resume in time and the chat is over. The user has been told. */
+  onSessionLost?: () => void;
   onError?: (error: string) => void;
 }
 
-/**
- * Return type for the useMatchmaking hook
- *
- * @property connectionState - Current connection state
- * @property matchData - Match data when matched (null otherwise)
- * @property error - Current error message (null if no error)
- * @property isConnected - Whether socket is connected
- * @property isAuthenticated - Whether user is authenticated with server
- * @property isWaiting - Whether user is waiting for a match
- * @property isMatched - Whether user is currently matched
- * @property join - Function to join the matchmaking queue
- * @property leaveRoom - Function to leave current chat room
- * @property cancelSearch - Function to cancel matchmaking search
- * @property disconnect - Function to disconnect from server
- */
 interface UseMatchmakingReturn {
   connectionState: ConnectionState;
   matchData: MatchDataMatched | null;
@@ -94,6 +53,8 @@ interface UseMatchmakingReturn {
   isAuthenticated: boolean;
   isWaiting: boolean;
   isMatched: boolean;
+  /** Our transport dropped mid-chat and the socket is trying to resume the session. */
+  isReconnecting: boolean;
   /** Partner's transport dropped; the server is holding their seat. Not a departure. */
   isPartnerReconnecting: boolean;
   join: (userData: UserData) => void;
@@ -102,30 +63,49 @@ interface UseMatchmakingReturn {
   disconnect: () => void;
 }
 
+const CONNECTION_LOST_MESSAGE = 'Connection lost. The chat has ended.';
+
 export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmakingReturn {
   const {
     autoConnect = false,
     userData,
     onAuthenticated,
     onMatched,
+    onReconnected,
+    onPartnerReconnected,
     onPartnerLeft,
+    onSessionLost,
     onError,
   } = options;
 
-  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-  const [matchData, setMatchData] = useState<MatchDataMatched | null>(null);
+  const [connectionState, setConnectionStateValue] = useState<ConnectionState>('disconnected');
+  const [matchData, setMatchDataValue] = useState<MatchDataMatched | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** True while the partner's transport is down but the server is still holding their seat. */
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [isPartnerReconnecting, setIsPartnerReconnecting] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const wsRef = useRef<SocketIOService | null>(null);
+  const connectionStateRef = useRef<ConnectionState>('disconnected');
+  const matchDataRef = useRef<MatchDataMatched | null>(null);
+  const reconnectingRef = useRef(false);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isJoiningRef = useRef(false);
   const isLeavingRef = useRef(false);
   const lastErrorTimeRef = useRef<number>(0);
   const lastErrorMessageRef = useRef<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingJoinRef = useRef<UserData | null>(null);
+
+  const setConnectionState = useCallback((state: ConnectionState) => {
+    connectionStateRef.current = state;
+    setConnectionStateValue(state);
+  }, []);
+
+  const setMatchData = useCallback((data: MatchDataMatched | null) => {
+    matchDataRef.current = data;
+    setMatchDataValue(data);
+  }, []);
 
   const getWs = useCallback(() => {
     if (!wsRef.current) {
@@ -134,9 +114,66 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     return wsRef.current;
   }, []);
 
+  const clearSearchTimeout = useCallback(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  const stopReconnecting = useCallback(() => {
+    clearReconnectTimer();
+    reconnectingRef.current = false;
+    setIsReconnecting(false);
+  }, [clearReconnectTimer]);
+
+  const showErrorOnce = useCallback((message: string, code: ErrorCode) => {
+    const now = Date.now();
+    const timeSinceLastError = now - lastErrorTimeRef.current;
+    const isDifferentError = message !== lastErrorMessageRef.current;
+    if (isDifferentError || timeSinceLastError > ERROR_DEDUPE_WINDOW) {
+      setError(message);
+      showError(message, code);
+      lastErrorTimeRef.current = now;
+      lastErrorMessageRef.current = message;
+      return true;
+    }
+    return false;
+  }, []);
+
+  /** The chat we were holding open for a resume is gone. */
+  const giveUpSession = useCallback(
+    (message: string) => {
+      stopReconnecting();
+      setIsPartnerReconnecting(false);
+      setMatchData(null);
+      setConnectionState(wsRef.current?.isConnected() ? 'connected' : 'disconnected');
+      isJoiningRef.current = false;
+      showErrorOnce(message, ErrorCode.CONNECTION_LOST);
+      onSessionLost?.();
+    },
+    [stopReconnecting, setMatchData, setConnectionState, showErrorOnce, onSessionLost]
+  );
+
   const handleMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
+        // The server's handshake. While we are trying to resume a chat, a handshake that did
+        // not reclaim our session means the server's grace window closed before we got back.
+        case 'connected': {
+          if (reconnectingRef.current && message.data.resumed !== true) {
+            giveUpSession(CONNECTION_LOST_MESSAGE);
+          }
+          break;
+        }
+
         // The server multiplexes several outcomes onto the `match` event. Every status it
         // can emit is handled here: an unhandled one leaves the UI frozen on whatever it was
         // showing — a dead video after the partner left, or "Searching..." forever after a
@@ -150,10 +187,8 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
             setError(null);
             onAuthenticated?.();
           } else if (message.data.status === 'matched') {
-            if (searchTimeoutRef.current) {
-              clearTimeout(searchTimeoutRef.current);
-              searchTimeoutRef.current = null;
-            }
+            clearSearchTimeout();
+            stopReconnecting();
 
             analytics.trackMatchFound();
             clearRtcSignalInbox();
@@ -171,10 +206,8 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           ) {
             // The other side is gone for good. Tear the session down so the user is returned
             // to a usable state instead of watching a frozen frame.
-            if (searchTimeoutRef.current) {
-              clearTimeout(searchTimeoutRef.current);
-              searchTimeoutRef.current = null;
-            }
+            clearSearchTimeout();
+            stopReconnecting();
             setConnectionState('connected');
             setMatchData(null);
             setIsPartnerReconnecting(false);
@@ -189,10 +222,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           } else if (status === 'error') {
             // Join was refused (rate limited, already in a room, transient failure). Without
             // this the user sits on "Searching..." indefinitely with no way forward.
-            if (searchTimeoutRef.current) {
-              clearTimeout(searchTimeoutRef.current);
-              searchTimeoutRef.current = null;
-            }
+            clearSearchTimeout();
             setConnectionState('connected');
             isJoiningRef.current = false;
             setError(
@@ -203,30 +233,46 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           break;
         }
 
-        case 'reconnected':
-          setConnectionState('connected');
+        // Our socket is back in the room it dropped out of.
+        case 'reconnected': {
+          stopReconnecting();
           setError(null);
-          if (message.data.iceServers && message.data.rtcEnabled !== false) {
-            const matchData: MatchDataMatched = {
-              status: 'matched',
-              roomId: message.data.roomId,
-              channelName: message.data.channelName || message.data.roomId,
-              isOfferer: message.data.isOfferer ?? false,
-              iceServers: message.data.iceServers,
-              rtcEnabled: true,
-              partnerName: message.data.partnerName || 'Partner',
-              partnerUid: message.data.partnerUid,
-              expiresAt: message.data.expiresAt || 0,
-            };
-            setMatchData(matchData);
-            setConnectionState('matched');
-            onMatched?.(matchData);
+
+          const previous = matchDataRef.current;
+          const restored: MatchDataMatched = {
+            status: 'matched',
+            roomId: message.data.roomId,
+            channelName: message.data.channelName || message.data.roomId,
+            isOfferer: message.data.isOfferer ?? false,
+            iceServers: message.data.iceServers ?? [],
+            rtcEnabled: message.data.rtcEnabled !== false,
+            partnerName: message.data.partnerName || previous?.partnerName || 'Stranger',
+            partnerUid: message.data.partnerUid,
+            partnerGender: message.data.partnerGender ?? previous?.partnerGender,
+            expiresAt: message.data.expiresAt || 0,
+            rtcEpoch: message.data.rtcEpoch,
+          };
+
+          const sameRoom = previous?.roomId === restored.roomId;
+          setMatchData(restored);
+          setConnectionState('matched');
+          setIsPartnerReconnecting(false);
+          isJoiningRef.current = false;
+
+          if (sameRoom) {
+            onReconnected?.(restored);
           } else {
-            setMatchData(null);
+            clearRtcSignalInbox();
+            onMatched?.(restored);
           }
           break;
+        }
 
         case 'session_expired':
+          if (reconnectingRef.current) {
+            giveUpSession('Session expired. Please start again.');
+            break;
+          }
           setConnectionState('connected');
           setMatchData(null);
           setIsPartnerReconnecting(false);
@@ -234,6 +280,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           break;
 
         case 'partner_left':
+          stopReconnecting();
           setConnectionState('connected');
           setMatchData(null);
           setError(null);
@@ -241,14 +288,15 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           onPartnerLeft?.();
           break;
 
-        // The partner's network dropped. The server is holding their seat, so the chat and
-        // the peer connection stay up — surface it as a transient state, never as a leave.
+        // The partner's network dropped. The server is holding their seat, so the chat stays
+        // up — surface it as a transient state, never as a leave.
         case 'partner_reconnecting':
           setIsPartnerReconnecting(true);
           break;
 
         case 'partner_reconnected':
           setIsPartnerReconnecting(false);
+          onPartnerReconnected?.(message.data.rtcEpoch);
           break;
 
         case 'kicked':
@@ -260,6 +308,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           break;
 
         case 'room_closed':
+          stopReconnecting();
           setConnectionState('connected');
           setMatchData(null);
           setError(null);
@@ -267,7 +316,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           onPartnerLeft?.();
           break;
 
-        case 'error':
+        case 'error': {
           const errorMsg = message.data.message.toLowerCase();
           if (errorMsg.includes('unknown message type') || errorMsg.includes('typing')) {
             break;
@@ -287,11 +336,8 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           onError?.(message.data.message);
           showError(message.data.message, ErrorCode.CONNECTION_LOST);
           break;
+        }
 
-        case 'pong':
-          break;
-
-        case 'message':
         case 'signal':
           enqueueRtcSignal(message.data);
           break;
@@ -300,41 +346,60 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
           break;
       }
     },
-    [onAuthenticated, onMatched, onPartnerLeft, onError]
+    [
+      onAuthenticated,
+      onMatched,
+      onReconnected,
+      onPartnerReconnected,
+      onPartnerLeft,
+      onError,
+      giveUpSession,
+      clearSearchTimeout,
+      stopReconnecting,
+      setConnectionState,
+      setMatchData,
+    ]
   );
 
   const handleOpen = useCallback(() => {
-    setConnectionState('connected');
     setError(null);
-  }, []);
+    // Resuming a chat: stay "matched" until the server says whether it kept our seat.
+    if (reconnectingRef.current) return;
+    setConnectionState('connected');
+  }, [setConnectionState]);
 
   const handleClose = useCallback(() => {
-    const wasInActiveState = connectionState === 'waiting' || connectionState === 'matched';
+    const state = connectionStateRef.current;
 
+    if (state === 'matched' && matchDataRef.current) {
+      // Transport dropped mid-chat. The server holds the room for a grace window and the
+      // socket reconnects on its own with a resume token; keep the session on screen and
+      // only give up when the window has clearly passed.
+      if (!reconnectingRef.current) {
+        reconnectingRef.current = true;
+        setIsReconnecting(true);
+        clearReconnectTimer();
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          if (reconnectingRef.current) {
+            giveUpSession(CONNECTION_LOST_MESSAGE);
+          }
+        }, SESSION_RECONNECT_GRACE);
+      }
+      return;
+    }
+
+    const wasWaiting = state === 'waiting';
     setConnectionState('disconnected');
     setMatchData(null);
 
-    if (wasInActiveState) {
-      const errorMsg = 'Connection lost. Please try again.';
-      const errorCode = ErrorCode.CONNECTION_LOST;
-
-      const now = Date.now();
-      const timeSinceLastError = now - lastErrorTimeRef.current;
-      const isDifferentError = errorMsg !== lastErrorMessageRef.current;
-
-      if (isDifferentError || timeSinceLastError > ERROR_DEDUPE_WINDOW) {
-        setError(errorMsg);
-        showError(errorMsg, errorCode);
-        lastErrorTimeRef.current = now;
-        lastErrorMessageRef.current = errorMsg;
-      }
+    if (wasWaiting) {
+      showErrorOnce('Connection lost. Please try again.', ErrorCode.CONNECTION_LOST);
     }
-  }, [connectionState]);
+  }, [clearReconnectTimer, giveUpSession, setConnectionState, setMatchData, showErrorOnce]);
 
   const handleError = useCallback(
     (error: Event | Error) => {
-      setConnectionState('error');
-
       let errorMessage = 'Connection error. Please check your network.';
       let errorCode = ErrorCode.CONNECTION_LOST;
 
@@ -358,19 +423,18 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
         }
       }
 
-      const now = Date.now();
-      const timeSinceLastError = now - lastErrorTimeRef.current;
-      const isDifferentError = errorMessage !== lastErrorMessageRef.current;
+      // The socket gave up reconnecting while we were holding a chat open for it.
+      if (reconnectingRef.current) {
+        giveUpSession(CONNECTION_LOST_MESSAGE);
+        return;
+      }
 
-      if (isDifferentError || timeSinceLastError > ERROR_DEDUPE_WINDOW) {
-        setError(errorMessage);
-        showError(errorMessage, errorCode);
-        lastErrorTimeRef.current = now;
-        lastErrorMessageRef.current = errorMessage;
+      setConnectionState('error');
+      if (showErrorOnce(errorMessage, errorCode)) {
         onError?.(errorMessage);
       }
     },
-    [onError]
+    [giveUpSession, onError, setConnectionState, showErrorOnce]
   );
 
   const join = useCallback(
@@ -386,15 +450,8 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
       }
 
       pendingJoinRef.current = null;
-
-      if (isJoiningRef.current) {
-        isJoiningRef.current = false;
-      }
-
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-        searchTimeoutRef.current = null;
-      }
+      isJoiningRef.current = false;
+      clearSearchTimeout();
 
       setConnectionState('waiting');
       setError(null);
@@ -438,7 +495,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
         setConnectionState('error');
       }
     },
-    [getWs]
+    [getWs, clearSearchTimeout, setConnectionState, setMatchData]
   );
 
   const leaveRoom = useCallback(() => {
@@ -448,11 +505,12 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
 
     const ws = getWs();
 
-    if (!matchData) {
+    if (!matchDataRef.current) {
       return;
     }
 
     isLeavingRef.current = true;
+    stopReconnecting();
 
     const success = ws.send({
       type: 'leave',
@@ -466,17 +524,16 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
         isLeavingRef.current = false;
       }, LEAVE_DEBOUNCE_DELAY);
     } else {
-      setError('Failed to leave room');
+      // The socket is down; the server will close the room when the grace window passes.
+      setConnectionState('disconnected');
+      setMatchData(null);
       isLeavingRef.current = false;
     }
-  }, [matchData, getWs]);
+  }, [getWs, stopReconnecting, setConnectionState, setMatchData]);
 
   const disconnect = useCallback(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-      searchTimeoutRef.current = null;
-    }
-
+    clearSearchTimeout();
+    stopReconnecting();
     pendingJoinRef.current = null;
 
     if (!wsRef.current) return;
@@ -485,7 +542,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     setConnectionState('disconnected');
     setMatchData(null);
     setError(null);
-  }, []);
+  }, [clearSearchTimeout, stopReconnecting, setConnectionState, setMatchData]);
 
   useEffect(() => {
     const ws = getWs();
@@ -496,17 +553,21 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     const unsubscribeError = ws.onError(handleError);
 
     return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-        searchTimeoutRef.current = null;
-      }
-
+      clearSearchTimeout();
       unsubscribeMessage();
       unsubscribeOpen();
       unsubscribeClose();
       unsubscribeError();
     };
-  }, [autoConnect, handleMessage, handleOpen, handleClose, handleError, getWs]);
+  }, [autoConnect, handleMessage, handleOpen, handleClose, handleError, getWs, clearSearchTimeout]);
+
+  useEffect(() => {
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (connectionState === 'connected' && pendingJoinRef.current) {
@@ -521,15 +582,12 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
   // Track if we should auto-join when connected
   const shouldAutoJoinRef = useRef(false);
 
-  // Set flag when we need to auto-join
   useEffect(() => {
     shouldAutoJoinRef.current = connectionState === 'connected' && !isAuthenticated && !!userData;
   }, [connectionState, isAuthenticated, userData]);
 
-  // Handle auto-join via microtask to avoid synchronous setState in effect
   useEffect(() => {
     if (connectionState === 'connected' && !isAuthenticated && userData) {
-      // Schedule join in next microtask to avoid synchronous setState
       queueMicrotask(() => {
         if (shouldAutoJoinRef.current) {
           join(userData);
@@ -543,11 +601,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
       return;
     }
 
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-      searchTimeoutRef.current = null;
-    }
-
+    clearSearchTimeout();
     pendingJoinRef.current = null;
 
     const ws = wsRef.current;
@@ -560,7 +614,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     setMatchData(null);
     setError(null);
     isJoiningRef.current = false;
-  }, []);
+  }, [clearSearchTimeout, setConnectionState, setMatchData]);
 
   return {
     connectionState,
@@ -573,6 +627,7 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     isAuthenticated,
     isWaiting: connectionState === 'waiting',
     isMatched: connectionState === 'matched',
+    isReconnecting,
     isPartnerReconnecting,
     join,
     leaveRoom,
@@ -583,19 +638,6 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
 
 /**
  * Hook to cleanup WebSocket connection on app unmount
- *
- * @description Ensures the Socket.IO service is properly destroyed
- * when the component tree unmounts. This prevents memory leaks
- * and ensures clean reconnection on subsequent mounts.
- *
- * @example
- * ```tsx
- * // In your App component or main layout
- * function App() {
- *   useWebSocketCleanup();
- *   return <MainContent />;
- * }
- * ```
  */
 export function useWebSocketCleanup() {
   useEffect(() => {

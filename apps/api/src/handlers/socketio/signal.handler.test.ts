@@ -37,6 +37,32 @@ describe('parseRtcSignal', () => {
   it('rejects unknown types including ice-candidate', () => {
     expect(parseRtcSignal({ type: 'ice-candidate', candidate: 'x' }).ok).toBe(false);
   });
+
+  it('relays the connection epoch untouched and omits it when absent', () => {
+    const withEpoch = parseRtcSignal({ type: 'offer', sdp: 'v=0', epoch: 1725500000000 });
+    expect(withEpoch).toEqual({
+      ok: true,
+      signal: { type: 'offer', sdp: 'v=0', epoch: 1725500000000 },
+    });
+
+    const candidate = parseRtcSignal({
+      type: 'candidate',
+      candidate: 'candidate:1 1 UDP 1 1.1.1.1 9 typ host',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+      epoch: 3,
+    });
+    expect(candidate.ok && candidate.signal.epoch).toBe(3);
+
+    const without = parseRtcSignal({ type: 'answer', sdp: 'v=0' });
+    expect(without.ok && 'epoch' in without.signal).toBe(false);
+  });
+
+  it('rejects a malformed epoch', () => {
+    expect(parseRtcSignal({ type: 'offer', sdp: 'v=0', epoch: -1 }).ok).toBe(false);
+    expect(parseRtcSignal({ type: 'offer', sdp: 'v=0', epoch: 1.5 }).ok).toBe(false);
+    expect(parseRtcSignal({ type: 'offer', sdp: 'v=0', epoch: '7' }).ok).toBe(false);
+  });
 });
 
 describe('SignalHandler', () => {

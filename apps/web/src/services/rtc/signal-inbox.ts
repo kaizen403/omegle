@@ -9,15 +9,23 @@ import type { RtcSignal } from './types';
 const pending: RtcSignal[] = [];
 let consumer: ((signal: RtcSignal) => void) | null = null;
 
+function parseEpoch(raw: Record<string, unknown>): number | undefined {
+  const value = raw.epoch;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return undefined;
+  return value;
+}
+
 export function toRtcSignal(
   signal: RTCSignal | RtcSignal | Record<string, unknown>
 ): RtcSignal | null {
   if (!signal || typeof signal !== 'object') return null;
   const raw = signal as Record<string, unknown>;
+  const epoch = parseEpoch(raw);
+  const envelope = epoch === undefined ? {} : { epoch };
 
   if (raw.type === 'offer' || raw.type === 'answer') {
     if (typeof raw.sdp !== 'string' || raw.sdp.length === 0) return null;
-    return { type: raw.type, sdp: raw.sdp };
+    return { type: raw.type, sdp: raw.sdp, ...envelope };
   }
 
   if (raw.type === 'candidate') {
@@ -27,6 +35,7 @@ export function toRtcSignal(
       candidate: raw.candidate,
       sdpMid: typeof raw.sdpMid === 'string' ? raw.sdpMid : null,
       sdpMLineIndex: typeof raw.sdpMLineIndex === 'number' ? raw.sdpMLineIndex : null,
+      ...envelope,
     };
   }
 

@@ -56,6 +56,21 @@ describe('signal inbox', () => {
     expect(received).toEqual([{ type: 'offer', sdp: 'v=0-keep' }]);
   });
 
+  it('carries the connection epoch through and ignores a malformed one', () => {
+    const received: unknown[] = [];
+    attachRtcSignalConsumer((signal) => received.push(signal));
+
+    enqueueRtcSignal({ type: 'offer', sdp: 'v=0', epoch: 1725500000000 });
+    enqueueRtcSignal({ type: 'answer', sdp: 'v=0', epoch: -1 });
+    enqueueRtcSignal({ type: 'answer', sdp: 'v=0', epoch: '3' });
+
+    expect(received).toEqual([
+      { type: 'offer', sdp: 'v=0', epoch: 1725500000000 },
+      { type: 'answer', sdp: 'v=0' },
+      { type: 'answer', sdp: 'v=0' },
+    ]);
+  });
+
   it('clears stale SDP when a new match starts', () => {
     enqueueRtcSignal({ type: 'offer', sdp: 'stale' });
     clearRtcSignalInbox();

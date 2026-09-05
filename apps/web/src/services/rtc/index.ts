@@ -18,7 +18,10 @@ export type {
   RtcParticipant,
   IceServer,
   RtcSignal,
+  RemoteTrackState,
+  RtcConnectionState,
+  IceRoute,
 } from './types';
 
-export { TrackManager, PeerManager } from './managers';
+export { TrackManager, PeerManager, remoteAudio, primeRemoteAudio } from './managers';
 export * from './managers/video-renderer';

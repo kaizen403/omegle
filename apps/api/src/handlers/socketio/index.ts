@@ -428,27 +428,36 @@ export class SocketIOManager {
     const partnerUid = held.partnerId;
     const partnerIsBot = partnerUid !== undefined && botManager.isBot(partnerUid);
     const rtcEnabled = partnerUid !== undefined && !partnerIsBot;
+    const partner = room.user1.uid === uid ? room.user2 : room.user1;
 
     const ice = rtcEnabled
       ? await this.turnService.mintIceConfig(uid, 3600)
       : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+
+    // A new peer-connection generation for both sides. The returning user may be on a
+    // different network now; each side rebuilds its connection under this number and the
+    // clients ignore anything still in flight from the old one.
+    const rtcEpoch = Date.now();
 
     socket.emit('reconnected', {
       status: 'reconnected',
       roomId: room.roomId,
       channelName: room.channelName,
       partnerUid,
+      partnerName: partner.name,
+      partnerGender: partner.gender,
       isOfferer: partnerUid !== undefined ? isOffererUid(uid, partnerUid) : false,
       iceServers: ice.iceServers,
       rtcEnabled,
       expiresAt: ice.expiresAt,
+      rtcEpoch,
       message: 'Reconnected to your chat',
     });
 
     if (partnerUid !== undefined) {
       const partnerSocket = this.connections.get(partnerUid);
       if (partnerSocket?.connected) {
-        partnerSocket.emit('partner_reconnected', { partnerUid: uid });
+        partnerSocket.emit('partner_reconnected', { partnerUid: uid, rtcEpoch });
       }
     }
 

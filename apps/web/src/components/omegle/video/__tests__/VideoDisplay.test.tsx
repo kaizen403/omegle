@@ -35,4 +35,39 @@ describe('VideoDisplay', () => {
     const local = container.querySelector('#local-video');
     expect(local?.className).toContain('opacity-0');
   });
+
+  it('shows a status overlay over the remote feed and keeps the video mounted', () => {
+    const { container, getByRole } = render(
+      <VideoDisplay
+        id="remote-video"
+        label="Stranger"
+        isConnected={true}
+        isSearching={false}
+        status="camera-off"
+      />
+    );
+
+    const overlay = getByRole('status');
+    expect(overlay.getAttribute('data-status')).toBe('camera-off');
+    expect(overlay.textContent).toContain('Camera is off');
+    expect(container.querySelector('#remote-video')?.className).toContain('opacity-100');
+  });
+
+  it('shows no overlay when the remote feed is live or before a match', () => {
+    const live = render(
+      <VideoDisplay id="remote-video" label="Stranger" isConnected={true} isSearching={false} />
+    );
+    expect(live.queryByRole('status')).toBeNull();
+
+    const idle = render(
+      <VideoDisplay
+        id="remote-video"
+        label="Stranger"
+        isConnected={false}
+        isSearching={false}
+        status="connecting"
+      />
+    );
+    expect(idle.queryByRole('status')).toBeNull();
+  });
 });

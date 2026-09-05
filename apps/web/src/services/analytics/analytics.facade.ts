@@ -202,6 +202,15 @@ class AnalyticsFacade {
     connectionTracker.trackRTCLeave();
   }
 
+  trackRTCIceRoute(route: {
+    local: string;
+    remote: string;
+    relayed: boolean;
+    connectTimeMs: number;
+  }): void {
+    connectionTracker.trackRTCIceRoute(route);
+  }
+
   trackRTCConnectionTime(connectionTimeMs: number): void {
     connectionTracker.trackRTCConnectionTime(connectionTimeMs);
   }

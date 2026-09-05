@@ -1,11 +1,20 @@
 /**
  * RTC service facade — 1:1 P2P WebRTC.
- * Callers use preview / join / leave / toggle; PeerConnection stays inside.
+ * Callers use preview / join / rebuild / leave / toggle; PeerConnection stays inside.
  */
 
 import { getSocketIOService } from '@/services/socket';
 import type { ClientMessage } from '@/types/matchmaking';
-import type { RtcJoinConfig, DeviceIds, NetworkQualityLevel, RtcParticipant } from './types';
+import type {
+  RtcJoinConfig,
+  DeviceIds,
+  NetworkQualityLevel,
+  RtcParticipant,
+  RtcSignal,
+  RemoteTrackState,
+  RtcConnectionState,
+  IceRoute,
+} from './types';
 import {
   TrackManager,
   PeerManager,
@@ -38,6 +47,8 @@ export class RtcService {
       currentNetworkQuality: 'unknown',
       isOfferer: false,
       partnerIdentity: '',
+      epoch: 0,
+      connectionState: 'idle',
     };
 
     this.trackManager = new TrackManager(this.state);
@@ -68,7 +79,7 @@ export class RtcService {
     }
 
     const socket = getSocketIOService();
-    const sendSignal = (signal: import('./types').RtcSignal) => {
+    const sendSignal = (signal: RtcSignal) => {
       const message: ClientMessage = { type: 'signal', data: signal };
       socket.send(message);
     };
@@ -92,6 +103,15 @@ export class RtcService {
     this.trackManager.updateDeviceIdsFromTracks();
   }
 
+  /**
+   * Replace the peer connection after a signalling reconnect. Left alone if it is still
+   * healthy; see PeerManager.rebuild.
+   */
+  async rebuild(epoch?: number): Promise<void> {
+    if (!this.state.isJoined) return;
+    await this.peerManager.rebuild(epoch, { onlyIfUnhealthy: true });
+  }
+
   async leave(): Promise<void> {
     this.unsubscribeSignal?.();
     this.unsubscribeSignal = null;
@@ -100,6 +120,10 @@ export class RtcService {
 
   isRoomJoined(): boolean {
     return this.state.isJoined;
+  }
+
+  getConnectionState(): RtcConnectionState {
+    return this.state.connectionState;
   }
 
   async toggleCamera(enabled: boolean): Promise<void> {
@@ -141,32 +165,20 @@ export class RtcService {
     attachLocalVideo(this.state.localVideoTrack, elementId);
   }
 
+  /** Unlock the remote audio element; call synchronously inside a user gesture. */
+  primeRemoteAudio(): void {
+    this.peerManager.primeRemoteAudio();
+  }
+
   resumeRemoteAudio(): void {
     this.peerManager.resumeRemoteAudio();
   }
 
   playRemoteVideo(_participant: RtcParticipant, elementId: string): void {
-    // Use the track `ontrack` actually handed us rather than re-deriving it.
-    //
-    // This used to take the first receiver of kind 'video', which is not necessarily the one
-    // carrying media: a PeerConnection can hold receivers belonging to transceivers that were
-    // never negotiated, and their tracks are live-but-silent placeholders. Picking one of
-    // those overwrote the real remote track on the <video> element milliseconds after
-    // `ontrack` had attached it correctly, leaving a permanently black remote tile
-    // (videoWidth 0) while `inbound-rtp` showed frames decoding.
-    const videoTrack =
-      this.peerManager.getRemoteVideoTrack() ??
-      this.state.peerConnection
-        ?.getTransceivers()
-        .find(
-          (transceiver) =>
-            transceiver.mid !== null &&
-            transceiver.receiver.track?.kind === 'video' &&
-            transceiver.currentDirection !== null &&
-            transceiver.currentDirection !== 'inactive' &&
-            transceiver.currentDirection !== 'sendonly'
-        )?.receiver.track;
-
+    // Only ever the track `ontrack` handed us. A PeerConnection can hold receivers whose
+    // transceivers were never negotiated; their tracks are live-but-silent placeholders and
+    // attaching one blanks the tile.
+    const videoTrack = this.peerManager.getRemoteVideoTrack();
     if (videoTrack) {
       attachRemoteVideo(videoTrack, elementId);
     }
@@ -186,24 +198,16 @@ export class RtcService {
     return this.peerManager.getRemoteConnectionQuality();
   }
 
-  setOnUserPublished(
-    callback: (participant: RtcParticipant, mediaType: 'audio' | 'video') => void
-  ): void {
-    this.callbacks.onTrackSubscribed = callback;
+  setOnRemoteTrack(callback: (kind: 'audio' | 'video', state: RemoteTrackState) => void): void {
+    this.callbacks.onRemoteTrack = callback;
   }
 
-  setOnUserUnpublished(
-    callback: (participant: RtcParticipant, mediaType: 'audio' | 'video') => void
-  ): void {
-    this.callbacks.onTrackUnsubscribed = callback;
+  setOnConnectionState(callback: (state: RtcConnectionState) => void): void {
+    this.callbacks.onConnectionState = callback;
   }
 
-  setOnUserJoined(callback: (participant: RtcParticipant) => void): void {
-    this.callbacks.onParticipantConnected = callback;
-  }
-
-  setOnUserLeft(callback: (participant: RtcParticipant) => void): void {
-    this.callbacks.onParticipantDisconnected = callback;
+  setOnIceRoute(callback: (route: IceRoute) => void): void {
+    this.callbacks.onIceRoute = callback;
   }
 
   setOnConnectionQualityChanged(
