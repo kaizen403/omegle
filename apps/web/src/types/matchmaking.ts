@@ -9,6 +9,7 @@ export type MessageType = 'join' | 'leave' | 'cancel' | 'message' | 'typing' | '
 
 // Server Message Types
 export type ServerMessageType =
+  | 'connected'
   | 'match'
   | 'reconnected'
   | 'session_expired'
@@ -91,6 +92,8 @@ export interface MatchDataMatched {
   partnerUid: number;
   partnerGender?: 'male' | 'female' | 'other';
   expiresAt: number;
+  /** Peer-connection generation to start at; set on a resumed session, 0 otherwise. */
+  rtcEpoch?: number;
 }
 
 // Union type for match responses
@@ -107,6 +110,9 @@ export interface ReconnectedData {
   rtcEnabled?: boolean;
   expiresAt?: number;
   partnerName?: string;
+  partnerGender?: 'male' | 'female' | 'other';
+  /** Generation both peers rebuild their connection under after this resume. */
+  rtcEpoch?: number;
   message: string;
 }
 
@@ -152,11 +158,13 @@ export interface SignalData {
 export interface RTCOfferSignal {
   type: 'offer';
   sdp: string;
+  epoch?: number;
 }
 
 export interface RTCAnswerSignal {
   type: 'answer';
   sdp: string;
+  epoch?: number;
 }
 
 export interface RTCCandidateSignal {
@@ -164,6 +172,7 @@ export interface RTCCandidateSignal {
   candidate: string;
   sdpMid: string | null;
   sdpMLineIndex: number | null;
+  epoch?: number;
 }
 
 export type RTCSignal = RTCOfferSignal | RTCAnswerSignal | RTCCandidateSignal;
@@ -218,6 +227,22 @@ export type ClientMessage =
   | PingMessage;
 
 // Server Messages (received from server)
+
+/**
+ * The server's handshake on every (re)connection. `resumed` is true when a held session was
+ * reclaimed with a resume token — false on a reconnect means the chat we were in is gone.
+ */
+export interface ConnectedMessage {
+  type: 'connected';
+  data: {
+    status?: string;
+    uid?: number;
+    resumeToken?: string;
+    resumed?: boolean;
+    message?: string;
+  };
+}
+
 export interface MatchMessage {
   type: 'match';
   data: MatchData;
@@ -260,7 +285,7 @@ export interface PartnerReconnectingMessage {
 /** The partner came back inside the grace window. */
 export interface PartnerReconnectedMessage {
   type: 'partner_reconnected';
-  data: { partnerUid: number };
+  data: { partnerUid: number; rtcEpoch?: number };
 }
 
 export interface ErrorMessage {
@@ -305,6 +330,7 @@ export interface RoomClosedMessage {
 }
 
 export type ServerMessage =
+  | ConnectedMessage
   | MatchMessage
   | ReconnectedMessage
   | SessionExpiredMessage

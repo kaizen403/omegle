@@ -7,27 +7,34 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { showError, showWarning, showSuccess, parseMediaError, ErrorCode } from '@/lib/toast';
 import { useMediaState } from './useMediaState';
 import { analytics } from '@/services/analytics';
-import { RTC_INIT_TIMEOUT, DEVICE_UPDATE_INTERVAL, DOM_IDS } from '@/constants';
+import { DEVICE_UPDATE_INTERVAL, DOM_IDS } from '@/constants';
+import { primeRemoteAudio, remoteAudio } from '@/services/rtc/managers/remote-audio';
 import type { MatchDataMatched } from '@/types/matchmaking';
 import type { RtcService } from '@/services/rtc';
-import type { NetworkQualityLevel, RtcParticipant } from '@/services/rtc';
+import type {
+  NetworkQualityLevel,
+  RtcParticipant,
+  RemoteTrackState,
+  RtcConnectionState,
+} from '@/services/rtc';
 
-interface UseRtcOptions {
-  onRemoteVideoReady?: (participantId: string) => void;
-  onRemoteUserLeft?: (participantId: string) => void;
-}
+/** What the remote tile should say about the partner's camera. */
+export type RemoteCameraStatus = 'connecting' | 'live' | 'off';
 
-export function useRtc(options: UseRtcOptions = {}) {
-  const { onRemoteVideoReady, onRemoteUserLeft } = options;
+/** How long a connected call may stay without video before we call the camera "off". */
+const REMOTE_CAMERA_GRACE_MS = 2000;
 
+export function useRtc() {
   const rtcServiceRef = useRef<RtcService | null>(null);
   const isInitializingRef = useRef(false);
 
   const { isCameraOn, isMicOn, setCameraOn, setMicOn } = useMediaState();
 
   const [isRTCInitialized, setIsRTCInitialized] = useState(false);
-  const [isRemoteCameraOn, setIsRemoteCameraOn] = useState(false);
-  const [isRemoteMicOn, setIsRemoteMicOn] = useState(false);
+  const [remoteVideoState, setRemoteVideoState] = useState<RemoteTrackState>('none');
+  const [remoteAudioState, setRemoteAudioState] = useState<RemoteTrackState>('none');
+  const [rtcConnectionState, setRtcConnectionState] = useState<RtcConnectionState>('idle');
+  const [remoteCameraStatus, setRemoteCameraStatus] = useState<RemoteCameraStatus>('connecting');
   const hasPreviewRef = useRef(false);
   const [currentCameraId, setCurrentCameraId] = useState<string | undefined>(undefined);
   const [currentMicId, setCurrentMicId] = useState<string | undefined>(undefined);
@@ -35,10 +42,50 @@ export function useRtc(options: UseRtcOptions = {}) {
   const [localNetworkQuality, setLocalNetworkQuality] = useState<NetworkQualityLevel>('unknown');
   const [remoteNetworkQuality, setRemoteNetworkQuality] = useState<NetworkQualityLevel>('unknown');
 
+  useEffect(() => {
+    if (remoteVideoState === 'live') {
+      setRemoteCameraStatus('live');
+      return;
+    }
+    if (remoteVideoState === 'muted') {
+      setRemoteCameraStatus('off');
+      return;
+    }
+    if (rtcConnectionState !== 'connected') {
+      setRemoteCameraStatus('connecting');
+      return;
+    }
+    // Connected with no video yet. A track normally unmutes within a few hundred ms of the
+    // transport coming up, so anything longer means the partner joined with the camera off.
+    const timer = setTimeout(() => setRemoteCameraStatus('off'), REMOTE_CAMERA_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [remoteVideoState, rtcConnectionState]);
+
+  const ensureService = useCallback(async (): Promise<RtcService> => {
+    if (!rtcServiceRef.current) {
+      const { RtcService } = await import('@/services/rtc');
+      rtcServiceRef.current = new RtcService();
+    }
+    return rtcServiceRef.current;
+  }, []);
+
+  const resetRemoteState = useCallback(() => {
+    setRemoteVideoState('none');
+    setRemoteAudioState('none');
+    setRtcConnectionState('idle');
+    setLocalNetworkQuality('unknown');
+    setRemoteNetworkQuality('unknown');
+  }, []);
+
+  const syncDevices = useCallback((service: RtcService) => {
+    const devices = service.getCurrentDevices();
+    if (devices.cameraId) setCurrentCameraId(devices.cameraId);
+    if (devices.micId) setCurrentMicId(devices.micId);
+  }, []);
+
   const initializeRTC = useCallback(
     async (
       matchData: MatchDataMatched,
-      uid: string | number,
       localVideoElementId: string,
       remoteVideoElementId: string
     ) => {
@@ -47,21 +94,15 @@ export function useRtc(options: UseRtcOptions = {}) {
         return;
       }
 
-      const initTimeout = setTimeout(() => {
-        showError('Connection timeout. Please check your network.', ErrorCode.CONNECTION_TIMEOUT);
-        isInitializingRef.current = false;
-      }, RTC_INIT_TIMEOUT);
+      isInitializingRef.current = true;
 
       try {
-        isInitializingRef.current = true;
-
         if (rtcServiceRef.current?.isRoomJoined()) {
           await rtcServiceRef.current.leave();
           setIsRTCInitialized(false);
         }
 
         if (!Array.isArray(matchData.iceServers)) {
-          clearTimeout(initTimeout);
           showError(
             'Video service configuration error. Please contact support.',
             ErrorCode.CHANNEL_JOIN_FAILED
@@ -70,61 +111,37 @@ export function useRtc(options: UseRtcOptions = {}) {
         }
 
         if (!matchData.roomId) {
-          clearTimeout(initTimeout);
           showError('Invalid session data. Please try again.', ErrorCode.CHANNEL_JOIN_FAILED);
           throw new Error('Missing room id from match data');
         }
 
-        const rtcConnectionStart = Date.now();
-        const numericUid = typeof uid === 'number' ? uid : parseInt(String(uid), 10);
-        const isOfferer =
-          typeof matchData.isOfferer === 'boolean'
-            ? matchData.isOfferer
-            : numericUid < matchData.partnerUid;
+        const service = await ensureService();
+        const connectionStart = Date.now();
+        resetRemoteState();
 
-        if (!rtcServiceRef.current) {
-          const { RtcService } = await import('@/services/rtc');
-          rtcServiceRef.current = new RtcService();
-        }
-
-        rtcServiceRef.current.setOnUserPublished(
-          (participant: RtcParticipant, mediaType: 'audio' | 'video') => {
-            if (mediaType === 'video') {
-              setIsRemoteCameraOn(true);
-              const remoteElement = document.getElementById(remoteVideoElementId);
-              if (remoteElement) {
-                rtcServiceRef.current?.playRemoteVideo(participant, remoteVideoElementId);
-                onRemoteVideoReady?.(participant.identity);
-              }
-            } else if (mediaType === 'audio') {
-              setIsRemoteMicOn(true);
-            }
+        service.setOnRemoteTrack((kind, state) => {
+          if (kind === 'video') {
+            setRemoteVideoState(state);
+            return;
           }
-        );
-
-        rtcServiceRef.current.setOnUserUnpublished(
-          (_participant: RtcParticipant, mediaType: 'audio' | 'video') => {
-            if (mediaType === 'video') {
-              setIsRemoteCameraOn(false);
-            } else if (mediaType === 'audio') {
-              setIsRemoteMicOn(false);
-            }
+          setRemoteAudioState(state);
+          if (state === 'live') {
+            remoteAudio.resume();
           }
-        );
-
-        rtcServiceRef.current.setOnUserLeft((participant: RtcParticipant) => {
-          setIsRemoteCameraOn(false);
-          setIsRemoteMicOn(false);
-          setRemoteNetworkQuality('unknown');
-          onRemoteUserLeft?.(participant.identity);
         });
 
-        rtcServiceRef.current.setOnConnectionQualityChanged(
+        service.setOnConnectionState((state) => {
+          setRtcConnectionState(state);
+          if (state === 'connected') {
+            analytics.trackRTCConnectionTime(Date.now() - connectionStart);
+          }
+        });
+
+        service.setOnConnectionQualityChanged(
           (quality: NetworkQualityLevel, participant: RtcParticipant | null) => {
-            const localIdentity = rtcServiceRef.current?.getLocalParticipantIdentity();
+            const localIdentity = service.getLocalParticipantIdentity();
             const isLocalParticipant =
               participant === null || participant.identity === localIdentity;
-
             if (isLocalParticipant) {
               setLocalNetworkQuality(quality);
             } else {
@@ -133,52 +150,38 @@ export function useRtc(options: UseRtcOptions = {}) {
           }
         );
 
-        await rtcServiceRef.current.join(
+        await service.join(
           {
             iceServers: matchData.iceServers,
-            isOfferer,
+            isOfferer: matchData.isOfferer,
             roomId: matchData.roomId,
             partnerIdentity: String(matchData.partnerUid),
             localVideoElementId,
             remoteVideoElementId,
+            epoch: matchData.rtcEpoch ?? 0,
           },
           isCameraOn,
           isMicOn
         );
 
-        if (!rtcServiceRef.current) {
-          clearTimeout(initTimeout);
+        if (rtcServiceRef.current !== service) {
           throw new Error('RTC service was cleaned up during initialization');
         }
 
-        setLocalNetworkQuality(rtcServiceRef.current.getLocalConnectionQuality());
-        setRemoteNetworkQuality(rtcServiceRef.current.getRemoteConnectionQuality());
-
-        const devices = rtcServiceRef.current.getCurrentDevices();
-        if (devices.cameraId) setCurrentCameraId(devices.cameraId);
-        if (devices.micId) setCurrentMicId(devices.micId);
-
+        syncDevices(service);
         analytics.trackRTCJoin();
-        analytics.trackRTCConnectionTime(Date.now() - rtcConnectionStart);
 
-        if (isCameraOn && rtcServiceRef.current) {
-          const localElement = document.getElementById(localVideoElementId);
-          if (localElement) {
-            try {
-              rtcServiceRef.current.playLocalVideo(localVideoElementId);
-            } catch {
-              // Video element may not exist yet
-            }
+        if (isCameraOn && document.getElementById(localVideoElementId)) {
+          try {
+            service.playLocalVideo(localVideoElementId);
+          } catch {
+            // Video element may not exist yet
           }
         }
 
         setIsRTCInitialized(true);
-        clearTimeout(initTimeout);
-        isInitializingRef.current = false;
       } catch (error) {
-        clearTimeout(initTimeout);
         setIsRTCInitialized(false);
-        isInitializingRef.current = false;
 
         if (rtcServiceRef.current) {
           try {
@@ -192,41 +195,49 @@ export function useRtc(options: UseRtcOptions = {}) {
         const { message, code } = parseMediaError(error);
         showError(message, code);
         throw error;
+      } finally {
+        isInitializingRef.current = false;
       }
     },
-    [isCameraOn, isMicOn, onRemoteVideoReady, onRemoteUserLeft]
+    [ensureService, resetRemoteState, syncDevices, isCameraOn, isMicOn]
   );
 
+  /**
+   * Replace the peer connection after a signalling reconnect (ours or the partner's). A
+   * connection that is still healthy is left alone.
+   */
+  const rebuildRTC = useCallback(async (epoch?: number) => {
+    const service = rtcServiceRef.current;
+    if (!service?.isRoomJoined()) return;
+    await service.rebuild(epoch);
+  }, []);
+
   const resumeRemoteAudio = useCallback(() => {
-    rtcServiceRef.current?.resumeRemoteAudio();
+    remoteAudio.resume();
   }, []);
 
   const prepareLocalMedia = useCallback(async () => {
+    // First, and synchronously: this runs inside the Start click, which is the only chance
+    // to unlock remote audio on iOS before the partner's track arrives.
+    primeRemoteAudio();
+
     if (!isCameraOn && !isMicOn) {
       return;
     }
 
     try {
-      if (!rtcServiceRef.current) {
-        const { RtcService } = await import('@/services/rtc');
-        rtcServiceRef.current = new RtcService();
-      }
-
-      await rtcServiceRef.current.createLocalPreview(isCameraOn, isMicOn);
+      const service = await ensureService();
+      await service.createLocalPreview(isCameraOn, isMicOn);
       hasPreviewRef.current = true;
-
-      const devices = rtcServiceRef.current.getCurrentDevices();
-      if (devices.cameraId) setCurrentCameraId(devices.cameraId);
-      if (devices.micId) setCurrentMicId(devices.micId);
+      syncDevices(service);
 
       if (isCameraOn) {
-        rtcServiceRef.current.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
+        service.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
       }
-      rtcServiceRef.current.resumeRemoteAudio();
     } catch {
       // Permission denied — text chat still works after match
     }
-  }, [isCameraOn, isMicOn]);
+  }, [ensureService, syncDevices, isCameraOn, isMicOn]);
 
   const isTogglingCameraRef = useRef(false);
 
@@ -242,9 +253,8 @@ export function useRtc(options: UseRtcOptions = {}) {
     if (isRTCInitialized && rtcServiceRef.current) {
       try {
         await rtcServiceRef.current.toggleCamera(newState);
-        const devices = rtcServiceRef.current.getCurrentDevices();
-        if (devices.cameraId) setCurrentCameraId(devices.cameraId);
-        rtcServiceRef.current.resumeRemoteAudio();
+        syncDevices(rtcServiceRef.current);
+        remoteAudio.resume();
         analytics.trackCameraToggle(newState, 'call');
         showSuccess(newState ? 'Camera on' : 'Camera off');
       } catch (error) {
@@ -263,18 +273,10 @@ export function useRtc(options: UseRtcOptions = {}) {
     } else {
       if (newState) {
         try {
-          if (!rtcServiceRef.current) {
-            const { RtcService } = await import('@/services/rtc');
-            rtcServiceRef.current = new RtcService();
-          }
-
-          await rtcServiceRef.current.createLocalPreview(true, isMicOn);
+          const service = await ensureService();
+          await service.createLocalPreview(true, isMicOn);
           hasPreviewRef.current = true;
-
-          const devices = rtcServiceRef.current.getCurrentDevices();
-          if (devices.cameraId) setCurrentCameraId(devices.cameraId);
-          if (devices.micId) setCurrentMicId(devices.micId);
-
+          syncDevices(service);
           analytics.trackCameraToggle(true, 'preview');
         } catch (error) {
           const errorStr = String(error);
@@ -290,7 +292,7 @@ export function useRtc(options: UseRtcOptions = {}) {
         isTogglingCameraRef.current = false;
       }
     }
-  }, [isCameraOn, isMicOn, isRTCInitialized, setCameraOn]);
+  }, [ensureService, syncDevices, isCameraOn, isMicOn, isRTCInitialized, setCameraOn]);
 
   const isTogglingMicRef = useRef(false);
 
@@ -306,9 +308,8 @@ export function useRtc(options: UseRtcOptions = {}) {
     if (isRTCInitialized && rtcServiceRef.current) {
       try {
         await rtcServiceRef.current.toggleMicrophone(newState);
-        const devices = rtcServiceRef.current.getCurrentDevices();
-        if (devices.micId) setCurrentMicId(devices.micId);
-        rtcServiceRef.current.resumeRemoteAudio();
+        syncDevices(rtcServiceRef.current);
+        remoteAudio.resume();
         analytics.trackMicrophoneToggle(newState, 'call');
         showSuccess(newState ? 'Microphone on' : 'Microphone off');
       } catch (error) {
@@ -324,18 +325,10 @@ export function useRtc(options: UseRtcOptions = {}) {
     } else {
       if (newState || isCameraOn) {
         try {
-          if (!rtcServiceRef.current) {
-            const { RtcService } = await import('@/services/rtc');
-            rtcServiceRef.current = new RtcService();
-          }
-
-          await rtcServiceRef.current.createLocalPreview(isCameraOn, newState);
+          const service = await ensureService();
+          await service.createLocalPreview(isCameraOn, newState);
           hasPreviewRef.current = true;
-
-          const devices = rtcServiceRef.current.getCurrentDevices();
-          if (devices.cameraId) setCurrentCameraId(devices.cameraId);
-          if (devices.micId) setCurrentMicId(devices.micId);
-
+          syncDevices(service);
           analytics.trackMicrophoneToggle(newState, 'preview');
         } catch {
           // Preview mic toggle failed
@@ -346,7 +339,7 @@ export function useRtc(options: UseRtcOptions = {}) {
         isTogglingMicRef.current = false;
       }
     }
-  }, [isCameraOn, isMicOn, isRTCInitialized, setMicOn]);
+  }, [ensureService, syncDevices, isCameraOn, isMicOn, isRTCInitialized, setMicOn]);
 
   const leaveRTC = useCallback(async () => {
     if (isInitializingRef.current) {
@@ -368,23 +361,17 @@ export function useRtc(options: UseRtcOptions = {}) {
       await rtcServiceRef.current.leave();
       hasPreviewRef.current = false;
       setIsRTCInitialized(false);
-      setIsRemoteCameraOn(false);
-      setIsRemoteMicOn(false);
-      setLocalNetworkQuality('unknown');
-      setRemoteNetworkQuality('unknown');
+      resetRemoteState();
 
       if (wasCameraOn || wasMicOn) {
         setTimeout(async () => {
           try {
-            if (!rtcServiceRef.current) {
-              const { RtcService } = await import('@/services/rtc');
-              rtcServiceRef.current = new RtcService();
-            }
-            await rtcServiceRef.current.createLocalPreview(wasCameraOn, wasMicOn);
+            const service = await ensureService();
+            await service.createLocalPreview(wasCameraOn, wasMicOn);
             hasPreviewRef.current = true;
 
             if (wasCameraOn) {
-              rtcServiceRef.current.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
+              service.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
             }
           } catch {
             // Preview recreation failed
@@ -398,7 +385,7 @@ export function useRtc(options: UseRtcOptions = {}) {
     } catch {
       setIsRTCInitialized(false);
     }
-  }, [isCameraOn, isMicOn]);
+  }, [ensureService, resetRemoteState, isCameraOn, isMicOn]);
 
   const switchCamera = useCallback(async (deviceId: string) => {
     if (!rtcServiceRef.current) return;
@@ -473,11 +460,14 @@ export function useRtc(options: UseRtcOptions = {}) {
     isCameraOn,
     isMicOn,
     isRTCInitialized,
-    isRemoteCameraOn,
-    isRemoteMicOn,
+    isRemoteCameraOn: remoteVideoState === 'live',
+    isRemoteMicOn: remoteAudioState === 'live',
+    remoteCameraStatus,
+    rtcConnectionState,
     localNetworkQuality,
     remoteNetworkQuality,
     initializeRTC,
+    rebuildRTC,
     prepareLocalMedia,
     toggleCamera,
     toggleMicrophone,

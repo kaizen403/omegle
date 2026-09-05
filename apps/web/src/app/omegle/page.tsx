@@ -19,6 +19,7 @@ import { showError, showWarning, ErrorCode } from '@/lib';
 import { isBrowserSupported } from '@/lib/browser-polyfill';
 import { analytics } from '@/services/analytics';
 import { isMobileDevice } from '@/services/rtc';
+import type { RemoteVideoStatus } from '@/components/omegle/video/VideoDisplay';
 import type { MatchDataMatched } from '@/types/matchmaking';
 import { Logo } from '@/components/brand';
 import { cn } from '@/lib/utils';
@@ -40,12 +41,16 @@ function OmeglePageContent() {
     connectionState,
     matchData,
     isMatched,
+    isReconnecting,
+    isPartnerReconnecting,
     isInSession,
     matchmakingError,
     isCameraOn,
     isMicOn,
     isRemoteCameraOn,
     isRemoteMicOn,
+    remoteCameraStatus,
+    rtcConnectionState,
     messages,
     isPartnerTyping,
     startSearch,
@@ -79,6 +84,25 @@ function OmeglePageContent() {
     () => connectionState === 'waiting' && !isMatched,
     [connectionState, isMatched]
   );
+
+  // What to say over the remote feed. Reconnection states win over everything else because
+  // they explain why the picture froze; after that, the camera state.
+  const remoteStatus = useMemo<RemoteVideoStatus | null>(() => {
+    if (!isMatched || !matchData?.rtcEnabled) return null;
+    if (isReconnecting || rtcConnectionState === 'reconnecting') return 'reconnecting';
+    if (isPartnerReconnecting) return 'partner-reconnecting';
+    if (rtcConnectionState === 'failed') return 'failed';
+    if (remoteCameraStatus === 'live') return null;
+    if (remoteCameraStatus === 'off') return 'camera-off';
+    return 'connecting';
+  }, [
+    isMatched,
+    matchData,
+    isReconnecting,
+    isPartnerReconnecting,
+    rtcConnectionState,
+    remoteCameraStatus,
+  ]);
 
   // Detect mobile device
   useEffect(() => {
@@ -219,7 +243,7 @@ function OmeglePageContent() {
     <div className="bg-sky bg-bubbles text-text fixed inset-0 flex h-dvh w-screen flex-col overflow-hidden">
       <MatchConfetti isActive={showMatchConfetti} />
 
-      <RoomHeader isMatched={isMatched} isSearching={isSearching} />
+      <RoomHeader isMatched={isMatched} isSearching={isSearching} isReconnecting={isReconnecting} />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Video column */}
@@ -234,6 +258,7 @@ function OmeglePageContent() {
               isCameraOn={isRemoteCameraOn}
               isMicOn={isRemoteMicOn}
               partnerGender={partnerGender}
+              status={remoteStatus}
             />
           </div>
 
@@ -298,8 +323,22 @@ function OmeglePageContent() {
 }
 
 /** Slim room header: wordmark, status, exit. */
-function RoomHeader({ isMatched, isSearching }: { isMatched: boolean; isSearching: boolean }) {
-  const status = isMatched ? 'Connected' : isSearching ? 'Searching' : '';
+function RoomHeader({
+  isMatched,
+  isSearching,
+  isReconnecting,
+}: {
+  isMatched: boolean;
+  isSearching: boolean;
+  isReconnecting: boolean;
+}) {
+  const status = isReconnecting
+    ? 'Reconnecting'
+    : isMatched
+      ? 'Connected'
+      : isSearching
+        ? 'Searching'
+        : '';
   return (
     <header className="flex h-14 shrink-0 items-center justify-between px-4 lg:px-5">
       <Logo height={22} priority />
@@ -307,7 +346,13 @@ function RoomHeader({ isMatched, isSearching }: { isMatched: boolean; isSearchin
         <span
           className={cn(
             'size-2 rounded-full',
-            isMatched ? 'bg-green animate-live' : isSearching ? 'bg-blue' : 'bg-line-2'
+            isReconnecting
+              ? 'bg-blue animate-live'
+              : isMatched
+                ? 'bg-green animate-live'
+                : isSearching
+                  ? 'bg-blue'
+                  : 'bg-line-2'
           )}
           aria-hidden
         />

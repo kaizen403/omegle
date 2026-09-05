@@ -27,16 +27,6 @@ export class MatchHandler {
   private adminHandler?: any;
   private botHandler?: BotHandler;
   private pendingJoinOperations: Map<number, Promise<void>>; // Prevent duplicate joins
-  /**
-   * Debounce timestamps, keyed by client-chosen uid.
-   *
-   * Because the uid comes from the client, an attacker can mint a new one per join and grow
-   * this Map without limit. It is pruned on write so a uid flood cannot exhaust the heap; the
-   * per-IP join budget in SocketIOManager is what actually rate-limits the behaviour.
-   */
-  private lastJoinTime: Map<number, number>; // Debounce join requests
-  private static readonly MAX_JOIN_TIME_ENTRIES = 50_000;
-  private static readonly JOIN_TIME_TTL_MS = 5 * 60 * 1000;
   private matchmakerInterval?: NodeJS.Timeout; // Periodic matchmaker
 
   constructor(
@@ -54,7 +44,6 @@ export class MatchHandler {
     this.rateLimiter = new SocketRateLimiter(100, 20);
     this.matchingInProgress = new Set();
     this.pendingJoinOperations = new Map();
-    this.lastJoinTime = new Map();
 
     // Start periodic matchmaker
     this.startPeriodicMatchmaker();
@@ -154,30 +143,6 @@ export class MatchHandler {
   }
 
   /**
-   * Record a join timestamp, pruning stale entries so the map cannot grow without bound.
-   */
-  private recordJoinTime(uid: number): void {
-    const now = Date.now();
-
-    if (this.lastJoinTime.size >= MatchHandler.MAX_JOIN_TIME_ENTRIES) {
-      const cutoff = now - MatchHandler.JOIN_TIME_TTL_MS;
-      for (const [key, at] of this.lastJoinTime) {
-        if (at < cutoff) {
-          this.lastJoinTime.delete(key);
-        }
-      }
-      // Still full of fresh entries: drop the oldest insertions to stay bounded.
-      while (this.lastJoinTime.size >= MatchHandler.MAX_JOIN_TIME_ENTRIES) {
-        const oldest = this.lastJoinTime.keys().next();
-        if (oldest.done) break;
-        this.lastJoinTime.delete(oldest.value);
-      }
-    }
-
-    this.lastJoinTime.set(uid, now);
-  }
-
-  /**
    * Handle join request - user wants to find a match
    */
   public async handleJoin(socket: ExtendedSocket, data: MatchRequest): Promise<void> {
@@ -195,15 +160,11 @@ export class MatchHandler {
       return;
     }
 
-    // Same reasoning for the rapid-repeat debounce: it protects the queue from churn, but to
-    // the user it is still "yes, you are searching".
-    const lastJoinTime = this.lastJoinTime.get(uid) || 0;
-    const now = Date.now();
-    if (now - lastJoinTime < 500) {
-      socketLogger.debug(`[JOIN DEBOUNCED] UID: ${uid} - too soon since last join`);
-      socket.emit('match', { status: 'searching', message: 'Searching for a match...' });
-      return;
-    }
+    // No rapid-repeat debounce here. It used to answer a join that came within 500ms of the
+    // previous one with "searching" and then not queue the user at all — so a fast "Next"
+    // straight after a match left the person on "Searching..." with nobody looking for them
+    // until the client's own timeout fired. The pending-operation check above already drops
+    // true duplicates, and the per-uid and per-IP budgets bound the churn.
 
     // Rate limit join requests (prevent queue flooding)
     if (!this.rateLimiter.allowMessage(uid)) {
@@ -273,7 +234,6 @@ export class MatchHandler {
     const joinOperation = (async () => {
       try {
         await this.matchmaking.addToQueue(queueUser, ipAddress, socket.id);
-        this.recordJoinTime(uid);
         socketLogger.debug(
           `⏳ [WAITING] UID: ${uid} (${name}) added to queue from IP: ${ipAddress}`
         );

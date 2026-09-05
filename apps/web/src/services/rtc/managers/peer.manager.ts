@@ -1,52 +1,107 @@
 /**
- * One RTCPeerConnection per match. Assigned-role signaling, trickle ICE, ICE restart.
+ * One RTCPeerConnection per match generation.
+ *
+ * Negotiation follows the W3C "perfect negotiation" pattern: either side may (re)negotiate at
+ * any time, and an offer collision is resolved by role — the answerer is *polite* and rolls
+ * its own offer back, the offerer is *impolite* and ignores the incoming one. Every signal is
+ * applied strictly in arrival order, and every signal carries the generation (`epoch`) it
+ * belongs to, so both sides can tear the connection down and rebuild it in lockstep after a
+ * reconnect or an ICE failure that a restart could not heal.
+ *
+ * Transceivers are created only by the offerer. The answerer waits for the offer and adopts
+ * the transceivers the browser builds while applying it: Chrome does not associate an offer's
+ * m-sections with transceivers made by a bare addTransceiver(), so pre-creating them on the
+ * answerer leaves its camera and mic on transceivers that are never negotiated — the call
+ * "connects" and only one direction ever carries media.
  */
 
 import { RTC_CONFIG, getVideoSettingsForNetwork, getAudioSettingsForNetwork } from '../config';
 import type { NetworkQuality } from '../config';
-import type { RtcJoinConfig, RtcSignal, NetworkQualityLevel, RtcParticipant } from '../types';
+import type {
+  IceServer,
+  RtcJoinConfig,
+  RtcSignal,
+  NetworkQualityLevel,
+  RemoteTrackState,
+  RtcConnectionState,
+} from '../types';
 import type { RtcState, RtcCallbacks } from './types';
 import { attachRemoteVideo, clearMediaElement } from './video-renderer';
+import { remoteAudio as sharedRemoteAudio, RemoteAudio } from './remote-audio';
 
 export type PeerConnectionFactory = (config: RTCConfiguration) => RTCPeerConnection;
 export type SendSignal = (signal: RtcSignal) => void;
 
+type Kind = 'audio' | 'video';
+const KINDS: readonly Kind[] = ['audio', 'video'];
+
 const DEFAULT_FACTORY: PeerConnectionFactory = (config) => new RTCPeerConnection(config);
+
+function newMediaStream(tracks: MediaStreamTrack[] = []): MediaStream | null {
+  if (typeof MediaStream === 'undefined') return null;
+  try {
+    return new MediaStream(tracks);
+  } catch {
+    return null;
+  }
+}
+
+function isKind(value: unknown): value is Kind {
+  return value === 'audio' || value === 'video';
+}
 
 export class PeerManager {
   private sendSignal: SendSignal | null = null;
-  private pendingCandidates: RTCIceCandidateInit[] = [];
-  private remoteDescriptionSet = false;
-  private makingOffer = false;
-  private iceRestartInFlight = false;
-  private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private statsTimer: ReturnType<typeof setInterval> | null = null;
-  private audioElement: HTMLAudioElement | null = null;
-  private audioTransceiver: RTCRtpTransceiver | null = null;
-  private videoTransceiver: RTCRtpTransceiver | null = null;
+  private iceServers: IceServer[] = [];
+  private polite = false;
   private remoteVideoElementId = '';
-  private unsubscribers: Array<() => void> = [];
-  private offersCreated = 0;
 
-  /**
-   * The local tracks this side wants to send. Held here because the answerer cannot attach
-   * them until the offer has been applied (see `adoptNegotiatedTransceivers`), and because a
-   * camera/mic toggle can land before that happens.
-   */
-  private localAudioTrack: MediaStreamTrack | null = null;
-  private localVideoTrack: MediaStreamTrack | null = null;
+  /** Serialises every operation that touches the PeerConnection. */
+  private chain: Promise<void> = Promise.resolve();
+  /** Bumped for every PeerConnection we create, so events from a closed one are ignored. */
+  private generation = 0;
+  /** Bumped whenever a description is applied; lets onnegotiationneeded skip stale requests. */
+  private descriptionsApplied = 0;
 
-  /** The remote video track handed to us by `ontrack`, so nothing has to guess it later. */
+  private makingOffer = false;
+  private ignoreOffer = false;
+  private isSettingRemoteAnswerPending = false;
+  private pendingCandidates: RTCIceCandidateInit[] = [];
+
+  private localTracks: Record<Kind, MediaStreamTrack | null> = { audio: null, video: null };
+  private localStream: MediaStream | null = null;
   private remoteVideoTrack: MediaStreamTrack | null = null;
+
+  private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private failedTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private statsTimer: ReturnType<typeof setInterval> | null = null;
+  private lastIceRestartAt = 0;
+  private consecutiveRebuilds = 0;
+  private offersCreated = 0;
 
   constructor(
     private state: RtcState,
     private callbacks: RtcCallbacks,
-    private peerConnectionFactory: PeerConnectionFactory = DEFAULT_FACTORY
+    private peerConnectionFactory: PeerConnectionFactory = DEFAULT_FACTORY,
+    private remoteAudio: RemoteAudio = sharedRemoteAudio
   ) {}
 
   getOffersCreated(): number {
     return this.offersCreated;
+  }
+
+  getEpoch(): number {
+    return this.state.epoch;
+  }
+
+  getConnectionState(): RtcConnectionState {
+    return this.state.connectionState;
+  }
+
+  /** The live remote video track, as reported by `ontrack`. */
+  getRemoteVideoTrack(): MediaStreamTrack | null {
+    return this.remoteVideoTrack;
   }
 
   async join(
@@ -61,139 +116,68 @@ export class PeerManager {
     }
 
     this.sendSignal = sendSignal;
+    this.iceServers = config.iceServers;
+    this.polite = !config.isOfferer;
     this.state.isOfferer = config.isOfferer;
     this.state.partnerIdentity = config.partnerIdentity;
+    this.state.epoch = config.epoch ?? 0;
     this.remoteVideoElementId = config.remoteVideoElementId;
-    this.pendingCandidates = [];
-    this.remoteDescriptionSet = false;
+    this.localTracks = { audio: micTrack, video: cameraTrack };
+    this.consecutiveRebuilds = 0;
     this.offersCreated = 0;
-
-    const pc = this.peerConnectionFactory({
-      iceServers: config.iceServers,
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require',
-      iceTransportPolicy: 'all',
-    });
-    this.state.peerConnection = pc;
-
-    this.localAudioTrack = micTrack;
-    this.localVideoTrack = cameraTrack;
-    this.audioTransceiver = null;
-    this.videoTransceiver = null;
-    this.remoteVideoTrack = null;
-
-    // Only the offerer creates transceivers up front, and doing so is what fixes the bug
-    // this whole path used to have.
-    //
-    // Both sides used to call addTransceiver('audio'|'video', sendrecv) before signalling.
-    // On the answerer that is silently wrong: when setRemoteDescription applies the offer,
-    // Chrome does NOT associate the offer's m-sections with transceivers created by a bare
-    // addTransceiver() — it only reuses ones created by addTrack(). So it built two *new*
-    // recvonly transceivers, answered `a=recvonly` on both m-lines, and left the answerer's
-    // camera and mic attached to two transceivers that were never negotiated (mid === null).
-    //
-    // The call still "connected": ICE succeeded, the offerer's media flowed, and the
-    // answerer's tile filled in. But the answerer sent nothing, in either direction of the
-    // UI's understanding — the offerer's `inbound-rtp` stayed empty forever. That is exactly
-    // the "he can't see or hear me even though my camera and mic are on" report.
-    //
-    // The answerer now waits for the offer and adopts the transceivers Chrome actually
-    // negotiated (see `adoptNegotiatedTransceivers`).
-    if (config.isOfferer) {
-      this.audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-      this.videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
-      await this.audioTransceiver.sender.replaceTrack(micTrack);
-      await this.videoTransceiver.sender.replaceTrack(cameraTrack);
-    }
-
-    this.bindPeerEvents(pc);
-
     this.state.isJoined = true;
-    this.startStatsLoop();
 
-    if (config.isOfferer) {
-      await this.createAndSendOffer();
-    }
+    // Only the offerer starts the first negotiation; see the class comment.
+    await this.run(() => this.createPeer({ initiate: !this.polite }));
   }
 
-  async handleSignal(signal: RtcSignal): Promise<void> {
-    const pc = this.state.peerConnection;
-    if (!pc || this.state.isLeaving) return;
-
-    if (signal.type === 'offer') {
-      if (this.state.isOfferer) return;
-      await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
-      this.remoteDescriptionSet = true;
-      // Must happen before createAnswer, or the answer goes out as recvonly and this side
-      // never sends a single RTP packet.
-      await this.adoptNegotiatedTransceivers(pc);
-      await this.flushCandidates(pc);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      if (answer.sdp) {
-        this.sendSignal?.({ type: 'answer', sdp: answer.sdp });
-      }
-      return;
-    }
-
-    if (signal.type === 'answer') {
-      if (!this.state.isOfferer) return;
-      await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
-      this.remoteDescriptionSet = true;
-      await this.flushCandidates(pc);
-      return;
-    }
-
-    const candidate: RTCIceCandidateInit = {
-      candidate: signal.candidate,
-      sdpMid: signal.sdpMid,
-      sdpMLineIndex: signal.sdpMLineIndex,
-    };
-
-    if (!this.remoteDescriptionSet) {
-      this.pendingCandidates.push(candidate);
-      return;
-    }
-
-    try {
-      await pc.addIceCandidate(candidate);
-    } catch {
-      // Stale candidate after rollback / restart
-    }
+  /**
+   * Replace the connection with a fresh one at a newer generation.
+   *
+   * Used after a signalling reconnect, when either side may have changed networks. With
+   * `onlyIfUnhealthy` a connection that is still `connected` is left alone; if the partner
+   * rebuilt anyway, their first signal carries the new epoch and we follow it then.
+   */
+  rebuild(targetEpoch?: number, options: { onlyIfUnhealthy?: boolean } = {}): Promise<void> {
+    return this.run(async () => {
+      const pc = this.state.peerConnection;
+      if (options.onlyIfUnhealthy && pc && pc.connectionState === 'connected') return;
+      // An explicit rebuild is a deliberate fresh start, not another failed attempt.
+      this.consecutiveRebuilds = 0;
+      await this.rebuildToUnlocked(targetEpoch ?? this.state.epoch + 1, { initiate: true });
+    });
   }
 
-  async replaceVideoTrack(track: MediaStreamTrack | null): Promise<void> {
-    // Remembered so a toggle that lands before the offer arrives is still applied when the
-    // answerer adopts its transceivers.
-    this.localVideoTrack = track;
-    const hadTrack = Boolean(this.videoTransceiver?.sender.track);
-    await this.videoTransceiver?.sender.replaceTrack(track);
-    if (track && !hadTrack) {
-      await this.renegotiateAfterAddingTrack();
-    }
+  handleSignal(signal: RtcSignal): Promise<void> {
+    return this.run(() => this.processSignal(signal));
   }
 
-  async replaceAudioTrack(track: MediaStreamTrack | null): Promise<void> {
-    this.localAudioTrack = track;
-    const hadTrack = Boolean(this.audioTransceiver?.sender.track);
-    await this.audioTransceiver?.sender.replaceTrack(track);
-    if (track && !hadTrack) {
-      await this.renegotiateAfterAddingTrack();
-    }
+  replaceVideoTrack(track: MediaStreamTrack | null): Promise<void> {
+    return this.replaceLocalTrack('video', track);
+  }
+
+  replaceAudioTrack(track: MediaStreamTrack | null): Promise<void> {
+    return this.replaceLocalTrack('audio', track);
+  }
+
+  primeRemoteAudio(): void {
+    this.remoteAudio.prime();
   }
 
   resumeRemoteAudio(): void {
-    if (!this.audioElement) return;
-    void this.audioElement.play().catch(() => {
-      // Still waiting for a user gesture
-    });
+    this.remoteAudio.resume();
   }
 
   async applyBitrate(quality: NetworkQuality): Promise<void> {
+    const pc = this.state.peerConnection;
+    if (!pc) return;
     const video = getVideoSettingsForNetwork(quality);
     const audio = getAudioSettingsForNetwork(quality);
-    await this.setSenderBitrate(this.videoTransceiver?.sender, video.maxBitrate);
-    await this.setSenderBitrate(this.audioTransceiver?.sender, audio.maxBitrate);
+    await this.setSenderParameters(this.senderFor(pc, 'video'), {
+      maxBitrate: video.maxBitrate,
+      maxFramerate: video.frameRate,
+    });
+    await this.setSenderParameters(this.senderFor(pc, 'audio'), { maxBitrate: audio.maxBitrate });
   }
 
   getLocalConnectionQuality(): NetworkQualityLevel {
@@ -207,211 +191,241 @@ export class PeerManager {
   async leave(): Promise<void> {
     if (!this.state.isJoined || this.state.isLeaving) return;
     this.state.isLeaving = true;
-    this.clearTimers();
-    this.unsubscribers.forEach((unsub) => unsub());
-    this.unsubscribers = [];
 
-    try {
-      await this.audioTransceiver?.sender.replaceTrack(null);
-      await this.videoTransceiver?.sender.replaceTrack(null);
-    } catch {
-      // Closing
-    }
+    await this.run(async () => {
+      this.teardownPeer();
+    });
 
-    this.state.peerConnection?.close();
-    this.state.peerConnection = null;
-    this.audioTransceiver = null;
-    this.videoTransceiver = null;
-    this.localAudioTrack = null;
-    this.localVideoTrack = null;
-    this.remoteVideoTrack = null;
-    this.remoteDescriptionSet = false;
-    this.pendingCandidates = [];
+    this.localTracks = { audio: null, video: null };
     this.sendSignal = null;
-
-    if (this.audioElement) {
-      this.audioElement.pause();
-      this.audioElement.srcObject = null;
-      this.audioElement.remove();
-      this.audioElement = null;
-    }
-    if (this.remoteVideoElementId) {
-      clearMediaElement(this.remoteVideoElementId);
-    }
-
     this.state.isJoined = false;
     this.state.isLeaving = false;
     this.state.isPreviewMode = false;
     this.state.currentNetworkQuality = 'unknown';
+    this.setConnectionState('idle');
   }
 
-  private bindPeerEvents(pc: RTCPeerConnection): void {
-    pc.onicecandidate = (event) => {
-      if (!event.candidate || !event.candidate.candidate) return;
-      this.sendSignal?.({
-        type: 'candidate',
-        candidate: event.candidate.candidate,
-        sdpMid: event.candidate.sdpMid,
-        sdpMLineIndex: event.candidate.sdpMLineIndex,
-      });
-    };
+  // ---------------------------------------------------------------------------------------
+  // Serialisation
+  // ---------------------------------------------------------------------------------------
 
-    pc.onnegotiationneeded = () => {
-      if (!this.state.isOfferer || this.makingOffer || !this.state.isJoined) return;
-      if (this.offersCreated > 0) return;
-      void this.createAndSendOffer();
-    };
-
-    pc.ontrack = (event) => {
-      const track = event.track;
-      const participant: RtcParticipant = { identity: this.state.partnerIdentity };
-      const kind = track.kind === 'video' ? 'video' : 'audio';
-
-      if (kind === 'video') {
-        this.remoteVideoTrack = track;
-        attachRemoteVideo(track, this.remoteVideoElementId);
-      } else {
-        this.attachRemoteAudio(track);
-      }
-
-      const publishIfLive = () => {
-        // Remote tracks start muted until the first RTP packet. Treating
-        // `muted` as unpublished hides a live video behind the avatar overlay.
-        if (track.readyState === 'ended') {
-          this.callbacks.onTrackUnsubscribed?.(participant, kind);
-          return;
-        }
-        this.callbacks.onTrackSubscribed?.(participant, kind);
-      };
-
-      publishIfLive();
-      track.addEventListener('unmute', () => {
-        if (kind === 'audio') this.resumeRemoteAudio();
-        publishIfLive();
-      });
-      track.addEventListener('ended', () => {
-        if (kind === 'video' && this.remoteVideoTrack === track) {
-          this.remoteVideoTrack = null;
-        }
-        this.callbacks.onTrackUnsubscribed?.(participant, kind);
-      });
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      const iceState = pc.iceConnectionState;
-      if (iceState === 'failed') {
-        void this.restartIce();
-      } else if (iceState === 'disconnected') {
-        this.scheduleIceRestart();
-      } else if (iceState === 'connected' || iceState === 'completed') {
-        this.clearDisconnectTimer();
-        this.callbacks.onParticipantConnected?.({ identity: this.state.partnerIdentity });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        this.callbacks.onParticipantDisconnected?.({ identity: this.state.partnerIdentity });
-      }
-    };
+  private run<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.chain.then(fn, fn);
+    this.chain = next.then(
+      () => undefined,
+      () => undefined
+    );
+    return next;
   }
 
-  private async renegotiateAfterAddingTrack(): Promise<void> {
-    // Only the offerer may renegotiate. The answerer does not need to: its transceivers are
-    // negotiated as sendrecv regardless of whether it had a track at answer time, so turning
-    // a camera on later is just a replaceTrack on an already-live sender.
-    if (!this.state.isOfferer) return;
-    await this.createAndSendOffer();
-  }
+  // ---------------------------------------------------------------------------------------
+  // Peer lifecycle
+  // ---------------------------------------------------------------------------------------
 
   /**
-   * Adopt the transceivers the browser created while applying a remote offer.
+   * Build a fresh RTCPeerConnection for the current generation.
    *
-   * Chrome builds one transceiver per m-section and gives them the reciprocal direction
-   * (`recvonly` against a `sendrecv` offer). Left alone, the answer says recvonly and this
-   * side never sends. Forcing them back to sendrecv and attaching the local tracks is what
-   * makes the call two-way.
-   *
-   * Idempotent: a later renegotiation offer runs through here again and simply re-confirms.
+   * `initiate` decides who lays out the m-lines for this generation. It is true for the
+   * offerer on the first join and for whichever side starts a rebuild of its own (a resumed
+   * socket, an ICE failure) — that side must offer, or the partner never learns about the new
+   * generation. It is false when we are following an offer the partner already sent: then we
+   * create nothing and adopt the transceivers their offer produces, exactly like an answerer.
    */
-  private async adoptNegotiatedTransceivers(pc: RTCPeerConnection): Promise<void> {
-    const negotiated = (kind: 'audio' | 'video') =>
-      pc.getTransceivers().find((t) => t.mid !== null && t.receiver.track?.kind === kind) ?? null;
+  private async createPeer(options: { initiate: boolean }): Promise<void> {
+    this.generation += 1;
+    const generation = this.generation;
 
-    this.audioTransceiver = negotiated('audio') ?? this.audioTransceiver;
-    this.videoTransceiver = negotiated('video') ?? this.videoTransceiver;
+    this.pendingCandidates = [];
+    this.makingOffer = false;
+    this.ignoreOffer = false;
+    this.isSettingRemoteAnswerPending = false;
+    this.remoteVideoTrack = null;
+    this.lastIceRestartAt = 0;
 
-    for (const transceiver of [this.audioTransceiver, this.videoTransceiver]) {
-      if (!transceiver) continue;
-      try {
-        if (transceiver.direction !== 'sendrecv') {
-          transceiver.direction = 'sendrecv';
+    const pc = this.peerConnectionFactory({
+      iceServers: this.iceServers,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      iceTransportPolicy: 'all',
+    });
+    this.state.peerConnection = pc;
+    this.localStream = newMediaStream(
+      KINDS.map((kind) => this.localTracks[kind]).filter((t): t is MediaStreamTrack => t !== null)
+    );
+
+    this.setConnectionState(this.consecutiveRebuilds > 0 ? 'reconnecting' : 'connecting');
+    this.bindPeerEvents(pc, generation);
+
+    if (options.initiate) {
+      // The initiating side owns the m-line layout: one audio and one video section, both
+      // sendrecv, whether or not it has a track to send right now. A camera turned on later
+      // is then just replaceTrack() on an already negotiated sender — no renegotiation.
+      for (const kind of KINDS) {
+        const init: RTCRtpTransceiverInit = {
+          direction: 'sendrecv',
+          sendEncodings: [{ maxBitrate: this.initialBitrate(kind) }],
+        };
+        if (this.localStream) init.streams = [this.localStream];
+        const transceiver = pc.addTransceiver(kind, init);
+        const track = this.localTracks[kind];
+        if (track) {
+          try {
+            await transceiver.sender.replaceTrack(track);
+          } catch {
+            // Device vanished between preview and join; keep receiving.
+          }
         }
-      } catch {
-        // Transceiver stopped mid-negotiation; the next offer will rebuild it.
+      }
+      if (this.isCurrent(pc, generation)) {
+        await this.makeOffer(pc);
       }
     }
 
-    try {
-      await this.audioTransceiver?.sender.replaceTrack(this.localAudioTrack);
-    } catch {
-      // Mic unavailable — stay in the call and keep receiving.
-    }
-    try {
-      await this.videoTransceiver?.sender.replaceTrack(this.localVideoTrack);
-    } catch {
-      // Camera unavailable — stay in the call and keep receiving.
-    }
+    this.startStatsLoop();
+    this.startConnectWatchdog(pc, generation);
   }
 
-  /** The live remote video track, as reported by `ontrack`. */
-  getRemoteVideoTrack(): MediaStreamTrack | null {
-    return this.remoteVideoTrack;
-  }
-
-  private async createAndSendOffer(iceRestart = false): Promise<void> {
+  private teardownPeer(): void {
+    this.clearTimers();
     const pc = this.state.peerConnection;
-    if (!pc || !this.state.isOfferer) return;
-    if (this.makingOffer) return;
-
-    this.makingOffer = true;
-    try {
-      const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
-      await pc.setLocalDescription(offer);
-      this.offersCreated += 1;
-      if (offer.sdp) {
-        this.sendSignal?.({ type: 'offer', sdp: offer.sdp });
+    if (pc) {
+      try {
+        pc.close();
+      } catch {
+        // Already closed
       }
-    } finally {
-      this.makingOffer = false;
+    }
+    this.state.peerConnection = null;
+    this.remoteVideoTrack = null;
+    this.pendingCandidates = [];
+    this.localStream = null;
+    this.remoteAudio.detach();
+    if (this.remoteVideoElementId) {
+      clearMediaElement(this.remoteVideoElementId);
+    }
+    for (const kind of KINDS) {
+      this.callbacks.onRemoteTrack?.(kind, 'none');
     }
   }
 
-  private async restartIce(): Promise<void> {
-    if (!this.state.isOfferer || this.iceRestartInFlight || !this.state.peerConnection) return;
-    this.iceRestartInFlight = true;
+  private async rebuildToUnlocked(epoch: number, options: { initiate: boolean }): Promise<void> {
+    if (!this.state.isJoined || this.state.isLeaving) return;
+    if (epoch <= this.state.epoch) return;
+
+    if (this.consecutiveRebuilds >= RTC_CONFIG.MAX_CONSECUTIVE_REBUILDS) {
+      this.setConnectionState('failed');
+      return;
+    }
+
+    this.consecutiveRebuilds += 1;
+    this.state.epoch = epoch;
+    this.teardownPeer();
+    await this.createPeer(options);
+  }
+
+  private isCurrent(pc: RTCPeerConnection, generation: number): boolean {
+    return generation === this.generation && this.state.peerConnection === pc;
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Signalling
+  // ---------------------------------------------------------------------------------------
+
+  private send(signal: RtcSignal): void {
+    this.sendSignal?.({ ...signal, epoch: this.state.epoch });
+  }
+
+  private async processSignal(signal: RtcSignal): Promise<void> {
+    if (!this.state.isJoined || this.state.isLeaving) return;
+
+    const epoch = signal.epoch ?? 0;
+    if (epoch < this.state.epoch) return; // From a generation we already replaced.
+    if (epoch > this.state.epoch) {
+      // The partner rebuilt; follow them before applying anything they sent. Their first
+      // signal on a new generation is the offer that lays it out, so we answer rather than
+      // offer. Anything else arriving first means their offer was lost — offer ourselves.
+      await this.rebuildToUnlocked(epoch, { initiate: signal.type !== 'offer' });
+    }
+
+    const pc = this.state.peerConnection;
+    if (!pc) return;
+
+    if (signal.type === 'candidate') {
+      await this.applyCandidate(pc, signal);
+      return;
+    }
+    await this.applyDescription(pc, signal);
+  }
+
+  private async applyDescription(
+    pc: RTCPeerConnection,
+    description: { type: 'offer' | 'answer'; sdp: string }
+  ): Promise<void> {
+    const isOffer = description.type === 'offer';
+
+    const readyForOffer =
+      !this.makingOffer && (pc.signalingState === 'stable' || this.isSettingRemoteAnswerPending);
+    const offerCollision = isOffer && !readyForOffer;
+
+    this.ignoreOffer = !this.polite && offerCollision;
+    if (this.ignoreOffer) return;
+
+    if (!isOffer && pc.signalingState !== 'have-local-offer') {
+      // A duplicate or late answer; nothing to apply it to.
+      return;
+    }
+
+    this.isSettingRemoteAnswerPending = !isOffer;
     try {
-      this.state.peerConnection.restartIce();
-      await this.createAndSendOffer(true);
-    } finally {
-      this.iceRestartInFlight = false;
+      // For the polite side this is also the rollback of its own colliding offer.
+      await pc.setRemoteDescription({ type: description.type, sdp: description.sdp });
+    } catch {
+      this.isSettingRemoteAnswerPending = false;
+      if (isOffer) {
+        // The offer cannot be applied to this connection (a stale one after the partner
+        // rebuilt, or a browser without rollback). Start over on both sides.
+        await this.rebuildToUnlocked(this.state.epoch + 1, { initiate: true });
+      }
+      return;
+    }
+    this.isSettingRemoteAnswerPending = false;
+    this.descriptionsApplied += 1;
+
+    await this.flushCandidates(pc);
+
+    if (!isOffer) return;
+
+    await this.adoptNegotiatedTransceivers(pc);
+    try {
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      this.descriptionsApplied += 1;
+      const sdp = pc.localDescription?.sdp ?? answer.sdp;
+      if (sdp) {
+        this.send({ type: 'answer', sdp });
+      }
+    } catch {
+      // Connection closed under us
     }
   }
 
-  private scheduleIceRestart(): void {
-    this.clearDisconnectTimer();
-    this.disconnectTimer = setTimeout(() => {
-      const state = this.state.peerConnection?.iceConnectionState;
-      if (state === 'disconnected' || state === 'failed') {
-        void this.restartIce();
-      }
-    }, RTC_CONFIG.ICE_DISCONNECT_MS);
-  }
-
-  private clearDisconnectTimer(): void {
-    if (this.disconnectTimer) {
-      clearTimeout(this.disconnectTimer);
-      this.disconnectTimer = null;
+  private async applyCandidate(
+    pc: RTCPeerConnection,
+    signal: Extract<RtcSignal, { type: 'candidate' }>
+  ): Promise<void> {
+    const candidate: RTCIceCandidateInit = {
+      candidate: signal.candidate,
+      sdpMid: signal.sdpMid,
+      sdpMLineIndex: signal.sdpMLineIndex,
+    };
+    if (!pc.remoteDescription) {
+      this.pendingCandidates.push(candidate);
+      return;
+    }
+    try {
+      await pc.addIceCandidate(candidate);
+    } catch {
+      // Candidate for a description that was rolled back or restarted
     }
   }
 
@@ -421,24 +435,327 @@ export class PeerManager {
       try {
         await pc.addIceCandidate(candidate);
       } catch {
-        // Ignore expired candidates
+        // Expired candidate
       }
     }
   }
 
-  private attachRemoteAudio(track: MediaStreamTrack): void {
-    if (!this.audioElement) {
-      this.audioElement = document.createElement('audio');
-      this.audioElement.autoplay = true;
-      this.audioElement.setAttribute('playsinline', 'true');
-      this.audioElement.style.display = 'none';
-      document.body.appendChild(this.audioElement);
+  private async makeOffer(pc: RTCPeerConnection): Promise<void> {
+    if (pc.signalingState !== 'stable') return;
+    this.makingOffer = true;
+    try {
+      const offer = await pc.createOffer();
+      if (pc !== this.state.peerConnection) return;
+      await pc.setLocalDescription(offer);
+      this.descriptionsApplied += 1;
+      this.offersCreated += 1;
+      const sdp = pc.localDescription?.sdp ?? offer.sdp;
+      if (sdp) {
+        this.send({ type: 'offer', sdp });
+      }
+    } catch {
+      // Connection closed under us, or a colliding remote offer changed the state first.
+    } finally {
+      this.makingOffer = false;
     }
-    this.audioElement.srcObject = new MediaStream([track]);
-    void this.audioElement.play().catch(() => {
-      // Autoplay may be blocked
+  }
+
+  /**
+   * Adopt the transceivers the browser created while applying a remote offer.
+   *
+   * They come out `recvonly`. Forcing them to `sendrecv` and attaching our tracks before
+   * createAnswer is what makes the answer two-way. Idempotent, so a renegotiation offer
+   * (ICE restart) runs through here again and simply re-confirms.
+   */
+  private async adoptNegotiatedTransceivers(pc: RTCPeerConnection): Promise<void> {
+    for (const transceiver of pc.getTransceivers()) {
+      if (transceiver.currentDirection === 'stopped') continue;
+
+      if (transceiver.mid === null) {
+        // One of ours that the browser did not associate with the remote offer (our own
+        // offer collided and was rolled back). Left alone it would be added as an extra
+        // m-line in our next offer and the partner would get a second, silent track.
+        try {
+          transceiver.stop();
+        } catch {
+          // Already stopped
+        }
+        continue;
+      }
+      const kind = transceiver.receiver.track?.kind;
+      if (!isKind(kind)) continue;
+
+      try {
+        if (transceiver.direction !== 'sendrecv') {
+          transceiver.direction = 'sendrecv';
+        }
+      } catch {
+        // Stopped mid-negotiation; the next offer rebuilds it.
+      }
+
+      const track = this.localTracks[kind];
+      if (transceiver.sender.track !== track) {
+        try {
+          await transceiver.sender.replaceTrack(track);
+        } catch {
+          // Device unavailable — stay in the call and keep receiving.
+        }
+      }
+
+      this.associateLocalStream(transceiver.sender);
+    }
+
+    await this.applyBitrate(this.state.currentNetworkQuality);
+  }
+
+  private associateLocalStream(sender: RTCRtpSender): void {
+    if (!this.localStream) return;
+    const withStreams = sender as RTCRtpSender & { setStreams?: (...s: MediaStream[]) => void };
+    if (typeof withStreams.setStreams !== 'function') return;
+    try {
+      withStreams.setStreams(this.localStream);
+    } catch {
+      // Not supported on this transceiver state
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Local tracks
+  // ---------------------------------------------------------------------------------------
+
+  private replaceLocalTrack(kind: Kind, track: MediaStreamTrack | null): Promise<void> {
+    const previous = this.localTracks[kind];
+    this.localTracks[kind] = track;
+    return this.run(async () => {
+      if (this.localStream) {
+        if (previous && previous !== track) {
+          try {
+            this.localStream.removeTrack(previous);
+          } catch {
+            // Not in the stream
+          }
+        }
+        if (track) {
+          try {
+            this.localStream.addTrack(track);
+          } catch {
+            // Already present
+          }
+        }
+      }
+
+      const pc = this.state.peerConnection;
+      if (!pc) return;
+      const sender = this.senderFor(pc, kind);
+      // The answerer has no sender until the offer arrives; the track is attached then.
+      if (!sender) return;
+      try {
+        await sender.replaceTrack(track);
+      } catch {
+        // Sender closed
+      }
+      if (track) {
+        await this.applyBitrate(this.state.currentNetworkQuality);
+      }
     });
   }
+
+  private senderFor(pc: RTCPeerConnection, kind: Kind): RTCRtpSender | null {
+    const transceivers = pc
+      .getTransceivers()
+      .filter((t) => t.receiver.track?.kind === kind && t.currentDirection !== 'stopped');
+    const negotiated = transceivers.find((t) => t.mid !== null);
+    return (negotiated ?? transceivers[0])?.sender ?? null;
+  }
+
+  private initialBitrate(kind: Kind): number {
+    return kind === 'video'
+      ? getVideoSettingsForNetwork(this.state.currentNetworkQuality).maxBitrate
+      : getAudioSettingsForNetwork(this.state.currentNetworkQuality).maxBitrate;
+  }
+
+  private async setSenderParameters(
+    sender: RTCRtpSender | null,
+    values: { maxBitrate: number; maxFramerate?: number }
+  ): Promise<void> {
+    if (!sender) return;
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      params.encodings[0].maxBitrate = values.maxBitrate;
+      if (values.maxFramerate !== undefined) {
+        params.encodings[0].maxFramerate = values.maxFramerate;
+      }
+      await sender.setParameters(params);
+    } catch {
+      // setParameters unsupported or sender not yet negotiated
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Events
+  // ---------------------------------------------------------------------------------------
+
+  private bindPeerEvents(pc: RTCPeerConnection, generation: number): void {
+    const alive = () => this.isCurrent(pc, generation);
+
+    pc.onicecandidate = (event) => {
+      if (!alive() || !event.candidate || !event.candidate.candidate) return;
+      this.send({
+        type: 'candidate',
+        candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+      });
+    };
+
+    pc.onnegotiationneeded = () => {
+      if (!alive()) return;
+      // Queue behind whatever is in flight. If a description lands in the meantime (the
+      // initial offer we made ourselves, or an answer that already covers this change),
+      // the request is stale and is dropped.
+      const requestedAt = this.descriptionsApplied;
+      void this.run(async () => {
+        if (!alive()) return;
+        if (pc.signalingState !== 'stable') return;
+        if (this.descriptionsApplied !== requestedAt) return;
+        await this.makeOffer(pc);
+      });
+    };
+
+    pc.ontrack = (event) => {
+      if (!alive()) return;
+      this.handleRemoteTrack(event.track, alive);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (!alive()) return;
+      this.handleIceState(pc, alive);
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (!alive()) return;
+      this.handleConnectionState(pc);
+    };
+  }
+
+  private handleRemoteTrack(track: MediaStreamTrack, alive: () => boolean): void {
+    const kind = track.kind;
+    if (!isKind(kind)) return;
+
+    if (kind === 'video') {
+      this.remoteVideoTrack = track;
+      attachRemoteVideo(track, this.remoteVideoElementId);
+    } else {
+      this.remoteAudio.attach(track);
+    }
+
+    // A remote track starts muted and unmutes on the first packet, so "muted" before it has
+    // ever been live means "still connecting", not "camera off".
+    let wasLive = false;
+    const emit = (state: RemoteTrackState) => {
+      if (!alive()) return;
+      this.callbacks.onRemoteTrack?.(kind, state);
+    };
+
+    track.addEventListener('unmute', () => {
+      wasLive = true;
+      if (kind === 'audio') this.remoteAudio.resume();
+      emit('live');
+    });
+    track.addEventListener('mute', () => {
+      if (wasLive) emit('muted');
+    });
+    track.addEventListener('ended', () => {
+      if (kind === 'video' && this.remoteVideoTrack === track) {
+        this.remoteVideoTrack = null;
+      }
+      emit('none');
+    });
+
+    if (!track.muted && track.readyState !== 'ended') {
+      wasLive = true;
+      emit('live');
+    }
+  }
+
+  private handleIceState(pc: RTCPeerConnection, alive: () => boolean): void {
+    switch (pc.iceConnectionState) {
+      case 'connected':
+      case 'completed':
+        this.clearDisconnectTimer();
+        this.clearFailedTimer();
+        break;
+      case 'disconnected':
+        this.clearDisconnectTimer();
+        this.disconnectTimer = setTimeout(() => {
+          this.disconnectTimer = null;
+          if (!alive()) return;
+          const state = pc.iceConnectionState;
+          if (state === 'disconnected' || state === 'failed') {
+            this.restartIce(pc);
+          }
+        }, RTC_CONFIG.ICE_DISCONNECT_MS);
+        break;
+      case 'failed':
+        this.clearDisconnectTimer();
+        this.restartIce(pc);
+        this.clearFailedTimer();
+        this.failedTimer = setTimeout(() => {
+          this.failedTimer = null;
+          if (!alive()) return;
+          if (pc.connectionState === 'connected') return;
+          void this.run(() => this.rebuildToUnlocked(this.state.epoch + 1, { initiate: true }));
+        }, RTC_CONFIG.ICE_FAILED_REBUILD_MS);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private restartIce(pc: RTCPeerConnection): void {
+    const now = Date.now();
+    if (now - this.lastIceRestartAt < RTC_CONFIG.ICE_RESTART_MIN_INTERVAL_MS) return;
+    this.lastIceRestartAt = now;
+    try {
+      // Either side may restart; the resulting offer goes through normal collision handling.
+      pc.restartIce();
+    } catch {
+      // Closed
+    }
+  }
+
+  private handleConnectionState(pc: RTCPeerConnection): void {
+    switch (pc.connectionState) {
+      case 'connected':
+        this.consecutiveRebuilds = 0;
+        this.clearConnectTimer();
+        this.setConnectionState('connected');
+        break;
+      case 'disconnected':
+      case 'failed':
+        this.setConnectionState('reconnecting');
+        break;
+      case 'connecting':
+      case 'new':
+        this.setConnectionState(this.consecutiveRebuilds > 0 ? 'reconnecting' : 'connecting');
+        break;
+      default:
+        break;
+    }
+  }
+
+  private setConnectionState(state: RtcConnectionState): void {
+    if (this.state.connectionState === state) return;
+    this.state.connectionState = state;
+    this.callbacks.onConnectionState?.(state);
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Stats
+  // ---------------------------------------------------------------------------------------
 
   private startStatsLoop(): void {
     this.clearStatsTimer();
@@ -489,21 +806,46 @@ export class PeerManager {
     }
   }
 
-  private async setSenderBitrate(
-    sender: RTCRtpSender | undefined,
-    maxBitrate: number
-  ): Promise<void> {
-    if (!sender) return;
-    try {
-      const params = sender.getParameters();
-      if (!params.encodings || params.encodings.length === 0) {
-        params.encodings = [{ maxBitrate }];
-      } else {
-        params.encodings[0].maxBitrate = maxBitrate;
-      }
-      await sender.setParameters(params);
-    } catch {
-      // setParameters unsupported
+  // ---------------------------------------------------------------------------------------
+  // Timers
+  // ---------------------------------------------------------------------------------------
+
+  private clearDisconnectTimer(): void {
+    if (this.disconnectTimer) {
+      clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
+    }
+  }
+
+  /**
+   * Rebuild a connection that never came up.
+   *
+   * Nothing else catches this: a peer whose offer or answer was lost sits in `new` with no
+   * candidates and no failure event, so neither the ICE handlers nor the stats loop ever
+   * fire. Without this the call is silently dead and the UI says "connecting" forever.
+   */
+  private startConnectWatchdog(pc: RTCPeerConnection, generation: number): void {
+    this.clearConnectTimer();
+    this.connectTimer = setTimeout(() => {
+      this.connectTimer = null;
+      if (!this.isCurrent(pc, generation)) return;
+      if (pc.connectionState === 'connected') return;
+      if (this.state.connectionState === 'failed') return;
+      void this.run(() => this.rebuildToUnlocked(this.state.epoch + 1, { initiate: true }));
+    }, RTC_CONFIG.CONNECT_WATCHDOG_MS);
+  }
+
+  private clearConnectTimer(): void {
+    if (this.connectTimer) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
+  }
+
+  private clearFailedTimer(): void {
+    if (this.failedTimer) {
+      clearTimeout(this.failedTimer);
+      this.failedTimer = null;
     }
   }
 
@@ -516,6 +858,8 @@ export class PeerManager {
 
   private clearTimers(): void {
     this.clearDisconnectTimer();
+    this.clearFailedTimer();
+    this.clearConnectTimer();
     this.clearStatsTimer();
   }
 }

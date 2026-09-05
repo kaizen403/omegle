@@ -10,6 +10,13 @@ export interface RtcSignal {
   candidate?: string;
   sdpMid?: string | null;
   sdpMLineIndex?: number | null;
+  /**
+   * Peer-connection generation, chosen by the clients. Relayed untouched so both sides can
+   * tell a signal for the connection they are on from one for a connection they have already
+   * replaced (after a reconnect or an ICE failure). Absent from older clients, which is read
+   * as generation 0.
+   */
+  epoch?: number;
 }
 
 function byteLength(value: string): number {
@@ -18,6 +25,18 @@ function byteLength(value: string): number {
 
 function isSignalType(value: unknown): value is SignalType {
   return typeof value === 'string' && (SIGNAL_TYPES as readonly string[]).includes(value);
+}
+
+function parseEpoch(
+  raw: Record<string, unknown>
+): { ok: true; epoch?: number } | { ok: false; error: string } {
+  if (raw.epoch === undefined || raw.epoch === null) {
+    return { ok: true };
+  }
+  if (typeof raw.epoch !== 'number' || !Number.isSafeInteger(raw.epoch) || raw.epoch < 0) {
+    return { ok: false, error: 'Invalid epoch' };
+  }
+  return { ok: true, epoch: raw.epoch };
 }
 
 /**
@@ -35,6 +54,12 @@ export function parseRtcSignal(
     return { ok: false, error: 'Invalid signal type' };
   }
 
+  const epoch = parseEpoch(raw);
+  if (!epoch.ok) {
+    return epoch;
+  }
+  const envelope = epoch.epoch === undefined ? {} : { epoch: epoch.epoch };
+
   if (raw.type === 'offer' || raw.type === 'answer') {
     if (typeof raw.sdp !== 'string' || raw.sdp.length === 0) {
       return { ok: false, error: 'Missing SDP' };
@@ -42,7 +67,7 @@ export function parseRtcSignal(
     if (byteLength(raw.sdp) > MAX_SDP_BYTES) {
       return { ok: false, error: 'SDP too large' };
     }
-    return { ok: true, signal: { type: raw.type, sdp: raw.sdp } };
+    return { ok: true, signal: { type: raw.type, sdp: raw.sdp, ...envelope } };
   }
 
   if (typeof raw.candidate !== 'string' || raw.candidate.length === 0) {
@@ -77,6 +102,7 @@ export function parseRtcSignal(
       candidate: raw.candidate,
       sdpMid,
       sdpMLineIndex,
+      ...envelope,
     },
   };
 }

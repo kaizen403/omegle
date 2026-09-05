@@ -1,5 +1,5 @@
 import type { NetworkQuality } from '../config';
-import type { RtcCallbacks } from '../types';
+import type { RtcCallbacks, RtcConnectionState } from '../types';
 
 export interface RtcState {
   peerConnection: RTCPeerConnection | null;
@@ -15,6 +15,9 @@ export interface RtcState {
   currentNetworkQuality: NetworkQuality;
   isOfferer: boolean;
   partnerIdentity: string;
+  /** Current peer-connection generation; see `RtcSignal.epoch`. */
+  epoch: number;
+  connectionState: RtcConnectionState;
 }
 
 export type { RtcCallbacks };
