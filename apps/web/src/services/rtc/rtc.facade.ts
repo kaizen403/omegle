@@ -13,6 +13,7 @@ import type {
   RtcSignal,
   RemoteTrackState,
   RtcConnectionState,
+  IceRoute,
 } from './types';
 import {
   TrackManager,
@@ -203,6 +204,10 @@ export class RtcService {
 
   setOnConnectionState(callback: (state: RtcConnectionState) => void): void {
     this.callbacks.onConnectionState = callback;
+  }
+
+  setOnIceRoute(callback: (route: IceRoute) => void): void {
+    this.callbacks.onIceRoute = callback;
   }
 
   setOnConnectionQualityChanged(

@@ -35,7 +35,6 @@ export function useRtc() {
   const [remoteAudioState, setRemoteAudioState] = useState<RemoteTrackState>('none');
   const [rtcConnectionState, setRtcConnectionState] = useState<RtcConnectionState>('idle');
   const [remoteCameraStatus, setRemoteCameraStatus] = useState<RemoteCameraStatus>('connecting');
-  const hasPreviewRef = useRef(false);
   const [currentCameraId, setCurrentCameraId] = useState<string | undefined>(undefined);
   const [currentMicId, setCurrentMicId] = useState<string | undefined>(undefined);
 
@@ -137,6 +136,10 @@ export function useRtc() {
           }
         });
 
+        service.setOnIceRoute((route) => {
+          analytics.trackRTCIceRoute({ ...route, connectTimeMs: Date.now() - connectionStart });
+        });
+
         service.setOnConnectionQualityChanged(
           (quality: NetworkQualityLevel, participant: RtcParticipant | null) => {
             const localIdentity = service.getLocalParticipantIdentity();
@@ -228,7 +231,6 @@ export function useRtc() {
     try {
       const service = await ensureService();
       await service.createLocalPreview(isCameraOn, isMicOn);
-      hasPreviewRef.current = true;
       syncDevices(service);
 
       if (isCameraOn) {
@@ -275,7 +277,6 @@ export function useRtc() {
         try {
           const service = await ensureService();
           await service.createLocalPreview(true, isMicOn);
-          hasPreviewRef.current = true;
           syncDevices(service);
           analytics.trackCameraToggle(true, 'preview');
         } catch (error) {
@@ -327,7 +328,6 @@ export function useRtc() {
         try {
           const service = await ensureService();
           await service.createLocalPreview(isCameraOn, newState);
-          hasPreviewRef.current = true;
           syncDevices(service);
           analytics.trackMicrophoneToggle(newState, 'preview');
         } catch {
@@ -354,38 +354,21 @@ export function useRtc() {
       return;
     }
 
-    const wasCameraOn = isCameraOn;
-    const wasMicOn = isMicOn;
-
     try {
+      // Closes the peer connection only. The local camera and mic stay live and stay
+      // attached to the preview, so "Next" does not pay for a second getUserMedia and the
+      // camera indicator does not blink between partners.
       await rtcServiceRef.current.leave();
-      hasPreviewRef.current = false;
       setIsRTCInitialized(false);
       resetRemoteState();
 
-      if (wasCameraOn || wasMicOn) {
-        setTimeout(async () => {
-          try {
-            const service = await ensureService();
-            await service.createLocalPreview(wasCameraOn, wasMicOn);
-            hasPreviewRef.current = true;
-
-            if (wasCameraOn) {
-              service.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
-            }
-          } catch {
-            // Preview recreation failed
-          }
-        }, 100);
-      } else {
-        setTimeout(() => {
-          rtcServiceRef.current = null;
-        }, 200);
+      if (isCameraOn) {
+        rtcServiceRef.current.reattachLocalVideo(DOM_IDS.LOCAL_VIDEO);
       }
     } catch {
       setIsRTCInitialized(false);
     }
-  }, [ensureService, resetRemoteState, isCameraOn, isMicOn]);
+  }, [resetRemoteState, isCameraOn]);
 
   const switchCamera = useCallback(async (deviceId: string) => {
     if (!rtcServiceRef.current) return;

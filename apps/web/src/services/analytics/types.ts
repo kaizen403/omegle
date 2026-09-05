@@ -54,6 +54,7 @@ export const AnalyticsEvents = {
   RTC_JOIN: 'rtc_join',
   RTC_LEAVE: 'rtc_leave',
   RTC_CONNECTION_TIME: 'rtc_connection_time',
+  RTC_ICE_ROUTE: 'rtc_ice_route',
   RTC_RECONNECT: 'rtc_reconnect',
   REMOTE_VIDEO_READY: 'remote_video_ready',
   FIRST_VIDEO_FRAME: 'first_video_frame',

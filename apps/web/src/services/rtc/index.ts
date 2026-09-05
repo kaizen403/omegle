@@ -20,6 +20,7 @@ export type {
   RtcSignal,
   RemoteTrackState,
   RtcConnectionState,
+  IceRoute,
 } from './types';
 
 export { TrackManager, PeerManager, remoteAudio, primeRemoteAudio } from './managers';

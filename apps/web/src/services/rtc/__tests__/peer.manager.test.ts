@@ -197,7 +197,8 @@ function createMockPc() {
     restartIce: vi.fn().mockImplementation(() => {
       pc.iceRestartRequested = true;
     }),
-    getStats: vi.fn().mockResolvedValue(new Map()),
+    stats: new Map<string, Record<string, unknown>>(),
+    getStats: vi.fn().mockImplementation(async () => pc.stats),
     close: vi.fn().mockImplementation(() => {
       pc.closed = true;
       pc.signalingState = 'closed';
@@ -609,6 +610,41 @@ describe('PeerManager', () => {
     await vi.advanceTimersByTimeAsync(RTC_CONFIG.CONNECT_WATCHDOG_MS * 2);
     expect(offerer.pcs).toHaveLength(2);
     expect(offerer.manager.getConnectionState()).toBe('connected');
+
+    await offerer.manager.leave();
+  });
+
+  it('reports how a connected call is routed, once', async () => {
+    const routes: unknown[] = [];
+    const offerer = createManager({ onIceRoute: (r) => routes.push(r) });
+    await offerer.manager.join({ ...joinConfig, isOfferer: true }, offerer.send, null, null);
+    const pc = offerer.pc();
+
+    pc.stats = new Map<string, Record<string, unknown>>([
+      ['L', { id: 'L', type: 'local-candidate', candidateType: 'relay' }],
+      ['R', { id: 'R', type: 'remote-candidate', candidateType: 'srflx' }],
+      [
+        'P',
+        {
+          id: 'P',
+          type: 'candidate-pair',
+          state: 'succeeded',
+          localCandidateId: 'L',
+          remoteCandidateId: 'R',
+        },
+      ],
+    ]);
+
+    pc.connectionState = 'connected';
+    pc.onconnectionstatechange?.();
+    await vi.waitFor(() => expect(routes).toHaveLength(1));
+    // A relay on either end means TURN is carrying this call.
+    expect(routes[0]).toEqual({ local: 'relay', remote: 'srflx', relayed: true });
+
+    // Not repeated for the same connection.
+    pc.onconnectionstatechange?.();
+    await Promise.resolve();
+    expect(routes).toHaveLength(1);
 
     await offerer.manager.leave();
   });

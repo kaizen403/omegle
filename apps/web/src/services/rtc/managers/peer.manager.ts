@@ -79,6 +79,8 @@ export class PeerManager {
   private lastIceRestartAt = 0;
   private consecutiveRebuilds = 0;
   private offersCreated = 0;
+  /** Reported once per connection; see `reportIceRoute`. */
+  private routeReported = false;
 
   constructor(
     private state: RtcState,
@@ -176,6 +178,10 @@ export class PeerManager {
     await this.setSenderParameters(this.senderFor(pc, 'video'), {
       maxBitrate: video.maxBitrate,
       maxFramerate: video.frameRate,
+      // A conversation is a talking head. When bandwidth runs short, a slightly softer but
+      // smooth face reads far better than a sharp one that stutters, so give up resolution
+      // before framerate.
+      degradationPreference: 'maintain-framerate',
     });
     await this.setSenderParameters(this.senderFor(pc, 'audio'), { maxBitrate: audio.maxBitrate });
   }
@@ -241,6 +247,7 @@ export class PeerManager {
     this.isSettingRemoteAnswerPending = false;
     this.remoteVideoTrack = null;
     this.lastIceRestartAt = 0;
+    this.routeReported = false;
 
     const pc = this.peerConnectionFactory({
       iceServers: this.iceServers,
@@ -579,7 +586,11 @@ export class PeerManager {
 
   private async setSenderParameters(
     sender: RTCRtpSender | null,
-    values: { maxBitrate: number; maxFramerate?: number }
+    values: {
+      maxBitrate: number;
+      maxFramerate?: number;
+      degradationPreference?: RTCDegradationPreference;
+    }
   ): Promise<void> {
     if (!sender) return;
     try {
@@ -590,6 +601,9 @@ export class PeerManager {
       params.encodings[0].maxBitrate = values.maxBitrate;
       if (values.maxFramerate !== undefined) {
         params.encodings[0].maxFramerate = values.maxFramerate;
+      }
+      if (values.degradationPreference !== undefined) {
+        params.degradationPreference = values.degradationPreference;
       }
       await sender.setParameters(params);
     } catch {
@@ -736,6 +750,7 @@ export class PeerManager {
         this.consecutiveRebuilds = 0;
         this.clearConnectTimer();
         this.setConnectionState('connected');
+        void this.reportIceRoute(pc);
         break;
       case 'disconnected':
       case 'failed':
@@ -754,6 +769,56 @@ export class PeerManager {
     if (this.state.connectionState === state) return;
     this.state.connectionState = state;
     this.callbacks.onConnectionState?.(state);
+  }
+
+  /**
+   * Report how this call is routed, once, as soon as it connects.
+   *
+   * A `relay` pair means TURN is carrying the media because no direct path existed. The share
+   * of calls on relay is what decides whether peer-to-peer is sufficient for this product,
+   * and it was previously unmeasurable — the only signal was users saying video "didn't
+   * work".
+   */
+  private async reportIceRoute(pc: RTCPeerConnection): Promise<void> {
+    if (this.routeReported || !this.callbacks.onIceRoute) return;
+    this.routeReported = true;
+
+    try {
+      const stats = await pc.getStats();
+      const candidates = new Map<string, { candidateType?: string }>();
+      let pair: { localCandidateId?: string; remoteCandidateId?: string } | null = null;
+
+      stats.forEach((report) => {
+        if (report.type === 'local-candidate' || report.type === 'remote-candidate') {
+          candidates.set(report.id, report as { candidateType?: string });
+        }
+        if (
+          report.type === 'candidate-pair' &&
+          (report as { state?: string }).state === 'succeeded' &&
+          !pair
+        ) {
+          pair = report as { localCandidateId?: string; remoteCandidateId?: string };
+        }
+      });
+
+      if (!pair) {
+        this.routeReported = false;
+        return;
+      }
+
+      const selected = pair as { localCandidateId?: string; remoteCandidateId?: string };
+      const local = candidates.get(selected.localCandidateId ?? '')?.candidateType ?? 'unknown';
+      const remote = candidates.get(selected.remoteCandidateId ?? '')?.candidateType ?? 'unknown';
+
+      this.callbacks.onIceRoute({
+        local,
+        remote,
+        relayed: local === 'relay' || remote === 'relay',
+      });
+    } catch {
+      // getStats unavailable; leave it unreported rather than guessing.
+      this.routeReported = false;
+    }
   }
 
   // ---------------------------------------------------------------------------------------

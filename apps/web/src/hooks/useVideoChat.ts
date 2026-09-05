@@ -289,11 +289,9 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
     clearMessages();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
     await leaveRTC();
 
-    await leaveRoom();
+    leaveRoom();
 
     isLeavingRef.current = false;
   }, [leaveRTC, leaveRoom, clearMessages]);
@@ -338,17 +336,19 @@ export function useVideoChat(options: UseVideoChatOptions) {
 
       clearMessages();
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      await leaveRoom();
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Next is the button people press hundreds of times a night, so nothing here waits on
+      // a timer. This used to sleep 100ms, 300ms and 200ms between the steps below — 600ms
+      // of dead time on every skip — to paper over a race the two sides now handle properly:
+      // the server serialises this socket's leave and join in the order they arrive, and the
+      // peer connection is torn down synchronously here rather than settling in the
+      // background.
+      //
+      // The local camera and mic deliberately stay live across the skip. Re-acquiring them
+      // costs a getUserMedia round trip and blinks the camera indicator, and the next call
+      // wants the very same tracks.
+      leaveRoom();
 
       await leaveRTC();
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      await prepareLocalMedia();
 
       if (userDataRef.current) {
         join({
@@ -390,7 +390,7 @@ export function useVideoChat(options: UseVideoChatOptions) {
         isFindingNextRef.current = false;
       }, FIND_NEXT_DEBOUNCE_DELAY);
     }
-  }, [leaveRoom, leaveRTC, join, clearMessages, prepareLocalMedia]);
+  }, [leaveRoom, leaveRTC, join, clearMessages]);
 
   // Store cleanup functions in refs to avoid stale closure issues
   const clearMessagesRef = useRef(clearMessages);

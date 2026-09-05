@@ -31,9 +31,20 @@ export type RemoteTrackState = 'none' | 'live' | 'muted';
 
 export type RtcConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
 
+/** How the media for a connected call is actually routed. */
+export interface IceRoute {
+  /** Our candidate type: host (same network), srflx (direct through NAT), or relay (TURN). */
+  local: string;
+  remote: string;
+  /** True when the call is going through TURN because a direct path was not possible. */
+  relayed: boolean;
+}
+
 export interface RtcCallbacks {
   onRemoteTrack?: (kind: 'audio' | 'video', state: RemoteTrackState) => void;
   onConnectionState?: (state: RtcConnectionState) => void;
+  /** Fires once per connection, as soon as the selected candidate pair is known. */
+  onIceRoute?: (route: IceRoute) => void;
   onConnectionQualityChanged?: (
     quality: NetworkQualityLevel,
     participant: RtcParticipant | null

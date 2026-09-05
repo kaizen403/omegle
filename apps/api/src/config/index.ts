@@ -165,7 +165,9 @@ export const config: Config = {
     // 5 users/second no matter how many were waiting, so a launch surge of 1,000 would leave
     // people staring at "Searching..." for minutes. findMatch costs ~1ms of Redis even with
     // 1,000 queued, so a far larger batch is affordable.
-    matchmakerTickMs: parseInt10(process.env.MATCHMAKER_TICK_MS, 1000),
+    // How quickly two people already waiting are paired. findMatch costs ~1ms of Redis even
+    // with a thousand queued, so the tick is set by what the wait feels like, not by load.
+    matchmakerTickMs: parseInt10(process.env.MATCHMAKER_TICK_MS, 500),
     matchmakerBatch: parseInt10(process.env.MATCHMAKER_BATCH, 150),
   },
   redisHost: process.env.REDIS_HOST || 'localhost',
@@ -276,6 +278,18 @@ if (isProduction) {
     }
   } else if (turnSecret.length < 16) {
     configWarnings.push('TURN_AUTH_SECRET looks too short for a coturn shared secret.');
+  }
+
+  // TURN over TLS on 443 is the only path that survives a network which blocks UDP, which
+  // describes a lot of campus wifi and mobile carriers. Without it those users get a call
+  // that connects to nothing, with no error — the failure this product is least able to
+  // explain to the person experiencing it.
+  if (config.turnHost.trim() && !isCloudflareTurn && config.turnTlsPort <= 0) {
+    configWarnings.push(
+      'TURN_TLS_PORT is 0, so no turns: (TURN over TLS) URL is advertised. Users on networks ' +
+        'that block UDP will fail to get video with no visible error. Set TURN_TLS_PORT=443 ' +
+        'and give coturn a TLS listener on 443, or move to Cloudflare TURN.'
+    );
   }
 
   if (!process.env.TRUSTED_PROXIES) {

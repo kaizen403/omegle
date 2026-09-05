@@ -68,6 +68,31 @@ export class ConnectionTracker extends BaseTracker {
     });
   }
 
+  /**
+   * How a call's media is actually routed once it connects.
+   *
+   * `relay` means the media is going through TURN because the two peers could not reach each
+   * other directly. The share of calls that land on `relay` is the number that decides
+   * whether peer-to-peer is enough for this product, and the share that never connect at all
+   * is the number that says TURN itself is broken or blocked. Neither was measurable before.
+   */
+  trackRTCIceRoute(route: {
+    local: string;
+    remote: string;
+    relayed: boolean;
+    connectTimeMs: number;
+  }): void {
+    this.safeTrack(() => {
+      this.analytics!.capture(AnalyticsEvents.RTC_ICE_ROUTE, {
+        local_candidate_type: route.local,
+        remote_candidate_type: route.remote,
+        relayed: route.relayed,
+        connect_time_ms: route.connectTimeMs,
+        timestamp: this.getTimestamp(),
+      });
+    });
+  }
+
   // ============================================
   // RECONNECTION
   // ============================================
