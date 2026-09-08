@@ -10,6 +10,7 @@ import {
 } from "@/lib/validators";
 
 describe("validateEmail", () => {
+  // validateEmail intentionally accepts a *username or email* on login.
   it("should return valid for correct email", () => {
     expect(validateEmail("test@example.com")).toEqual({ valid: true });
   });
@@ -18,42 +19,49 @@ describe("validateEmail", () => {
     expect(validateEmail("user@mail.example.com")).toEqual({ valid: true });
   });
 
+  it("should return valid for a username (login accepts username or email)", () => {
+    expect(validateEmail("surya.dev_1")).toEqual({ valid: true });
+    expect(validateEmail("admin")).toEqual({ valid: true });
+  });
+
   it("should return invalid for empty email", () => {
     expect(validateEmail("")).toEqual({
       valid: false,
-      error: "Email is required",
+      error: "Username is required",
     });
   });
 
   it("should return invalid for whitespace only", () => {
     expect(validateEmail("   ")).toEqual({
       valid: false,
-      error: "Email is required",
+      error: "Username is required",
     });
   });
 
-  it("should return invalid for email without @", () => {
-    expect(validateEmail("testexample.com")).toEqual({
+  it("should return invalid for a string too short to be a username", () => {
+    // A bare "a@b" / single chars fall through to the username path and fail
+    // the 3-30 length rule.
+    expect(validateEmail("ab")).toEqual({
       valid: false,
-      error: "Please enter a valid email address",
+      error: "Username must be 3-30 chars (letters, numbers, . _ -)",
     });
   });
 
   it("should return invalid for email without domain", () => {
     expect(validateEmail("test@")).toEqual({
       valid: false,
-      error: "Please enter a valid email address",
+      error: "Please enter a valid username or email",
     });
   });
 
   it("should return invalid for null/undefined", () => {
     expect(validateEmail(null as unknown as string)).toEqual({
       valid: false,
-      error: "Email is required",
+      error: "Username is required",
     });
     expect(validateEmail(undefined as unknown as string)).toEqual({
       valid: false,
-      error: "Email is required",
+      error: "Username is required",
     });
   });
 });

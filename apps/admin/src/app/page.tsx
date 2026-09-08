@@ -68,7 +68,11 @@ export default function LoginPage() {
     setErrorMessage("");
     setIsSubmitting(true);
 
-    const result = await login(identifier, password, turnstileToken || undefined);
+    const result = await login(
+      identifier,
+      password,
+      turnstileToken || undefined,
+    );
 
     setIsSubmitting(false);
 

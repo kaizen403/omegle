@@ -16,13 +16,16 @@ export default function TakeoverPage() {
   const token = params.get('takeover') || params.get('takeoverToken');
   const [copied, setCopied] = useState(false);
 
+  // Single unconditional effect: store the token (for socket reconnects) and,
+  // when present, forward to the normal participant UI which already has voice
+  // (VideoDisplay + WebRTC). Hooks are always called in the same order.
   useEffect(() => {
-    if (token) {
-      // Store for socket reconnects (query stays in URL anyway)
-      try {
-        sessionStorage.setItem('takeoverToken', token);
-      } catch {}
-    }
+    if (!token) return;
+    try {
+      sessionStorage.setItem('takeoverToken', token);
+    } catch {}
+    const url = `/omegle?takeover=${encodeURIComponent(token)}`;
+    window.location.replace(url);
   }, [token]);
 
   if (!token) {
@@ -31,24 +34,22 @@ export default function TakeoverPage() {
         <div className="max-w-md space-y-3">
           <h1 className="text-xl font-semibold">No takeover token</h1>
           <p className="text-sm text-slate-600">
-            Open this page via <span className="font-mono">Moderation → Monitor → Takeover as…</span> in the admin panel. The token is short-lived (2 min).
+            Open this page via{' '}
+            <span className="font-mono">Moderation → Monitor → Takeover as…</span> in the admin
+            panel. The token is short-lived (2 min).
           </p>
         </div>
       </div>
     );
   }
 
-  // Redirect to the normal participant UI with token preserved — that UI already has voice (VideoDisplay + WebRTC)
-  useEffect(() => {
-    const url = `/omegle?takeover=${encodeURIComponent(token)}`;
-    window.location.replace(url);
-  }, [token]);
-
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="text-center space-y-3">
         <p className="text-sm text-slate-600">Opening takeover session…</p>
-        <p className="font-mono text-xs break-all bg-slate-50 p-2 rounded border">{token.slice(0, 40)}…</p>
+        <p className="font-mono text-xs break-all bg-slate-50 p-2 rounded border">
+          {token.slice(0, 40)}…
+        </p>
         <button
           onClick={() => {
             const url = `${window.location.origin}/omegle?takeover=${encodeURIComponent(token)}`;
