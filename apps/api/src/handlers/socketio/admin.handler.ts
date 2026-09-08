@@ -1246,21 +1246,9 @@ export class AdminHandler {
       ipAddress: (socket as any).clientIp,
     });
     socket.emit('takeover_entered', { roomId });
-    // Notify participants that a moderator is present
-    const sys = {
-      text: 'A moderator has joined the conversation.',
-      from: 0,
-      fromName: 'System',
-      timestamp: Date.now(),
-      system: true,
-    };
-    await this.roomService.addChatMessage(roomId, sys);
-    for (const uid of [room.user1.uid, room.user2.uid]) {
-      const s = this.userConnectionsMap.get(uid) as any;
-      if (s) s.emit('system', { roomId, text: sys.text, timestamp: sys.timestamp });
-    }
-    this.broadcastRoomMessage(roomId, { sender: 'System', content: sys.text, type: 'system' });
-    logger.info(`[ADMIN] ${socket.adminEmail} entered takeover for room ${roomId}`);
+    // Stealth: no system message to participants — takeover is invisible until admin actually sends.
+    // Audit-only; participants only see Moderator messages when admin sends them.
+    logger.info(`[ADMIN] ${socket.adminEmail} entered takeover (stealth) for room ${roomId}`);
   }
 
   private async handleTakeoverLeave(socket: AdminSocket, data: any): Promise<void> {
