@@ -363,10 +363,24 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
 
   const handleOpen = useCallback(() => {
     setError(null);
+    // Report fingerprint once per socket lifetime (cheap, cached)
+    void (async () => {
+      try {
+        const { collectFingerprint, getCachedHash, setCachedHash } = await import('@/lib/fingerprint');
+        const fp = await collectFingerprint();
+        // Only re-send if hash changed (e.g., after clearing storage)
+        if (getCachedHash() !== fp.hash) {
+          setCachedHash(fp.hash);
+          getWs().send({ type: 'fingerprint:report', data: fp } as any);
+        } else {
+          getWs().send({ type: 'fingerprint:report', data: { hash: fp.hash } } as any);
+        }
+      } catch {}
+    })();
     // Resuming a chat: stay "matched" until the server says whether it kept our seat.
     if (reconnectingRef.current) return;
     setConnectionState('connected');
-  }, [setConnectionState]);
+  }, [getWs, setConnectionState]);
 
   const handleClose = useCallback(() => {
     const state = connectionStateRef.current;

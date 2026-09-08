@@ -29,6 +29,10 @@ export default function RoomsPage() {
     monitorRoom,
     unmonitorRoom,
     refreshData,
+    takeoverEnter,
+    takeoverLeave,
+    sendAdminMessage,
+    sendAdminWarning,
   } = useAdminSocketContext();
 
   // Custom hooks for business logic
@@ -63,7 +67,7 @@ export default function RoomsPage() {
     refreshData();
   }, [refreshData]);
 
-  // Monitor view
+  // Monitor view — now tabbed (Listen / Incidents / Takeover / Fingerprints)
   if (monitorRoomId) {
     const currentRoom = rooms.find((r) => r.roomId === monitorRoomId);
     const messages = monitoredRooms.get(monitorRoomId) || [];
@@ -75,6 +79,13 @@ export default function RoomsPage() {
           currentRoom={currentRoom}
           messages={messages}
           onBack={handleBack}
+          onTakeoverChange={(mode) => {
+            if (mode === "takeover") takeoverEnter(monitorRoomId);
+            else takeoverLeave(monitorRoomId);
+          }}
+          onSendAsModerator={(text) => sendAdminMessage(monitorRoomId, text)}
+          onSendWarning={(text) => sendAdminWarning(monitorRoomId, text)}
+          onForceEnd={() => handleCloseRoom(monitorRoomId)}
         />
       </AdminLayout>
     );

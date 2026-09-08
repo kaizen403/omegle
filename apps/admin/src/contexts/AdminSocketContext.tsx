@@ -66,6 +66,13 @@ interface AdminSocketContextType {
   getRoomDetails: (roomId: string) => void;
   toggleSystemStatus: (status: boolean, message?: string) => Promise<boolean>;
   refreshData: () => void;
+  takeoverEnter: (roomId: string) => void;
+  takeoverLeave: (roomId: string) => void;
+  sendAdminMessage: (roomId: string, text: string) => void;
+  sendAdminWarning: (roomId: string, text: string) => void;
+  incidentAction: (id: string, action: "reviewed" | "dismissed" | "actioned") => void;
+  fetchIncidents: (opts?: { roomId?: string; status?: string; type?: string; limit?: number }) => void;
+  fetchFingerprints: (limit?: number) => void;
 }
 
 const AdminSocketContext = createContext<AdminSocketContextType | undefined>(

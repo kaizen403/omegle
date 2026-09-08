@@ -12,6 +12,7 @@ import {
   ChevronUp,
   User2,
   Bot,
+  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -61,6 +62,12 @@ const items = [
     title: "Rooms",
     url: "/home/rooms",
     icon: MessageSquare,
+    roles: ["admin", "super-admin"],
+  },
+  {
+    title: "Moderation",
+    url: "/home/moderation",
+    icon: ShieldAlert,
     roles: ["admin", "super-admin"],
   },
   {

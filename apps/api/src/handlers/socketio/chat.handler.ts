@@ -9,6 +9,7 @@ import { MessageValidator } from '../../utils/messageValidator';
 import { config } from '../../config';
 import { analyticsService } from '../../services/admin/analytics.service';
 import { GlobalBudget } from '../../utils/boundedRateLimiter';
+import { incidentService } from '../../services/incident/incident.service';
 
 /** Single source of truth for chat text length — the validator uses the same value. */
 const MAX_CHAT_MESSAGE_LENGTH = 1000;
@@ -157,6 +158,35 @@ export class ChatHandler {
       };
       await this.roomService.addChatMessage(room.roomId, messageWithName);
       analyticsService.recordMessage();
+
+      // Incident scan — store PII/harassment signals and push to admin dashboards
+      const hits = await incidentService.scanAndStore({
+        roomId: room.roomId,
+        uid: socket.uid,
+        userName: socket.name || 'Unknown',
+        text: message.text,
+        timestamp: message.timestamp,
+      });
+      if (hits.length > 0 && this.adminHandler?.broadcastIncidents) {
+        this.adminHandler.broadcastIncidents(
+          hits.map((h) => ({
+            id: '', // filled server-side; client uses matchedValue+timestamp as key until DB push arrives
+            roomId: room.roomId,
+            uid: socket.uid!,
+            userName: socket.name || 'Unknown',
+            type: h.type,
+            severity: h.severity,
+            matchedValue: h.matchedValue,
+            snippet: message.text.slice(Math.max(0, h.index - 24), h.index + 48).trim(),
+            status: 'open' as const,
+            timestamp: message.timestamp,
+          }))
+        );
+        // Also fetch the persisted rows so admins get the canonical IDs
+        void incidentService.getByRoom(room.roomId, 20).then((rows) => {
+          if (rows.length > 0) this.adminHandler?.broadcastIncidentBatch?.(rows);
+        });
+      }
 
       // Broadcast to partner only (not sender - frontend does optimistic update)
       socket.to(room.roomId).emit('message', message);

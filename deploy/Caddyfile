@@ -1,0 +1,78 @@
+# TLS terminates at Cloudflare's edge (cloudflared tunnel). Caddy serves plain
+# HTTP on :80, the tunnel maps vitap.in / d3fault.vitap.in to localhost:8081.
+# web/ and admin/ are Next.js static exports (apps/*/out) served from disk;
+# everything else proxies to the API. Socket.IO websocket upgrade is handled
+# automatically by Caddy's reverse_proxy; transport http buffers keep the
+# tunnel healthy.
+
+:80 {
+	handle /health* {
+		reverse_proxy api:8080
+	}
+	handle /status* {
+		reverse_proxy api:8080
+	}
+	@webhost header Host vitap.in
+	handle @webhost {
+		@backend path /socket.io/* /api/* /health /metrics /status
+		handle @backend {
+			reverse_proxy api:8080 {
+				header_up X-Real-IP {remote_host}
+				header_up X-Forwarded-Proto https
+				flush_interval -1
+				transport http {
+					read_buffer 4096
+					write_buffer 4096
+				}
+			}
+		}
+
+		# Static user app
+		handle {
+			encode zstd gzip
+			root * /srv/web
+			try_files {path} {path}/ /index.html
+			file_server
+
+			header {
+				X-Content-Type-Options nosniff
+				X-Frame-Options DENY
+				Referrer-Policy strict-origin-when-cross-origin
+				-Server
+			}
+		}
+	}
+
+	@adminhost header Host d3fault.vitap.in
+	handle @adminhost {
+		@backend path /socket.io/* /api/* /health /status
+		handle @backend {
+			reverse_proxy api:8080 {
+				header_up X-Real-IP {remote_host}
+				header_up X-Forwarded-Proto https
+				flush_interval -1
+				transport http {
+					read_buffer 4096
+					write_buffer 4096
+				}
+			}
+		}
+
+		handle {
+			encode zstd gzip
+			root * /srv/admin
+			try_files {path} {path}/ /index.html
+			file_server
+
+			header {
+				X-Content-Type-Options nosniff
+				X-Frame-Options DENY
+				Referrer-Policy strict-origin-when-cross-origin
+				-Server
+			}
+		}
+	}
+	handle {
+		respond "Not found - set Host: vitap.in or d3fault.vitap.in or use DNS" 404
+	}
+}

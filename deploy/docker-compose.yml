@@ -1,0 +1,164 @@
+# Single-box production deployment for Omegle VITAP.
+# One host runs: Caddy (TLS + static + WS proxy), API (SFU + recording),
+# coturn, Postgres, Redis. See deploy/README.md and docs/RECORDING_ARCHITECTURE.md.
+name: omegle
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: omegle-caddy
+    restart: unless-stopped
+    ports:
+      - "8081:80" # host 80 = httpd, 8080 = another app; the tunnel points at 8081
+    environment:
+      - WEB_DOMAIN=${WEB_DOMAIN}
+      - ADMIN_DOMAIN=${ADMIN_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../apps/web/out:/srv/web:ro
+      - ../apps/admin/out:/srv/admin:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    image: omegle-api:local
+    container_name: omegle-api
+    restart: unless-stopped
+    # No published ports: only Caddy reaches the API. TURN uses host networking.
+    expose:
+      - "8080"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      # Recordings land here; a sidecar/cron uploads and prunes. See docs/RECORDING_ARCHITECTURE.md
+      - RECORDINGS_DIR=/recordings
+    volumes:
+      # Bind mount on the big LV — root disk is nearly full; recordings must
+      # not land on it. Local-only mode: S3 unset, operator prunes manually.
+      - /mnt/lv02/ghost-recordings:/recordings
+      - api_logs:/app/logs
+    # mediasoup workers spawn child processes; allow generous PID/SHM
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: omegle-postgres
+    restart: unless-stopped
+    # Internal only — never publish 5432 on a public host
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-omegle}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-omegle}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: omegle-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  # Host networking: TURN relay needs the full UDP range and the host's
+  # real public IP. Must run alongside (not behind) Caddy.
+  coturn:
+    image: coturn/coturn:4.6
+    container_name: omegle-coturn
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --log-file=stdout
+      - --listening-port=3478
+      - --listening-ip=0.0.0.0
+      - --relay-ip=${TURN_RELAY_IP}
+      - --external-ip=${TURN_PUBLIC_IP}
+      - --min-port=49160
+      - --max-port=59259
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_AUTH_SECRET}
+      - --realm=${TURN_REALM:-omegle}
+      - --no-multicast-peers
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --no-cli
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  api_logs:
+  caddy_data:
+  caddy_config:

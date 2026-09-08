@@ -9,6 +9,10 @@ import { analyticsService } from '../../services/admin/analytics.service';
 import { getAdminFromToken } from '../../lib/session';
 import { BoundedRateLimiter } from '../../utils/boundedRateLimiter';
 import { resolveClientIp } from '../../utils/clientIp';
+import { fingerprintService } from '../../services/fingerprint/fingerprint.service';
+import { incidentService } from '../../services/incident/incident.service';
+import { chatArchiveService } from '../../services/chat/chatArchive.service';
+import { MessageValidator } from '../../utils/messageValidator';
 
 /**
  * Admin sockets are unauthenticated until they present a valid session, and every `auth`
@@ -37,11 +41,14 @@ export class AdminHandler {
   private roomService: RoomService;
   private turnService: TurnService;
   private monitoredRooms: Map<string, Set<string>>;
+  /** Rooms where an admin has entered takeover (visible to users) */
+  private takeoverRooms: Map<string, Set<string>> = new Map();
   private userConnectionsMap: Map<number, Socket>;
   private matchmakingService: any;
   private redisClient: any;
   private startTime: number;
   private systemStatusGetter?: () => boolean;
+  private adminMessageLimiter = new BoundedRateLimiter({ capacity: 20, refillPerSecond: 20 / 60, maxKeys: 5_000 });
   // Event batching system
   private eventBatchQueue: Map<string, any[]> = new Map();
   private batchInterval: NodeJS.Timeout | null = null;
@@ -213,6 +220,7 @@ export class AdminHandler {
     }
     // Flush any remaining events
     this.flushEventBatches();
+    this.adminMessageLimiter.destroy?.();
   }
 
   /**
@@ -322,6 +330,14 @@ export class AdminHandler {
     socket.on('clear_queue', (data: any) => this.handleClearQueue(socket, data));
     socket.on('monitor_room', async (data: any) => await this.handleMonitorRoom(socket, data));
     socket.on('unmonitor_room', (data: any) => this.handleUnmonitorRoom(socket, data));
+    // Takeover (admin becomes visible participant)
+    socket.on('admin:takeover:enter', async (data: any) => await this.handleTakeoverEnter(socket, data));
+    socket.on('admin:takeover:leave', async (data: any) => await this.handleTakeoverLeave(socket, data));
+    socket.on('admin:message', async (data: any) => await this.handleAdminMessage(socket, data));
+    socket.on('admin:warning', async (data: any) => await this.handleAdminWarning(socket, data));
+    socket.on('incident:action', async (data: any) => await this.handleIncidentAction(socket, data));
+    socket.on('get_incidents', async (data: any) => await this.handleGetIncidents(socket, data));
+    socket.on('get_fingerprints', async (data: any) => await this.handleGetFingerprints(socket, data));
     socket.on('ping', () => socket.emit('pong'));
 
     socket.on('disconnect', async () => {
@@ -944,6 +960,12 @@ export class AdminHandler {
     try {
       const room = await this.roomService.getRoom(roomId);
       if (room) {
+        // Archive before deleting
+        try {
+          const messages = await this.roomService.getChatHistory(roomId);
+          const inc = await incidentService.getByRoom(roomId, 100);
+          await chatArchiveService.archiveRoom(room, messages, inc.length);
+        } catch {}
         // Notify users
         const user1Socket = this.userConnectionsMap.get(room.user1.uid) as any;
         const user2Socket = this.userConnectionsMap.get(room.user2.uid) as any;
@@ -1162,6 +1184,225 @@ export class AdminHandler {
         this.monitoredRooms.delete(roomId);
       }
     }
+    for (const [roomId, admins] of this.takeoverRooms.entries()) {
+      if (admins.has(adminId)) {
+        admins.delete(adminId);
+        if (admins.size === 0) this.takeoverRooms.delete(roomId);
+        // tell the room the moderator left (best-effort)
+        const room = this.roomService.getRoom(roomId) as any;
+        // no await — fire and forget on disconnect
+        void room;
+      }
+    }
+  }
+
+  // ── Takeover / moderation ────────────────────────────────────────────
+
+  private async handleTakeoverEnter(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated || !socket.adminId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const roomId = data?.roomId;
+    if (!roomId) {
+      socket.emit('error', { message: 'Invalid room ID' });
+      return;
+    }
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+    if (!this.monitoredRooms.has(roomId) || !this.monitoredRooms.get(roomId)!.has(socket.adminId)) {
+      socket.emit('error', { message: 'Must be monitoring the room to enter takeover' });
+      return;
+    }
+    if (!this.takeoverRooms.has(roomId)) this.takeoverRooms.set(roomId, new Set());
+    this.takeoverRooms.get(roomId)!.add(socket.adminId);
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'takeover_enter',
+      target: roomId,
+      ipAddress: (socket as any).clientIp,
+    });
+    socket.emit('takeover_entered', { roomId });
+    // Notify participants that a moderator is present
+    const sys = { text: 'A moderator has joined the conversation.', from: 0, fromName: 'System', timestamp: Date.now(), system: true };
+    await this.roomService.addChatMessage(roomId, sys);
+    for (const uid of [room.user1.uid, room.user2.uid]) {
+      const s = this.userConnectionsMap.get(uid) as any;
+      if (s) s.emit('system', { roomId, text: sys.text, timestamp: sys.timestamp });
+    }
+    this.broadcastRoomMessage(roomId, { sender: 'System', content: sys.text, type: 'system' });
+    logger.info(`[ADMIN] ${socket.adminEmail} entered takeover for room ${roomId}`);
+  }
+
+  private async handleTakeoverLeave(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated || !socket.adminId) return;
+    const roomId = data?.roomId;
+    if (!roomId) return;
+    const set = this.takeoverRooms.get(roomId);
+    if (set) {
+      set.delete(socket.adminId);
+      if (set.size === 0) this.takeoverRooms.delete(roomId);
+    }
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'takeover_leave',
+      target: roomId,
+      ipAddress: (socket as any).clientIp,
+    });
+    socket.emit('takeover_left', { roomId });
+    logger.info(`[ADMIN] ${socket.adminEmail} left takeover for room ${roomId}`);
+  }
+
+  private async handleAdminMessage(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated || !socket.adminId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const roomId = data?.roomId;
+    const raw = data?.text;
+    if (!roomId || typeof raw !== 'string' || !raw.trim()) {
+      socket.emit('error', { message: 'Invalid message' });
+      return;
+    }
+    if (!this.takeoverRooms.get(roomId)?.has(socket.adminId)) {
+      socket.emit('error', { message: 'Enter takeover first' });
+      return;
+    }
+    if (!this.adminMessageLimiter.tryConsume(socket.adminId)) {
+      socket.emit('error', { message: 'Too many admin messages' });
+      return;
+    }
+    const text = MessageValidator.sanitizeDisplayName(raw.trim(), 800);
+    if (!text) {
+      socket.emit('error', { message: 'Invalid message' });
+      return;
+    }
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+    const msg = { text, from: 0, fromName: `Moderator (${socket.adminEmail})`, timestamp: Date.now(), admin: true };
+    await this.roomService.addChatMessage(roomId, msg);
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'admin_message',
+      target: roomId,
+      ipAddress: (socket as any).clientIp,
+      details: { text: text.slice(0, 200) },
+    });
+    // Deliver to both participants
+    for (const uid of [room.user1.uid, room.user2.uid]) {
+      const s = this.userConnectionsMap.get(uid) as any;
+      if (s) s.emit('message', { text, from: 0, fromName: 'Moderator', timestamp: msg.timestamp, moderator: true });
+    }
+    this.broadcastRoomMessage(roomId, { sender: 'Moderator', content: text, type: 'moderator' });
+    socket.emit('admin_message_sent', { roomId });
+  }
+
+  private async handleAdminWarning(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated || !socket.adminId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const roomId = data?.roomId;
+    const raw = data?.text;
+    if (!roomId || typeof raw !== 'string' || !raw.trim()) {
+      socket.emit('error', { message: 'Invalid warning text' });
+      return;
+    }
+    if (!this.takeoverRooms.get(roomId)?.has(socket.adminId)) {
+      socket.emit('error', { message: 'Enter takeover first' });
+      return;
+    }
+    const text = MessageValidator.sanitizeDisplayName(raw.trim(), 800);
+    if (!text) {
+      socket.emit('error', { message: 'Invalid warning' });
+      return;
+    }
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+    const sys = { text: `⚠️ Moderator warning: ${text}`, from: 0, fromName: 'System', timestamp: Date.now(), system: true };
+    await this.roomService.addChatMessage(roomId, sys);
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'admin_warning',
+      target: roomId,
+      ipAddress: (socket as any).clientIp,
+      details: { text: text.slice(0, 200) },
+    });
+    for (const uid of [room.user1.uid, room.user2.uid]) {
+      const s = this.userConnectionsMap.get(uid) as any;
+      if (s) s.emit('system', { roomId, text: sys.text, timestamp: sys.timestamp });
+    }
+    this.broadcastRoomMessage(roomId, { sender: 'System', content: sys.text, type: 'system' });
+    socket.emit('admin_warning_sent', { roomId });
+  }
+
+  private async handleIncidentAction(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated || !socket.adminId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const id = data?.id;
+    const action = data?.action; // reviewed | dismissed | actioned
+    if (!id || !['reviewed', 'dismissed', 'actioned'].includes(action)) {
+      socket.emit('error', { message: 'Invalid incident action' });
+      return;
+    }
+    const row = await incidentService.updateStatus(id, action, socket.adminEmail || socket.adminId);
+    if (!row) {
+      socket.emit('error', { message: 'Incident not found' });
+      return;
+    }
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'incident_action',
+      target: id,
+      ipAddress: (socket as any).clientIp,
+      details: { newStatus: action },
+    });
+    this.adminNamespace.emit('incident_updated', row);
+    socket.emit('incident_action_done', { id, status: action });
+    if (action === 'actioned' && row.roomId) {
+      // Optionally close the room when actioned
+      // Leave close to the admin to do explicitly via Takeover → Force end, so we only emit guidance here
+    }
+  }
+
+  private async handleGetIncidents(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const rows = await incidentService.list({
+      roomId: data?.roomId,
+      status: data?.status,
+      type: data?.type,
+      limit: Math.min(Number(data?.limit) || 50, 200),
+      offset: Number(data?.offset) || 0,
+    });
+    socket.emit('incidents_list', { incidents: rows });
+  }
+
+  private async handleGetFingerprints(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const rows = await fingerprintService.listRecent(Math.min(Number(data?.limit) || 50, 200));
+    socket.emit('fingerprints_list', { fingerprints: rows });
   }
 
   /**
@@ -1339,6 +1580,16 @@ export class AdminHandler {
     this.adminNamespace.emit('user_error', error);
   }
 
+  public broadcastIncidents(incidents: any[]): void {
+    if (this.adminConnections.size === 0) return;
+    this.adminNamespace.emit('incidents_new', { incidents, timestamp: Date.now() });
+  }
+
+  public broadcastIncidentBatch(rows: any[]): void {
+    if (this.adminConnections.size === 0) return;
+    this.adminNamespace.emit('incidents_batch', { incidents: rows, timestamp: Date.now() });
+  }
+
   /**
    * Broadcast room message to monitoring admins
    */
@@ -1368,18 +1619,17 @@ export class AdminHandler {
   }
 
   /**
-   * Get active users
+   * Get active users — enriched with fingerprint hash + open incident count (best-effort, non-blocking)
    */
   private async getActiveUsers(): Promise<any[]> {
     const users: any[] = [];
+    const uids: number[] = [];
     for (const [uid, socket] of this.userConnectionsMap.entries()) {
-      // Only include connected sockets (filter out disconnecting/disconnected)
       if (!socket.connected) {
-        // Log but don't include disconnected sockets still in map
         logger.debug(`[ADMIN] Skipping disconnected socket in map: UID ${uid}`);
         continue;
       }
-
+      uids.push(uid);
       const extSocket = socket as any;
       users.push({
         uid,
@@ -1391,8 +1641,17 @@ export class AdminHandler {
         connected: socket.connected,
         clientIP: extSocket.clientIP,
         userAgent: extSocket.userAgent,
+        fingerprintHash: extSocket.fingerprintHash || null,
+        fingerprint: extSocket.fingerprint || null,
       });
     }
+    // Enrich with incident counts (open) — ignore failures
+    try {
+      if (uids.length > 0) {
+        const counts = await incidentService.countsByUid(uids);
+        for (const u of users) u.incidentCount = counts.get(u.uid) || 0;
+      }
+    } catch {}
     return users;
   }
 

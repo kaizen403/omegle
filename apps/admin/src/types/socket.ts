@@ -17,6 +17,28 @@ export interface Room {
   messageCount?: number;
 }
 
+export interface UserFingerprint {
+  fingerprintId: string;
+  hash: string;
+  canvasHash?: string;
+  webglHash?: string;
+  audioHash?: string;
+  screen?: string;
+  timezone?: string;
+  language?: string;
+  platform?: string;
+  vendor?: string;
+  deviceMemory?: number;
+  hardwareConcurrency?: number;
+  plugins?: string[];
+  fonts?: string[];
+  firstSeenAt: number;
+  lastSeenAt: number;
+  seenCount: number;
+  linkedUids: number[];
+  riskScore?: number;
+}
+
 export interface User {
   uid: number;
   name: string;
@@ -27,6 +49,48 @@ export interface User {
   clientIP?: string;
   userAgent?: string;
   socketId?: string;
+  fingerprint?: UserFingerprint | null;
+  fingerprintHash?: string | null;
+  incidentCount?: number;
+}
+
+/** Incident detected in chat content */
+export type IncidentType =
+  | "instagram_handle"
+  | "phone_number"
+  | "email"
+  | "harassment"
+  | "spam"
+  | "threat"
+  | "pii_leak";
+
+export type IncidentSeverity = "low" | "medium" | "high" | "critical";
+
+export interface Incident {
+  id: string;
+  roomId: string;
+  messageId?: string;
+  uid: number;
+  userName: string;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  snippet: string;
+  matchedValue: string;
+  timestamp: number;
+  status: "open" | "reviewed" | "dismissed" | "actioned";
+  reviewedBy?: string | null;
+}
+
+/** Admin takeover session state for a room */
+export type TakeoverMode = "listen" | "takeover" | "ended";
+
+export interface TakeoverMessage {
+  id: string;
+  roomId: string;
+  from: "admin" | "user1" | "user2" | "system";
+  adminEmail?: string;
+  content: string;
+  timestamp: number;
 }
 
 export interface QueueStats {

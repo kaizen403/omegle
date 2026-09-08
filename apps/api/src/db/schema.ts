@@ -128,7 +128,87 @@ export const adminAuditLog = pgTable(
   ]
 );
 
+export const userFingerprints = pgTable(
+  'user_fingerprints',
+  {
+    id: text('id').primaryKey(),
+    hash: text('hash').notNull().unique(),
+    canvasHash: text('canvas_hash'),
+    webglHash: text('webgl_hash'),
+    audioHash: text('audio_hash'),
+    screen: text('screen'),
+    timezone: text('timezone'),
+    language: text('language'),
+    platform: text('platform'),
+    vendor: text('vendor'),
+    deviceMemory: integer('device_memory'),
+    hardwareConcurrency: integer('hardware_concurrency'),
+    plugins: jsonb('plugins').$type<string[]>(),
+    fonts: jsonb('fonts').$type<string[]>(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    seenCount: integer('seen_count').notNull().default(1),
+    linkedUids: jsonb('linked_uids').$type<number[]>().notNull().default([]),
+    riskScore: integer('risk_score'),
+  },
+  (table) => [
+    index('user_fingerprints_last_seen').on(table.lastSeenAt),
+    index('user_fingerprints_risk').on(table.riskScore),
+  ]
+);
+
+export const chatIncidents = pgTable(
+  'chat_incidents',
+  {
+    id: text('id').primaryKey(),
+    roomId: text('room_id').notNull(),
+    messageId: text('message_id'),
+    uid: integer('uid').notNull(),
+    userName: text('user_name').notNull(),
+    type: text('type').notNull(),
+    severity: text('severity').notNull(),
+    matchedValue: text('matched_value').notNull(),
+    snippet: text('snippet').notNull(),
+    status: text('status').notNull().default('open'),
+    reviewedBy: text('reviewed_by'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('chat_incidents_room_created').on(table.roomId, table.createdAt),
+    index('chat_incidents_status_severity').on(table.status, table.severity),
+    index('chat_incidents_uid').on(table.uid),
+    index('chat_incidents_created').on(table.createdAt),
+  ]
+);
+
+export const chatArchives = pgTable(
+  'chat_archives',
+  {
+    id: text('id').primaryKey(),
+    roomId: text('room_id').notNull().unique(),
+    user1Uid: integer('user1_uid').notNull(),
+    user1Name: text('user1_name').notNull(),
+    user2Uid: integer('user2_uid').notNull(),
+    user2Name: text('user2_name').notNull(),
+    messages: jsonb('messages').$type<Array<Record<string, unknown>>>().notNull(),
+    messageCount: integer('message_count').notNull().default(0),
+    incidentCount: integer('incident_count').notNull().default(0),
+    createdAt: timestamp('created_at').notNull(),
+    archivedAt: timestamp('archived_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('chat_archives_archived_at').on(table.archivedAt),
+    index('chat_archives_user1').on(table.user1Uid),
+    index('chat_archives_user2').on(table.user2Uid),
+  ]
+);
+
 export type AdminAuditRow = typeof adminAuditLog.$inferSelect;
 export type UserRow = typeof user.$inferSelect;
 export type UserVisitRow = typeof userVisits.$inferSelect;
 export type BotConfigRow = typeof botConfig.$inferSelect;
+export type UserFingerprintRow = typeof userFingerprints.$inferSelect;
+export type ChatIncidentRow = typeof chatIncidents.$inferSelect;
+export type ChatArchiveRow = typeof chatArchives.$inferSelect;

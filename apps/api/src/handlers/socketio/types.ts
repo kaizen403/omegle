@@ -17,6 +17,8 @@ export interface ExtendedSocket extends Socket {
   clientIP?: string;
   userAgent?: string;
   joinedAt?: number;
+  fingerprintHash?: string;
+  fingerprint?: any;
   _disconnectSnapshot?: {
     uid: number;
     name?: string;
@@ -67,6 +69,9 @@ export interface UserUpdate {
   partnerId?: number;
   clientIP?: string;
   userAgent?: string;
+  fingerprintHash?: string | null;
+  fingerprint?: any | null;
+  incidentCount?: number;
 }
 
 export interface RoomCreatedEvent {

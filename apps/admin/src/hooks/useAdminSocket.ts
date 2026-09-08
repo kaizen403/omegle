@@ -714,6 +714,50 @@ export function useAdminSocket(token: string | null) {
       }
     });
 
+    // Moderation: incidents & takeover acks
+    socket.on("incidents_new", (data: { incidents?: any[] }) => {
+      if (!isMountedRef.current || !data?.incidents?.length) return;
+      // surface as system events so they appear in the events feed too
+      setEvents((prev) => [...prev, { type: "incidents_new", timestamp: Date.now(), data: { count: data.incidents!.length } }].slice(-100));
+    });
+    socket.on("incidents_batch", (data: { incidents?: any[] }) => {
+      if (!isMountedRef.current || !data?.incidents?.length) return;
+      setEvents((prev) => [...prev, { type: "incidents_batch", timestamp: Date.now(), data: { count: data.incidents!.length } }].slice(-100));
+    });
+    socket.on("incident_updated", (row: any) => {
+      if (!isMountedRef.current) return;
+      toast({ variant: "info", title: `Incident ${row.status}`, description: `${row.type} · ${String(row.matched_value).slice(0, 30)}` });
+    });
+    socket.on("takeover_entered", (data: { roomId?: string }) => {
+      if (!isMountedRef.current) return;
+      toast({ variant: "success", title: "Takeover entered", description: data?.roomId ? `Room ${String(data.roomId).slice(0, 8)}` : undefined });
+    });
+    socket.on("takeover_left", (data: { roomId?: string }) => {
+      if (!isMountedRef.current) return;
+      toast({ variant: "info", title: "Takeover left", description: data?.roomId ? `Room ${String(data.roomId).slice(0, 8)}` : undefined });
+    });
+    socket.on("admin_message_sent", () => {
+      if (!isMountedRef.current) return;
+      toast({ variant: "success", title: "Moderator message sent" });
+    });
+    socket.on("admin_warning_sent", () => {
+      if (!isMountedRef.current) return;
+      toast({ variant: "warning", title: "Warning sent to room" });
+    });
+    socket.on("incidents_list", (data: { incidents?: any[] }) => {
+      if (!isMountedRef.current) return;
+      if (Array.isArray(data?.incidents)) {
+        // expose via events so moderation page can consume without extra state
+        setEvents((prev) => [...prev, { type: "incidents_list", timestamp: Date.now(), data: { incidents: data.incidents } }].slice(-100));
+      }
+    });
+    socket.on("fingerprints_list", (data: { fingerprints?: any[] }) => {
+      if (!isMountedRef.current) return;
+      if (Array.isArray(data?.fingerprints)) {
+        setEvents((prev) => [...prev, { type: "fingerprints_list", timestamp: Date.now(), data: { fingerprints: data.fingerprints } }].slice(-100));
+      }
+    });
+
     // Heartbeat for connection health monitoring
     socket.on(
       "heartbeat",
@@ -858,6 +902,29 @@ export function useAdminSocket(token: string | null) {
     }
   }, []);
 
+  // Takeover / moderation actions
+  const takeoverEnter = useCallback((roomId: string) => {
+    if (socketRef.current?.connected) socketRef.current.emit("admin:takeover:enter", { roomId });
+  }, []);
+  const takeoverLeave = useCallback((roomId: string) => {
+    if (socketRef.current?.connected) socketRef.current.emit("admin:takeover:leave", { roomId });
+  }, []);
+  const sendAdminMessage = useCallback((roomId: string, text: string) => {
+    if (socketRef.current?.connected) socketRef.current.emit("admin:message", { roomId, text });
+  }, []);
+  const sendAdminWarning = useCallback((roomId: string, text: string) => {
+    if (socketRef.current?.connected) socketRef.current.emit("admin:warning", { roomId, text });
+  }, []);
+  const incidentAction = useCallback((id: string, action: "reviewed" | "dismissed" | "actioned") => {
+    if (socketRef.current?.connected) socketRef.current.emit("incident:action", { id, action });
+  }, []);
+  const fetchIncidents = useCallback((opts?: { roomId?: string; status?: string; type?: string; limit?: number }) => {
+    if (socketRef.current?.connected) socketRef.current.emit("get_incidents", opts || {});
+  }, []);
+  const fetchFingerprints = useCallback((limit?: number) => {
+    if (socketRef.current?.connected) socketRef.current.emit("get_fingerprints", { limit: limit ?? 50 });
+  }, []);
+
   /**
    * Take the public site up or down over HTTP (POST /status).
    * `status: false` = maintenance mode. The optional `message` is shown to end
@@ -992,5 +1059,12 @@ export function useAdminSocket(token: string | null) {
     getRoomDetails,
     toggleSystemStatus,
     refreshData,
+    takeoverEnter,
+    takeoverLeave,
+    sendAdminMessage,
+    sendAdminWarning,
+    incidentAction,
+    fetchIncidents,
+    fetchFingerprints,
   };
 }

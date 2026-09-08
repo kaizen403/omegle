@@ -22,6 +22,7 @@ import { isOffererUid } from '../../services/turn';
 import { socketLogger } from '../../utils/logger';
 import { DisconnectReason } from '../../models';
 import { registerRuntimeMetrics } from '../../services/admin/runtimeMetrics';
+import { fingerprintService } from '../../services/fingerprint/fingerprint.service';
 
 /**
  * Socket.IO Manager - Main orchestrator for all Socket.IO operations
@@ -374,6 +375,44 @@ export class SocketIOManager {
 
     socket.on('signal', (data) => {
       this.signalHandler.handleSignal(socket, data);
+    });
+
+    socket.on('fingerprint:report', async (data) => {
+      if (!socket.uid || !data?.hash) return;
+      await fingerprintService.upsert(socket.uid, {
+        hash: String(data.hash).slice(0, 128),
+        canvasHash: data.canvasHash ? String(data.canvasHash).slice(0, 128) : undefined,
+        webglHash: data.webglHash ? String(data.webglHash).slice(0, 128) : undefined,
+        audioHash: data.audioHash ? String(data.audioHash).slice(0, 128) : undefined,
+        screen: data.screen ? String(data.screen).slice(0, 64) : undefined,
+        timezone: data.timezone ? String(data.timezone).slice(0, 64) : undefined,
+        language: data.language ? String(data.language).slice(0, 16) : undefined,
+        platform: data.platform ? String(data.platform).slice(0, 64) : undefined,
+        vendor: data.vendor ? String(data.vendor).slice(0, 64) : undefined,
+        deviceMemory: typeof data.deviceMemory === 'number' ? data.deviceMemory : undefined,
+        hardwareConcurrency: typeof data.hardwareConcurrency === 'number' ? data.hardwareConcurrency : undefined,
+        plugins: Array.isArray(data.plugins) ? data.plugins.slice(0, 20).map(String) : undefined,
+        fonts: Array.isArray(data.fonts) ? data.fonts.slice(0, 50).map(String) : undefined,
+        ipAddress: socket.clientIP,
+        userAgent: socket.userAgent,
+      });
+      // cache on socket for admin enrichment
+      (socket as any).fingerprintHash = String(data.hash).slice(0, 64);
+      (socket as any).fingerprint = { hash: String(data.hash).slice(0, 64) };
+      // notify admins about updated fingerprint (lightweight user_update)
+      if (socket.name && socket.gender) {
+        this.adminHandler.broadcastUserUpdate({
+          uid: socket.uid,
+          name: socket.name,
+          gender: socket.gender,
+          state: socket.state || 'idle',
+          roomId: socket.roomId,
+          partnerId: socket.partnerId,
+          clientIP: socket.clientIP,
+          userAgent: socket.userAgent,
+          fingerprintHash: (socket as any).fingerprintHash,
+        } as any);
+      }
     });
 
     // Ping/pong for keepalive. Charged so it cannot be used as a free flood channel.

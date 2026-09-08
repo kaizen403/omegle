@@ -82,3 +82,16 @@ CREATE TABLE IF NOT EXISTS "user_visits" (
 );
 
 CREATE INDEX IF NOT EXISTS "user_visits_date_visited" ON "user_visits" ("visit_date", "visited_at");
+
+CREATE TABLE IF NOT EXISTS "admin_audit_log" (
+  "id" text PRIMARY KEY,
+  "admin_id" text NOT NULL,
+  "admin_email" text,
+  "action" text NOT NULL,
+  "target" text,
+  "ip_address" text,
+  "details" jsonb,
+  "created_at" timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS "admin_audit_created" ON "admin_audit_log" ("created_at");
+CREATE INDEX IF NOT EXISTS "admin_audit_admin" ON "admin_audit_log" ("admin_id", "created_at");

@@ -5,6 +5,8 @@ import { socketLogger } from '../../utils/logger';
 import { DisconnectReason } from '../../models';
 import { botManager } from '../../services/bots';
 import { ChatHandler } from './chat.handler';
+import { chatArchiveService } from '../../services/chat/chatArchive.service';
+import { incidentService } from '../../services/incident/incident.service';
 
 /**
  * Room Handler - Manages room operations (leave, cleanup)
@@ -78,6 +80,14 @@ export class RoomHandler {
       );
     }
 
+    // Archive before deleting (best-effort)
+    try {
+      const messages = await this.roomService.getChatHistory(room.roomId);
+      const inc = await incidentService.getByRoom(room.roomId, 100);
+      await chatArchiveService.archiveRoom(room, messages, inc.length);
+    } catch (_e) {
+      void _e;
+    }
     // Remove user from room (this will delete the room)
     await this.roomService.removeUserFromRoom(socket.uid, room.roomId);
 
@@ -208,6 +218,13 @@ export class RoomHandler {
 
       if (room) {
         socketLogger.info(`🏠 [CLEANUP] UID ${uid} in room ${room.roomId}`);
+        try {
+          const messages = await this.roomService.getChatHistory(room.roomId);
+          const inc = await incidentService.getByRoom(room.roomId, 100);
+          await chatArchiveService.archiveRoom(room, messages, inc.length);
+        } catch (_e) {
+          void _e;
+        }
 
         let partnerUid;
         try {

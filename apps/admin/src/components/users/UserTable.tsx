@@ -13,6 +13,8 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { User, isUserInSameRoomAsPrevious } from "./utils";
+import { shortHash, riskBadge } from "@/lib/fingerprint";
+import { UserFingerprintSheet } from "./UserFingerprintSheet";
 
 interface UserTableProps {
   users: User[];
@@ -58,9 +60,15 @@ const UserRow = memo(function UserRow({
     }
   }, [onMonitorRoom, user.roomId]);
 
+  const fpHash = (user as unknown as { fingerprintHash?: string | null; fingerprint?: { hash?: string; riskScore?: number } | null }).fingerprintHash
+    ?? (user as unknown as { fingerprint?: { hash?: string } | null }).fingerprint?.hash
+    ?? null;
+  const risk = riskBadge((user as unknown as { fingerprint?: { riskScore?: number } | null }).fingerprint?.riskScore);
+  const incidentCount = (user as unknown as { incidentCount?: number }).incidentCount ?? 0;
+
   return (
     <div
-      className={`grid grid-cols-[48px_minmax(200px,1fr)_130px_110px_180px_180px_150px] gap-4 px-4 py-3 border-b border-sky-100 hover:bg-sky-50/50 group ${isSelected ? "bg-sky-50" : ""}`}
+      className={`grid grid-cols-[48px_minmax(220px,1fr)_110px_100px_150px_170px_170px_150px] gap-3 px-4 py-3 border-b border-sky-100 hover:bg-sky-50/50 group ${isSelected ? "bg-sky-50" : ""}`}
     >
       {/* Checkbox */}
       <div className="flex items-center">
@@ -92,7 +100,14 @@ const UserRow = memo(function UserRow({
               </span>
             )}
           </div>
-          <div className="text-xs text-slate-500 font-mono">ID: {user.uid}</div>
+          <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 flex-wrap">
+            ID: {user.uid}
+            {fpHash && <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-700" title={fpHash}>{shortHash(fpHash, 7)}</span>}
+            {incidentCount > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-bold text-white">{incidentCount}⚠</span>}
+          </div>
+          {fpHash && (
+            <div className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${risk.className}`}>fp {shortHash(fpHash, 6)} · {risk.label}</div>
+          )}
         </div>
       </div>
 
@@ -134,6 +149,18 @@ const UserRow = memo(function UserRow({
         </span>
       </div>
 
+      {/* Fingerprint */}
+      <div className="flex items-center">
+        {fpHash ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-xs text-slate-700" title={fpHash}>
+            {shortHash(fpHash, 8)}
+            <span className={`ml-1 rounded-full border px-1 py-0.5 text-[10px] ${risk.className}`}>{risk.label.split(" ")[0]}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400">— no fp</span>
+        )}
+      </div>
+
       {/* Room Info */}
       <div className="flex items-center">
         {user.roomId ? (
@@ -154,12 +181,26 @@ const UserRow = memo(function UserRow({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-1.5">
+      <div className="flex items-center justify-end gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-slate-600 hover:bg-slate-100 text-[10px] sm:text-xs px-1.5 py-1 h-6 whitespace-nowrap"
+          onClick={() => {
+            // open fingerprint sheet via custom event — row owns no sheet state; bubble via callback would re-render all rows
+            // Instead we dispatch and let the table handle it (see below)
+            const ev = new CustomEvent("open-fp-sheet", { detail: user });
+            window.dispatchEvent(ev);
+          }}
+          title="View fingerprint"
+        >
+          FP
+        </Button>
         {isSuperAdmin && user.roomId && (
           <Button
             variant="ghost"
             size="sm"
-            className="text-purple-400 hover:bg-purple-900/20 text-[10px] sm:text-xs px-1.5 sm:px-2 py-1 h-6 sm:h-7 whitespace-nowrap"
+            className="text-purple-400 hover:bg-purple-900/20 text-[10px] sm:text-xs px-1.5 py-1 h-6 whitespace-nowrap"
             onClick={handleMonitor}
           >
             Monitor
@@ -169,7 +210,7 @@ const UserRow = memo(function UserRow({
           <Button
             variant="ghost"
             size="sm"
-            className="text-red-400 hover:bg-red-900/20 text-[10px] sm:text-xs px-1.5 sm:px-2 py-1 h-6 sm:h-7 whitespace-nowrap"
+            className="text-red-400 hover:bg-red-900/20 text-[10px] sm:text-xs px-1.5 py-1 h-6 whitespace-nowrap"
             onClick={handleKick}
             title="Kick user from room"
           >
@@ -190,6 +231,7 @@ export default function UserTable({
 }: UserTableProps) {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
+  const [fpUser, setFpUser] = useState<User | null>(null);
   const itemsPerPage = 50;
 
   // Pagination calculations
@@ -245,6 +287,15 @@ export default function UserTable({
     );
   }, [currentUsers, selectedUsers]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as User;
+      setFpUser(detail);
+    };
+    window.addEventListener("open-fp-sheet", handler as EventListener);
+    return () => window.removeEventListener("open-fp-sheet", handler as EventListener);
+  }, []);
+
   if (users.length === 0) {
     return (
       <div className="bg-white border border-sky-100 rounded-lg p-12 text-center">
@@ -258,9 +309,9 @@ export default function UserTable({
   return (
     <div className="bg-white border border-sky-100 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
-        <div className="min-w-[1100px]">
+        <div className="min-w-[1250px]">
           {/* Header */}
-          <div className="grid grid-cols-[48px_minmax(200px,1fr)_130px_110px_180px_180px_150px] gap-4 px-4 py-3 bg-[#e8f4f8] border-b border-sky-100">
+          <div className="grid grid-cols-[48px_minmax(220px,1fr)_110px_100px_150px_170px_170px_150px] gap-3 px-4 py-3 bg-[#e8f4f8] border-b border-sky-100">
             <div className="flex items-center">
               <input
                 type="checkbox"
@@ -280,6 +331,9 @@ export default function UserTable({
             </div>
             <div className="text-xs font-semibold text-slate-500 uppercase">
               IP ADDRESS
+            </div>
+            <div className="text-xs font-semibold text-slate-500 uppercase">
+              FINGERPRINT
             </div>
             <div className="text-xs font-semibold text-slate-500 uppercase">
               ROOM INFO
@@ -314,6 +368,8 @@ export default function UserTable({
           </div>
         </div>
       </div>
+
+      <UserFingerprintSheet user={fpUser} open={!!fpUser} onOpenChange={(o) => !o && setFpUser(null)} />
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
