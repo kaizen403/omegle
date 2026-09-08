@@ -36,7 +36,8 @@ function canvasFingerprint(): string | null {
 function webglFingerprint(): string | null {
   try {
     const canvas = document.createElement('canvas');
-    const gl = (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
+    const gl = (canvas.getContext('webgl') ||
+      canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
     if (!gl) return null;
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
     const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : 'unknown';
@@ -69,17 +70,33 @@ export async function collectFingerprint(): Promise<FingerprintReport> {
   const screen = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const language = navigator.language;
-  const platform = (navigator as any).platform || (navigator as any).userAgentData?.platform || '';
+  const platform =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (navigator as any).platform ||
+    (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ||
+    '';
   const vendor = navigator.vendor || '';
-  const deviceMemory = (navigator as any).deviceMemory;
+  const deviceMemory = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
   const hardwareConcurrency = navigator.hardwareConcurrency;
-  const plugins = Array.from(navigator.plugins || []).map((p) => p.name).slice(0, 20);
+  const plugins = Array.from(navigator.plugins || [])
+    .map((p) => p.name)
+    .slice(0, 20);
 
   const canvasHash = canvasData ? await hashString(canvasData) : undefined;
   const webglHash = webglData ? await hashString(webglData) : undefined;
 
   // stable composite
-  const composite = [canvasHash || '', webglHash || '', screen, timezone, language, platform, vendor, String(deviceMemory ?? ''), String(hardwareConcurrency ?? '')].join('|');
+  const composite = [
+    canvasHash || '',
+    webglHash || '',
+    screen,
+    timezone,
+    language,
+    platform,
+    vendor,
+    String(deviceMemory ?? ''),
+    String(hardwareConcurrency ?? ''),
+  ].join('|');
   const hash = await hashString(composite);
 
   return {

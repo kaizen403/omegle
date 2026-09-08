@@ -390,7 +390,8 @@ export class SocketIOManager {
         platform: data.platform ? String(data.platform).slice(0, 64) : undefined,
         vendor: data.vendor ? String(data.vendor).slice(0, 64) : undefined,
         deviceMemory: typeof data.deviceMemory === 'number' ? data.deviceMemory : undefined,
-        hardwareConcurrency: typeof data.hardwareConcurrency === 'number' ? data.hardwareConcurrency : undefined,
+        hardwareConcurrency:
+          typeof data.hardwareConcurrency === 'number' ? data.hardwareConcurrency : undefined,
         plugins: Array.isArray(data.plugins) ? data.plugins.slice(0, 20).map(String) : undefined,
         fonts: Array.isArray(data.fonts) ? data.fonts.slice(0, 50).map(String) : undefined,
         ipAddress: socket.clientIP,

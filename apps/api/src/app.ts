@@ -413,11 +413,7 @@ export class App {
       // The old scheduler forced the site closed any time it was not 9 PM–2 AM, which
       // overwrote the admin toggle. A leftover daytime close from that logic should not
       // keep the product down — the dashboard is in charge until 2 AM.
-      if (
-        !restored.open &&
-        restored.changedBy === 'scheduler' &&
-        istHour() !== WINDOW_CLOSE_HOUR
-      ) {
+      if (!restored.open && restored.changedBy === 'scheduler' && istHour() !== WINDOW_CLOSE_HOUR) {
         const reopened = await maintenanceService.set(true, null, 'scheduler');
         this.systemStatus = reopened.open;
         this.socketIOManager.applyMaintenanceState(true, null);
@@ -433,11 +429,7 @@ export class App {
           // an in-memory flag nothing enforced.
           this.systemStatus = status;
           void maintenanceService
-            .set(
-              status,
-              status ? null : 'The service is closed for the night.',
-              'scheduler'
-            )
+            .set(status, status ? null : 'The service is closed for the night.', 'scheduler')
             .then((state) => {
               this.socketIOManager?.applyMaintenanceState(state.open, state.message);
             })

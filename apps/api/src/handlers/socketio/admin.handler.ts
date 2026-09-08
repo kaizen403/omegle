@@ -3,6 +3,7 @@ import { AdminSocket, UserUpdate, RoomCreatedEvent, QueueStats } from './types';
 import { RoomService } from '../../services/room';
 import { TurnService } from '../../services/turn';
 import { logger } from '../../utils/logger';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import adminService from '../../services/admin/admin.service';
 import { adminAuditService } from '../../services/admin/audit.service';
 import { analyticsService } from '../../services/admin/analytics.service';
@@ -48,7 +49,11 @@ export class AdminHandler {
   private redisClient: any;
   private startTime: number;
   private systemStatusGetter?: () => boolean;
-  private adminMessageLimiter = new BoundedRateLimiter({ capacity: 20, refillPerSecond: 20 / 60, maxKeys: 5_000 });
+  private adminMessageLimiter = new BoundedRateLimiter({
+    capacity: 20,
+    refillPerSecond: 20 / 60,
+    maxKeys: 5_000,
+  });
   // Event batching system
   private eventBatchQueue: Map<string, any[]> = new Map();
   private batchInterval: NodeJS.Timeout | null = null;
@@ -331,13 +336,25 @@ export class AdminHandler {
     socket.on('monitor_room', async (data: any) => await this.handleMonitorRoom(socket, data));
     socket.on('unmonitor_room', (data: any) => this.handleUnmonitorRoom(socket, data));
     // Takeover (admin becomes visible participant)
-    socket.on('admin:takeover:enter', async (data: any) => await this.handleTakeoverEnter(socket, data));
-    socket.on('admin:takeover:leave', async (data: any) => await this.handleTakeoverLeave(socket, data));
+    socket.on(
+      'admin:takeover:enter',
+      async (data: any) => await this.handleTakeoverEnter(socket, data)
+    );
+    socket.on(
+      'admin:takeover:leave',
+      async (data: any) => await this.handleTakeoverLeave(socket, data)
+    );
     socket.on('admin:message', async (data: any) => await this.handleAdminMessage(socket, data));
     socket.on('admin:warning', async (data: any) => await this.handleAdminWarning(socket, data));
-    socket.on('incident:action', async (data: any) => await this.handleIncidentAction(socket, data));
+    socket.on(
+      'incident:action',
+      async (data: any) => await this.handleIncidentAction(socket, data)
+    );
     socket.on('get_incidents', async (data: any) => await this.handleGetIncidents(socket, data));
-    socket.on('get_fingerprints', async (data: any) => await this.handleGetFingerprints(socket, data));
+    socket.on(
+      'get_fingerprints',
+      async (data: any) => await this.handleGetFingerprints(socket, data)
+    );
     socket.on('ping', () => socket.emit('pong'));
 
     socket.on('disconnect', async () => {
@@ -965,7 +982,9 @@ export class AdminHandler {
           const messages = await this.roomService.getChatHistory(roomId);
           const inc = await incidentService.getByRoom(roomId, 100);
           await chatArchiveService.archiveRoom(room, messages, inc.length);
-        } catch {}
+        } catch (_e) {
+          void _e;
+        }
         // Notify users
         const user1Socket = this.userConnectionsMap.get(room.user1.uid) as any;
         const user2Socket = this.userConnectionsMap.get(room.user2.uid) as any;
@@ -1228,7 +1247,13 @@ export class AdminHandler {
     });
     socket.emit('takeover_entered', { roomId });
     // Notify participants that a moderator is present
-    const sys = { text: 'A moderator has joined the conversation.', from: 0, fromName: 'System', timestamp: Date.now(), system: true };
+    const sys = {
+      text: 'A moderator has joined the conversation.',
+      from: 0,
+      fromName: 'System',
+      timestamp: Date.now(),
+      system: true,
+    };
     await this.roomService.addChatMessage(roomId, sys);
     for (const uid of [room.user1.uid, room.user2.uid]) {
       const s = this.userConnectionsMap.get(uid) as any;
@@ -1287,7 +1312,13 @@ export class AdminHandler {
       socket.emit('error', { message: 'Room not found' });
       return;
     }
-    const msg = { text, from: 0, fromName: `Moderator (${socket.adminEmail})`, timestamp: Date.now(), admin: true };
+    const msg = {
+      text,
+      from: 0,
+      fromName: `Moderator (${socket.adminEmail})`,
+      timestamp: Date.now(),
+      admin: true,
+    };
     await this.roomService.addChatMessage(roomId, msg);
     adminAuditService.track({
       adminId: socket.adminId,
@@ -1300,7 +1331,14 @@ export class AdminHandler {
     // Deliver to both participants
     for (const uid of [room.user1.uid, room.user2.uid]) {
       const s = this.userConnectionsMap.get(uid) as any;
-      if (s) s.emit('message', { text, from: 0, fromName: 'Moderator', timestamp: msg.timestamp, moderator: true });
+      if (s)
+        s.emit('message', {
+          text,
+          from: 0,
+          fromName: 'Moderator',
+          timestamp: msg.timestamp,
+          moderator: true,
+        });
     }
     this.broadcastRoomMessage(roomId, { sender: 'Moderator', content: text, type: 'moderator' });
     socket.emit('admin_message_sent', { roomId });
@@ -1331,7 +1369,13 @@ export class AdminHandler {
       socket.emit('error', { message: 'Room not found' });
       return;
     }
-    const sys = { text: `⚠️ Moderator warning: ${text}`, from: 0, fromName: 'System', timestamp: Date.now(), system: true };
+    const sys = {
+      text: `⚠️ Moderator warning: ${text}`,
+      from: 0,
+      fromName: 'System',
+      timestamp: Date.now(),
+      system: true,
+    };
     await this.roomService.addChatMessage(roomId, sys);
     adminAuditService.track({
       adminId: socket.adminId,
@@ -1651,7 +1695,9 @@ export class AdminHandler {
         const counts = await incidentService.countsByUid(uids);
         for (const u of users) u.incidentCount = counts.get(u.uid) || 0;
       }
-    } catch {}
+    } catch (_e) {
+      void _e;
+    }
     return users;
   }
 

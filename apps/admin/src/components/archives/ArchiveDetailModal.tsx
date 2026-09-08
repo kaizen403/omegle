@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { ChatArchiveDetail } from "@/types/archive";
 
@@ -15,17 +15,14 @@ export function ArchiveDetailModal({
   loading,
   onClose,
 }: ArchiveDetailModalProps) {
-  const nameMap = useRef(new Map<number, string>());
-  if (detail) {
-    nameMap.current.set(
-      detail.user1Uid,
-      detail.user1Name ?? `UID ${detail.user1Uid}`,
-    );
-    nameMap.current.set(
-      detail.user2Uid,
-      detail.user2Name ?? `UID ${detail.user2Uid}`,
-    );
-  }
+  const nameMap = useMemo(() => {
+    const m = new Map<number, string>();
+    if (detail) {
+      m.set(detail.user1Uid, detail.user1Name ?? `UID ${detail.user1Uid}`);
+      m.set(detail.user2Uid, detail.user2Name ?? `UID ${detail.user2Uid}`);
+    }
+    return m;
+  }, [detail]);
 
   if (!detail && !loading) return null;
 
@@ -70,7 +67,7 @@ export function ArchiveDetailModal({
               >
                 <div className="flex justify-between items-baseline mb-1">
                   <span className="font-semibold text-sky-700">
-                    {nameMap.current.get(msg.from) ?? `UID ${msg.from}`}
+                    {nameMap.get(msg.from) ?? `UID ${msg.from}`}
                   </span>
                   <span className="text-[10px] text-slate-400 tabular-nums">
                     {new Date(msg.timestamp).toLocaleTimeString("en-IN", {

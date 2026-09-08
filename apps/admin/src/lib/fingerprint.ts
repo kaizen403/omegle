@@ -22,11 +22,29 @@ export function fingerprintSummary(fp?: UserFingerprint | null): string {
   return parts.join(" · ") || shortHash(fp.hash);
 }
 
-export function riskBadge(score?: number): { label: string; className: string } {
-  if (score === undefined || score === null) return { label: "unknown", className: "bg-slate-100 text-slate-600 border-slate-200" };
-  if (score >= 80) return { label: `high ${score}`, className: "bg-red-500/15 text-red-600 border-red-500/25" };
-  if (score >= 50) return { label: `med ${score}`, className: "bg-amber-500/15 text-amber-700 border-amber-500/25" };
-  return { label: `low ${score}`, className: "bg-emerald-500/12 text-emerald-700 border-emerald-500/20" };
+export function riskBadge(score?: number): {
+  label: string;
+  className: string;
+} {
+  if (score === undefined || score === null)
+    return {
+      label: "unknown",
+      className: "bg-slate-100 text-slate-600 border-slate-200",
+    };
+  if (score >= 80)
+    return {
+      label: `high ${score}`,
+      className: "bg-red-500/15 text-red-600 border-red-500/25",
+    };
+  if (score >= 50)
+    return {
+      label: `med ${score}`,
+      className: "bg-amber-500/15 text-amber-700 border-amber-500/25",
+    };
+  return {
+    label: `low ${score}`,
+    className: "bg-emerald-500/12 text-emerald-700 border-emerald-500/20",
+  };
 }
 
 export function timeAgo(ts?: number | null): string {

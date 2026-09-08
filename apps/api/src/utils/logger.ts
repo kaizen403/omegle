@@ -23,7 +23,9 @@ export function redactLogMetadata(metadata: Record<string, unknown>): Record<str
       return value == null ? value : '[redacted]';
     }
     if (Array.isArray(value)) {
-      return depth >= 3 ? '[truncated]' : value.map((item, i) => redact(String(i), item, depth + 1));
+      return depth >= 3
+        ? '[truncated]'
+        : value.map((item, i) => redact(String(i), item, depth + 1));
     }
     if (value && typeof value === 'object' && depth < 4) {
       return Object.fromEntries(

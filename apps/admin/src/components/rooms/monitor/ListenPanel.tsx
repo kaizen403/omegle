@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { Room } from "@/contexts/AdminSocketContext";
-import { highlightIncidents, severityColor, typeLabel } from "@/lib/incidentDetector";
+import {
+  highlightIncidents,
+  severityColor,
+  typeLabel,
+} from "@/lib/incidentDetector";
 import { detectIncidents } from "@/lib/incidentDetector";
 
 interface ListenPanelProps {
@@ -25,7 +29,10 @@ export function ListenPanel({ messages, currentRoom }: ListenPanelProps) {
       <div className="flex h-[42vh] items-center justify-center text-slate-500">
         <div className="text-center">
           <p className="font-medium">Listening… no messages yet</p>
-          <p className="text-sm text-slate-400">Messages appear here in real-time. Admin is invisible to users in listen mode.</p>
+          <p className="text-sm text-slate-400">
+            Messages appear here in real-time. Admin is invisible to users in
+            listen mode.
+          </p>
         </div>
       </div>
     );
@@ -35,30 +42,52 @@ export function ListenPanel({ messages, currentRoom }: ListenPanelProps) {
     <div className="space-y-3 py-2">
       <div className="flex items-center gap-2 text-xs text-slate-500 px-2">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-700">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Listen mode — invisible
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{" "}
+          Listen mode — invisible
         </span>
         <span className="ml-auto">{messages.length} messages</span>
       </div>
       {messages.map((msg, idx) => {
         const senderUid = msg.message?.sender ? String(msg.message.sender) : "";
-        const isUser1 = currentRoom ? senderUid === String(currentRoom.user1.uid) : idx % 2 === 0;
-        const senderName = currentRoom ? (isUser1 ? currentRoom.user1.name : currentRoom.user2.name) : `User ${senderUid.slice(-4) || idx}`;
+        const isUser1 = currentRoom
+          ? senderUid === String(currentRoom.user1.uid)
+          : idx % 2 === 0;
+        const senderName = currentRoom
+          ? isUser1
+            ? currentRoom.user1.name
+            : currentRoom.user2.name
+          : `User ${senderUid.slice(-4) || idx}`;
         const text = msg.message?.content || "";
         const hits = detectIncidents(text);
         const parts = highlightIncidents(text);
 
         return (
-          <div key={idx} className={`flex ${isUser1 ? "justify-start" : "justify-end"} px-2`}>
-            <div className={`max-w-[68%] ${isUser1 ? "items-start" : "items-end"}`}>
-              <div className={`mb-1 flex items-center gap-2 text-xs ${isUser1 ? "ml-1" : "mr-1 flex-row-reverse"}`}>
-                <span className="font-semibold text-slate-700">{senderName}</span>
-                <span className="text-slate-400">{new Date(msg.timestamp).toLocaleTimeString()}</span>
-                <span className="font-mono text-slate-400">#{senderUid.slice(-6) || "—"}</span>
+          <div
+            key={idx}
+            className={`flex ${isUser1 ? "justify-start" : "justify-end"} px-2`}
+          >
+            <div
+              className={`max-w-[68%] ${isUser1 ? "items-start" : "items-end"}`}
+            >
+              <div
+                className={`mb-1 flex items-center gap-2 text-xs ${isUser1 ? "ml-1" : "mr-1 flex-row-reverse"}`}
+              >
+                <span className="font-semibold text-slate-700">
+                  {senderName}
+                </span>
+                <span className="text-slate-400">
+                  {new Date(msg.timestamp).toLocaleTimeString()}
+                </span>
+                <span className="font-mono text-slate-400">
+                  #{senderUid.slice(-6) || "—"}
+                </span>
               </div>
 
               <div
                 className={`rounded-2xl border px-4 py-3 text-sm leading-relaxed break-words backdrop-blur-sm ${
-                  isUser1 ? "rounded-tl-sm border-blue-200 bg-blue-50" : "rounded-tr-sm border-purple-200 bg-purple-50"
+                  isUser1
+                    ? "rounded-tl-sm border-blue-200 bg-blue-50"
+                    : "rounded-tr-sm border-purple-200 bg-purple-50"
                 }`}
               >
                 <p className="whitespace-pre-wrap text-slate-800">

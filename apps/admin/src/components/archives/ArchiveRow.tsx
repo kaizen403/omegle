@@ -16,7 +16,9 @@ export function ArchiveRow({
   onOpen,
 }: ArchiveRowProps) {
   const formatTime = (ts: string | null) =>
-    ts ? new Date(ts).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
+    ts
+      ? new Date(ts).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      : "—";
 
   const user1 = archive.user1Name ?? `UID ${archive.user1Uid}`;
   const user2 = archive.user2Name ?? `UID ${archive.user2Uid}`;

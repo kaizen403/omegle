@@ -52,7 +52,10 @@ export default function RoomMonitor({
   }, []);
 
   // live incident count for tab badge
-  const incidentCount = messages.reduce((n, m) => n + detectIncidents(m.message?.content || "").length, 0);
+  const incidentCount = messages.reduce(
+    (n, m) => n + detectIncidents(m.message?.content || "").length,
+    0,
+  );
 
   const handleEnterTakeover = useCallback(() => {
     setMode("takeover");
@@ -85,19 +88,38 @@ export default function RoomMonitor({
         )}
       </MonitorHeader>
 
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className="flex-1 flex flex-col overflow-hidden"
+      >
         <div className="border-b border-sky-100 bg-white px-4">
           <TabsList className="h-10 bg-slate-100 p-1">
             <TabsTrigger value="listen" className="text-xs">
-              Listen {messages.length > 0 && <span className="ml-1 rounded-full bg-white px-1.5 py-0.5 text-[11px]">{messages.length}</span>}
+              Listen{" "}
+              {messages.length > 0 && (
+                <span className="ml-1 rounded-full bg-white px-1.5 py-0.5 text-[11px]">
+                  {messages.length}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="incidents" className="text-xs">
-              Incidents {incidentCount > 0 && <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] text-white">{incidentCount}</span>}
+              Incidents{" "}
+              {incidentCount > 0 && (
+                <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] text-white">
+                  {incidentCount}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="takeover" className="text-xs">
-              Takeover {mode === "takeover" && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-amber-500" />}
+              Takeover{" "}
+              {mode === "takeover" && (
+                <span className="ml-1 h-1.5 w-1.5 rounded-full bg-amber-500" />
+              )}
             </TabsTrigger>
-            <TabsTrigger value="fingerprints" className="text-xs">Fingerprints</TabsTrigger>
+            <TabsTrigger value="fingerprints" className="text-xs">
+              Fingerprints
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -131,21 +153,53 @@ export default function RoomMonitor({
                 onForceEnd={() => onForceEnd?.()}
               />
               <p className="mt-3 text-xs text-slate-500">
-                Socket events (to be wired): <span className="font-mono">admin:takeover:enter</span>, <span className="font-mono">admin:message</span> (as moderator), <span className="font-mono">admin:warning</span>. All actions are audit-logged on the server as <span className="font-mono">adminAuditLog</span>.
+                Socket events (to be wired):{" "}
+                <span className="font-mono">admin:takeover:enter</span>,{" "}
+                <span className="font-mono">admin:message</span> (as moderator),{" "}
+                <span className="font-mono">admin:warning</span>. All actions
+                are audit-logged on the server as{" "}
+                <span className="font-mono">adminAuditLog</span>.
               </p>
             </TabsContent>
 
             <TabsContent value="fingerprints" className="mt-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FingerprintCard title={`${currentRoom?.user1.name ?? "User 1"} — fingerprint`} fp={null} />
-                <FingerprintCard title={`${currentRoom?.user2.name ?? "User 2"} — fingerprint`} fp={null} />
+                <FingerprintCard
+                  title={`${currentRoom?.user1.name ?? "User 1"} — fingerprint`}
+                  fp={null}
+                />
+                <FingerprintCard
+                  title={`${currentRoom?.user2.name ?? "User 2"} — fingerprint`}
+                  fp={null}
+                />
               </div>
               <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50 p-3 text-xs text-slate-700">
-                <div className="font-semibold text-slate-800">How fingerprinting works (admin view)</div>
+                <div className="font-semibold text-slate-800">
+                  How fingerprinting works (admin view)
+                </div>
                 <ul className="mt-1 list-disc pl-4 space-y-1">
-                  <li>Web app collects a stable hash (canvas + WebGL + UA + timezone + screen) on first join and sends <span className="font-mono">fingerprint:report</span> over the user socket.</li>
-                  <li>API upserts into <span className="font-mono">user_fingerprints</span> — keyed by <span className="font-mono">hash</span>, with <span className="font-mono">linked_uids jsonb</span> and <span className="font-mono">risk_score</span>.</li>
-                  <li>Admin socket enriches <span className="font-mono">users_list / user_update</span> with <span className="font-mono">fingerprint {`{ hash, seenCount, riskScore }`}</span>. Fall back shown here when missing.</li>
+                  <li>
+                    Web app collects a stable hash (canvas + WebGL + UA +
+                    timezone + screen) on first join and sends{" "}
+                    <span className="font-mono">fingerprint:report</span> over
+                    the user socket.
+                  </li>
+                  <li>
+                    API upserts into{" "}
+                    <span className="font-mono">user_fingerprints</span> — keyed
+                    by <span className="font-mono">hash</span>, with{" "}
+                    <span className="font-mono">linked_uids jsonb</span> and{" "}
+                    <span className="font-mono">risk_score</span>.
+                  </li>
+                  <li>
+                    Admin socket enriches{" "}
+                    <span className="font-mono">users_list / user_update</span>{" "}
+                    with{" "}
+                    <span className="font-mono">
+                      fingerprint {`{ hash, seenCount, riskScore }`}
+                    </span>
+                    . Fall back shown here when missing.
+                  </li>
                 </ul>
               </div>
             </TabsContent>

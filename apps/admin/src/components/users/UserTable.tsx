@@ -60,11 +60,22 @@ const UserRow = memo(function UserRow({
     }
   }, [onMonitorRoom, user.roomId]);
 
-  const fpHash = (user as unknown as { fingerprintHash?: string | null; fingerprint?: { hash?: string; riskScore?: number } | null }).fingerprintHash
-    ?? (user as unknown as { fingerprint?: { hash?: string } | null }).fingerprint?.hash
-    ?? null;
-  const risk = riskBadge((user as unknown as { fingerprint?: { riskScore?: number } | null }).fingerprint?.riskScore);
-  const incidentCount = (user as unknown as { incidentCount?: number }).incidentCount ?? 0;
+  const fpHash =
+    (
+      user as unknown as {
+        fingerprintHash?: string | null;
+        fingerprint?: { hash?: string; riskScore?: number } | null;
+      }
+    ).fingerprintHash ??
+    (user as unknown as { fingerprint?: { hash?: string } | null }).fingerprint
+      ?.hash ??
+    null;
+  const risk = riskBadge(
+    (user as unknown as { fingerprint?: { riskScore?: number } | null })
+      .fingerprint?.riskScore,
+  );
+  const incidentCount =
+    (user as unknown as { incidentCount?: number }).incidentCount ?? 0;
 
   return (
     <div
@@ -102,11 +113,26 @@ const UserRow = memo(function UserRow({
           </div>
           <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 flex-wrap">
             ID: {user.uid}
-            {fpHash && <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-700" title={fpHash}>{shortHash(fpHash, 7)}</span>}
-            {incidentCount > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-bold text-white">{incidentCount}⚠</span>}
+            {fpHash && (
+              <span
+                className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-700"
+                title={fpHash}
+              >
+                {shortHash(fpHash, 7)}
+              </span>
+            )}
+            {incidentCount > 0 && (
+              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-bold text-white">
+                {incidentCount}⚠
+              </span>
+            )}
           </div>
           {fpHash && (
-            <div className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${risk.className}`}>fp {shortHash(fpHash, 6)} · {risk.label}</div>
+            <div
+              className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${risk.className}`}
+            >
+              fp {shortHash(fpHash, 6)} · {risk.label}
+            </div>
           )}
         </div>
       </div>
@@ -152,9 +178,16 @@ const UserRow = memo(function UserRow({
       {/* Fingerprint */}
       <div className="flex items-center">
         {fpHash ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-xs text-slate-700" title={fpHash}>
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-xs text-slate-700"
+            title={fpHash}
+          >
             {shortHash(fpHash, 8)}
-            <span className={`ml-1 rounded-full border px-1 py-0.5 text-[10px] ${risk.className}`}>{risk.label.split(" ")[0]}</span>
+            <span
+              className={`ml-1 rounded-full border px-1 py-0.5 text-[10px] ${risk.className}`}
+            >
+              {risk.label.split(" ")[0]}
+            </span>
           </span>
         ) : (
           <span className="text-xs text-slate-400">— no fp</span>
@@ -293,7 +326,8 @@ export default function UserTable({
       setFpUser(detail);
     };
     window.addEventListener("open-fp-sheet", handler as EventListener);
-    return () => window.removeEventListener("open-fp-sheet", handler as EventListener);
+    return () =>
+      window.removeEventListener("open-fp-sheet", handler as EventListener);
   }, []);
 
   if (users.length === 0) {
@@ -369,7 +403,11 @@ export default function UserTable({
         </div>
       </div>
 
-      <UserFingerprintSheet user={fpUser} open={!!fpUser} onOpenChange={(o) => !o && setFpUser(null)} />
+      <UserFingerprintSheet
+        user={fpUser}
+        open={!!fpUser}
+        onOpenChange={(o) => !o && setFpUser(null)}
+      />
 
       {/* Pagination Controls */}
       {totalPages > 1 && (

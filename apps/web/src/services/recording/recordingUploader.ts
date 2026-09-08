@@ -31,11 +31,7 @@ export class RecordingUploader {
 
   static pickMimeType(): string {
     // Prefer hardware-friendly H.264 in WebM (widely accelerated), then VP8
-    const candidates = [
-      'video/webm;codecs=h264,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-    ];
+    const candidates = ['video/webm;codecs=h264,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
     return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
   }
 
@@ -124,14 +120,11 @@ export class RecordingUploader {
   private async uploadChunk(blob: Blob): Promise<boolean> {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const res = await fetch(
-          `${API_URL}/api/recordings/${this.sessionId}/chunk`,
-          {
-            method: 'POST',
-            headers: { 'x-api-key': API_KEY, 'x-seq': String(this.seq) },
-            body: blob,
-          }
-        );
+        const res = await fetch(`${API_URL}/api/recordings/${this.sessionId}/chunk`, {
+          method: 'POST',
+          headers: { 'x-api-key': API_KEY, 'x-seq': String(this.seq) },
+          body: blob,
+        });
         if (res.ok) return true;
         if (res.status === 409) return true; // duplicate/unknown session — don't retry forever
       } catch {

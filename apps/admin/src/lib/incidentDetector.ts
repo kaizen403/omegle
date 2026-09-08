@@ -13,8 +13,7 @@ import type { Incident, IncidentSeverity, IncidentType } from "@/types/socket";
 const INSTAGRAM_RE =
   /(?:instagram\.com\/|ig\s*:\s*|insta\s*:\s*|@)([a-zA-Z0-9._]{1,30})/gi;
 
-const PHONE_RE =
-  /(?:\+?91[\s-]?)?(?:\d[\s-]?){10,12}|\b\d{10}\b/g;
+const PHONE_RE = /(?:\+?91[\s-]?)?(?:\d[\s-]?){10,12}|\b\d{10}\b/g;
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 
@@ -31,7 +30,9 @@ const HARASSMENT_KEYWORDS = [
 ];
 
 const HARASSMENT_RE = new RegExp(
-  HARASSMENT_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+  HARASSMENT_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(
+    "|",
+  ),
   "i",
 );
 
@@ -56,7 +57,12 @@ export function detectIncidents(text: string): DetectedIncident[] {
     if (raw.replace(/[^a-zA-Z0-9._]/g, "").length < 3) continue;
     // avoid double counting email domain
     if (raw.includes("@") && raw.includes(".")) continue;
-    out.push({ type: "instagram_handle", severity: "medium", matchedValue: raw.slice(0, 48), index: m.index });
+    out.push({
+      type: "instagram_handle",
+      severity: "medium",
+      matchedValue: raw.slice(0, 48),
+      index: m.index,
+    });
     if (out.length > 8) break;
   }
 
@@ -67,21 +73,39 @@ export function detectIncidents(text: string): DetectedIncident[] {
     if (digits.length < 10 || digits.length > 13) continue;
     // ignore years / timestamps like 2026
     if (digits.length === 10 && Number(digits) < 5000000000) continue;
-    out.push({ type: "phone_number", severity: "high", matchedValue: digits.slice(0, 16), index: m.index });
+    out.push({
+      type: "phone_number",
+      severity: "high",
+      matchedValue: digits.slice(0, 16),
+      index: m.index,
+    });
     if (out.length > 8) break;
   }
 
   // Email
   EMAIL_RE.lastIndex = 0;
   while ((m = EMAIL_RE.exec(text)) !== null) {
-    out.push({ type: "email", severity: "medium", matchedValue: m[0].slice(0, 64), index: m.index });
+    out.push({
+      type: "email",
+      severity: "medium",
+      matchedValue: m[0].slice(0, 64),
+      index: m.index,
+    });
     if (out.length > 8) break;
   }
 
   // Harassment heuristic
   if (HARASSMENT_RE.test(text)) {
-    const kw = HARASSMENT_KEYWORDS.find((k) => text.toLowerCase().includes(k.toLowerCase())) || "harassment";
-    out.push({ type: "harassment", severity: "critical", matchedValue: kw, index: text.toLowerCase().indexOf(kw.toLowerCase()) });
+    const kw =
+      HARASSMENT_KEYWORDS.find((k) =>
+        text.toLowerCase().includes(k.toLowerCase()),
+      ) || "harassment";
+    out.push({
+      type: "harassment",
+      severity: "critical",
+      matchedValue: kw,
+      index: text.toLowerCase().indexOf(kw.toLowerCase()),
+    });
   }
 
   return out;
@@ -145,13 +169,19 @@ export function incidentsFromMessage(opts: {
 }
 
 /** Highlight matched substrings inside a message for the monitor */
-export function highlightIncidents(text: string): Array<{ text: string; isIncident: boolean; type?: IncidentType }> {
+export function highlightIncidents(
+  text: string,
+): Array<{ text: string; isIncident: boolean; type?: IncidentType }> {
   const hits = detectIncidents(text);
   if (hits.length === 0) return [{ text, isIncident: false }];
 
   // collect ranges
   const ranges: Array<{ start: number; end: number; type: IncidentType }> = hits
-    .map((h) => ({ start: h.index, end: h.index + h.matchedValue.length, type: h.type }))
+    .map((h) => ({
+      start: h.index,
+      end: h.index + h.matchedValue.length,
+      type: h.type,
+    }))
     .sort((a, b) => a.start - b.start);
 
   // merge overlapping
@@ -162,13 +192,23 @@ export function highlightIncidents(text: string): Array<{ text: string; isIncide
     else merged.push({ ...r });
   }
 
-  const parts: Array<{ text: string; isIncident: boolean; type?: IncidentType }> = [];
+  const parts: Array<{
+    text: string;
+    isIncident: boolean;
+    type?: IncidentType;
+  }> = [];
   let cursor = 0;
   for (const r of merged) {
-    if (r.start > cursor) parts.push({ text: text.slice(cursor, r.start), isIncident: false });
-    parts.push({ text: text.slice(r.start, r.end), isIncident: true, type: r.type });
+    if (r.start > cursor)
+      parts.push({ text: text.slice(cursor, r.start), isIncident: false });
+    parts.push({
+      text: text.slice(r.start, r.end),
+      isIncident: true,
+      type: r.type,
+    });
     cursor = r.end;
   }
-  if (cursor < text.length) parts.push({ text: text.slice(cursor), isIncident: false });
+  if (cursor < text.length)
+    parts.push({ text: text.slice(cursor), isIncident: false });
   return parts;
 }

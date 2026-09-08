@@ -41,7 +41,8 @@ router.get('/fingerprints', requireAuth, async (req, res) => {
 router.get('/fingerprints/:uid', requireAuth, async (req, res) => {
   const { fingerprintService } = await import('../../services/fingerprint/fingerprint.service');
   const uid = Number(req.params.uid);
-  if (!Number.isFinite(uid)) return res.status(400).json({ success: false, message: 'Invalid uid' });
+  if (!Number.isFinite(uid))
+    return res.status(400).json({ success: false, message: 'Invalid uid' });
   const data = await fingerprintService.getByUid(uid);
   res.json({ success: true, data });
 });
@@ -64,7 +65,8 @@ router.get('/incidents/room/:roomId', requireAuth, async (req, res) => {
 router.patch('/incidents/:id', requireAuth, async (req, res) => {
   const { incidentService } = await import('../../services/incident/incident.service');
   const { status } = req.body;
-  if (!['open', 'reviewed', 'dismissed', 'actioned'].includes(status)) return res.status(400).json({ success: false, message: 'Invalid status' });
+  if (!['open', 'reviewed', 'dismissed', 'actioned'].includes(status))
+    return res.status(400).json({ success: false, message: 'Invalid status' });
   const row = await incidentService.updateStatus(req.params.id, status, (req as any).user?.email);
   if (!row) return res.status(404).json({ success: false, message: 'Not found' });
   res.json({ success: true, data: row });

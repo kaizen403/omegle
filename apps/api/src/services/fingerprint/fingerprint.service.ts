@@ -21,7 +21,11 @@ export interface FingerprintReport {
   userAgent?: string;
 }
 
-function computeRiskScore(report: FingerprintReport, seenCount: number, linkedCount: number): number {
+function computeRiskScore(
+  report: FingerprintReport,
+  seenCount: number,
+  linkedCount: number
+): number {
   let score = 0;
   if (linkedCount > 3) score += 40;
   else if (linkedCount > 1) score += 20;
@@ -33,13 +37,22 @@ function computeRiskScore(report: FingerprintReport, seenCount: number, linkedCo
 
 export class FingerprintService {
   async upsert(uid: number, report: FingerprintReport): Promise<void> {
-    if (!report.hash || typeof report.hash !== 'string' || report.hash.length < 8 || report.hash.length > 128) {
+    if (
+      !report.hash ||
+      typeof report.hash !== 'string' ||
+      report.hash.length < 8 ||
+      report.hash.length > 128
+    ) {
       logger.warn(`[FINGERPRINT] Invalid hash from uid ${uid}`);
       return;
     }
     const hash = report.hash.slice(0, 128);
     try {
-      const existing = await db.select().from(userFingerprints).where(eq(userFingerprints.hash, hash)).limit(1);
+      const existing = await db
+        .select()
+        .from(userFingerprints)
+        .where(eq(userFingerprints.hash, hash))
+        .limit(1);
       if (existing.length > 0) {
         const row = existing[0];
         const linked = Array.isArray(row.linkedUids) ? row.linkedUids : [];
@@ -71,7 +84,8 @@ export class FingerprintService {
           platform: report.platform?.slice(0, 64) || null,
           vendor: report.vendor?.slice(0, 64) || null,
           deviceMemory: typeof report.deviceMemory === 'number' ? report.deviceMemory : null,
-          hardwareConcurrency: typeof report.hardwareConcurrency === 'number' ? report.hardwareConcurrency : null,
+          hardwareConcurrency:
+            typeof report.hardwareConcurrency === 'number' ? report.hardwareConcurrency : null,
           plugins: report.plugins?.slice(0, 20) || null,
           fonts: report.fonts?.slice(0, 50) || null,
           ipAddress: report.ipAddress || null,
@@ -91,7 +105,11 @@ export class FingerprintService {
 
   async getByHash(hash: string) {
     try {
-      const rows = await db.select().from(userFingerprints).where(eq(userFingerprints.hash, hash)).limit(1);
+      const rows = await db
+        .select()
+        .from(userFingerprints)
+        .where(eq(userFingerprints.hash, hash))
+        .limit(1);
       return rows[0] || null;
     } catch {
       return null;
@@ -114,7 +132,11 @@ export class FingerprintService {
 
   async listRecent(limit = 100) {
     try {
-      return await db.select().from(userFingerprints).orderBy(desc(userFingerprints.lastSeenAt)).limit(limit);
+      return await db
+        .select()
+        .from(userFingerprints)
+        .orderBy(desc(userFingerprints.lastSeenAt))
+        .limit(limit);
     } catch {
       return [];
     }

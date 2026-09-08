@@ -31,7 +31,12 @@ export class ChatArchiveService {
 
   async list(limit = 50, offset = 0) {
     try {
-      return await db.select().from(chatArchives).orderBy(desc(chatArchives.archivedAt)).limit(limit).offset(offset);
+      return await db
+        .select()
+        .from(chatArchives)
+        .orderBy(desc(chatArchives.archivedAt))
+        .limit(limit)
+        .offset(offset);
     } catch {
       return [];
     }
@@ -39,7 +44,11 @@ export class ChatArchiveService {
 
   async getByRoomId(roomId: string) {
     try {
-      const rows = await db.select().from(chatArchives).where(eq(chatArchives.roomId, roomId)).limit(1);
+      const rows = await db
+        .select()
+        .from(chatArchives)
+        .where(eq(chatArchives.roomId, roomId))
+        .limit(1);
       return rows[0] || null;
     } catch {
       return null;

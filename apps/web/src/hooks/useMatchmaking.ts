@@ -366,13 +366,16 @@ export function useMatchmaking(options: UseMatchmakingOptions = {}): UseMatchmak
     // Report fingerprint once per socket lifetime (cheap, cached)
     void (async () => {
       try {
-        const { collectFingerprint, getCachedHash, setCachedHash } = await import('@/lib/fingerprint');
+        const { collectFingerprint, getCachedHash, setCachedHash } =
+          await import('@/lib/fingerprint');
         const fp = await collectFingerprint();
         // Only re-send if hash changed (e.g., after clearing storage)
         if (getCachedHash() !== fp.hash) {
           setCachedHash(fp.hash);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           getWs().send({ type: 'fingerprint:report', data: fp } as any);
         } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           getWs().send({ type: 'fingerprint:report', data: { hash: fp.hash } } as any);
         }
       } catch {}

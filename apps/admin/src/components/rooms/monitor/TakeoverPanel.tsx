@@ -29,14 +29,20 @@ export function TakeoverPanel({
 }: TakeoverPanelProps) {
   const { toast } = useToast();
   const [draft, setDraft] = useState("");
-  const [warnDraft, setWarnDraft] = useState("This conversation is being monitored by moderation. Please keep it respectful.");
+  const [warnDraft, setWarnDraft] = useState(
+    "This conversation is being monitored by moderation. Please keep it respectful.",
+  );
 
   const canSend = draft.trim().length > 0 && draft.trim().length <= 800;
 
   const handleSend = () => {
     if (!canSend) return;
     onSendAsModerator(draft.trim());
-    toast({ variant: "success", title: "Sent as moderator", description: draft.trim().slice(0, 60) });
+    toast({
+      variant: "success",
+      title: "Sent as moderator",
+      description: draft.trim().slice(0, 60),
+    });
     setDraft("");
   };
 
@@ -51,12 +57,16 @@ export function TakeoverPanel({
       {/* Mode banner */}
       <div
         className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${
-          mode === "takeover" ? "border-amber-200 bg-amber-50" : "border-sky-200 bg-sky-50"
+          mode === "takeover"
+            ? "border-amber-200 bg-amber-50"
+            : "border-sky-200 bg-sky-50"
         }`}
       >
         <div>
           <div className="text-sm font-semibold text-slate-800">
-            {mode === "takeover" ? "Takeover active — you are now a participant" : "Listen only — users cannot see you"}
+            {mode === "takeover"
+              ? "Takeover active — you are now a participant"
+              : "Listen only — users cannot see you"}
           </div>
           <p className="text-xs text-slate-600 mt-0.5">
             {mode === "takeover"
@@ -65,13 +75,20 @@ export function TakeoverPanel({
           </p>
           {currentRoom && (
             <p className="text-xs font-mono text-slate-500 mt-1">
-              {currentRoom.user1.name} (#{String(currentRoom.user1.uid).slice(-6)}) ↔ {currentRoom.user2.name} (#{String(currentRoom.user2.uid).slice(-6)}) • {roomId.slice(0, 8)}
+              {currentRoom.user1.name} (#
+              {String(currentRoom.user1.uid).slice(-6)}) ↔{" "}
+              {currentRoom.user2.name} (#
+              {String(currentRoom.user2.uid).slice(-6)}) • {roomId.slice(0, 8)}
             </p>
           )}
         </div>
         <div className="flex gap-2 shrink-0">
           {mode === "listen" ? (
-            <Button size="sm" onClick={onEnterTakeover} className="bg-amber-600 hover:bg-amber-700 text-white">
+            <Button
+              size="sm"
+              onClick={onEnterTakeover}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
               Enter takeover
             </Button>
           ) : (
@@ -84,10 +101,23 @@ export function TakeoverPanel({
 
       {/* Quick warnings */}
       <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick warning</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Quick warning
+        </div>
         <div className="mt-2 flex gap-2">
-          <Textarea value={warnDraft} onChange={(e) => setWarnDraft(e.target.value)} rows={2} className="text-sm" placeholder="Warning text shown as system message" />
-          <Button size="sm" variant="secondary" onClick={handleWarn} disabled={!warnDraft.trim()}>
+          <Textarea
+            value={warnDraft}
+            onChange={(e) => setWarnDraft(e.target.value)}
+            rows={2}
+            className="text-sm"
+            placeholder="Warning text shown as system message"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleWarn}
+            disabled={!warnDraft.trim()}
+          >
             Send warning
           </Button>
         </div>
@@ -110,8 +140,12 @@ export function TakeoverPanel({
 
       {/* Send as moderator */}
       <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Speak as Moderator</div>
-        <p className="text-xs text-slate-500 mt-1">Only available in takeover mode. All sends are audit-logged.</p>
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Speak as Moderator
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          Only available in takeover mode. All sends are audit-logged.
+        </p>
         <div className="mt-2 flex gap-2">
           <Textarea
             value={draft}
@@ -119,14 +153,24 @@ export function TakeoverPanel({
             rows={3}
             maxLength={800}
             disabled={mode !== "takeover"}
-            placeholder={mode === "takeover" ? "Type a message users will see as Moderator…" : "Enter takeover to send"}
+            placeholder={
+              mode === "takeover"
+                ? "Type a message users will see as Moderator…"
+                : "Enter takeover to send"
+            }
             className="text-sm"
           />
           <div className="flex flex-col gap-2 shrink-0">
-            <Button size="sm" onClick={handleSend} disabled={!canSend || mode !== "takeover"}>
+            <Button
+              size="sm"
+              onClick={handleSend}
+              disabled={!canSend || mode !== "takeover"}
+            >
               Send
             </Button>
-            <span className="text-[11px] text-slate-400 text-right">{draft.length}/800</span>
+            <span className="text-[11px] text-slate-400 text-right">
+              {draft.length}/800
+            </span>
           </div>
         </div>
       </div>
@@ -134,8 +178,13 @@ export function TakeoverPanel({
       {/* Danger */}
       <div className="rounded-xl border border-red-200 bg-red-50 p-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-red-700">End conversation</div>
-          <p className="text-xs text-red-600/80">Disconnects both users and closes the room. Use for harassment / PII leaks.</p>
+          <div className="text-sm font-semibold text-red-700">
+            End conversation
+          </div>
+          <p className="text-xs text-red-600/80">
+            Disconnects both users and closes the room. Use for harassment / PII
+            leaks.
+          </p>
         </div>
         <Button size="sm" variant="destructive" onClick={onForceEnd}>
           Force end room

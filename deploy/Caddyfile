@@ -43,7 +43,7 @@
 		}
 	}
 
-	@adminhost header Host d3fault.vitap.in
+	@adminhost header Host admin.vitap.in d3fault.vitap.in
 	handle @adminhost {
 		@backend path /socket.io/* /api/* /health /status
 		handle @backend {
@@ -73,6 +73,6 @@
 		}
 	}
 	handle {
-		respond "Not found - set Host: vitap.in or d3fault.vitap.in or use DNS" 404
+		respond "Not found - set Host: vitap.in or admin.vitap.in/d3fault.vitap.in or use DNS" 404
 	}
 }
