@@ -44,6 +44,7 @@ const UserRow = memo(function UserRow({
   onToggleSelection,
   onKickUser,
   onMonitorRoom,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isSuperAdmin,
 }: UserRowProps) {
   const handleCheckbox = useCallback(() => {
@@ -229,7 +230,7 @@ const UserRow = memo(function UserRow({
         >
           FP
         </Button>
-        {isSuperAdmin && user.roomId && (
+        {user.roomId && (
           <Button
             variant="ghost"
             size="sm"
