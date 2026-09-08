@@ -1,6 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { CheckCircle2, AlertTriangle, XCircle, Info, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { Tone } from "@/components/console";
 
 export type ToastVariant = "success" | "error" | "warning" | "info";
 
@@ -11,30 +14,20 @@ export interface ToastMessage {
   variant: ToastVariant;
 }
 
-const variantStyles: Record<
-  ToastVariant,
-  { container: string; dot: string; title: string }
-> = {
-  success: {
-    container: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white",
-    dot: "bg-emerald-500",
-    title: "text-emerald-700",
-  },
-  error: {
-    container: "border-red-200 bg-gradient-to-br from-red-50 to-white",
-    dot: "bg-red-500",
-    title: "text-red-700",
-  },
-  warning: {
-    container: "border-amber-200 bg-gradient-to-br from-amber-50 to-white",
-    dot: "bg-amber-500",
-    title: "text-amber-700",
-  },
-  info: {
-    container: "border-sky-100 bg-gradient-to-br from-sky-50 to-white",
-    dot: "bg-sky-500",
-    title: "text-sky-700",
-  },
+/** Variants map onto the console's semantic tones — no bespoke colours here. */
+const VARIANTS: Record<ToastVariant, { tone: Tone; icon: LucideIcon }> = {
+  success: { tone: "success", icon: CheckCircle2 },
+  error: { tone: "danger", icon: XCircle },
+  warning: { tone: "warning", icon: AlertTriangle },
+  info: { tone: "info", icon: Info },
+};
+
+const ICON_TONE: Record<Tone, string> = {
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-danger",
+  info: "text-info",
+  neutral: "text-neutral",
 };
 
 interface ToastViewportProps {
@@ -46,69 +39,60 @@ interface ToastViewportProps {
  * Presentational toast stack. State lives in `ToastProvider`; this component
  * only renders. Rendered once at the root so any page (and the socket hook,
  * which has no DOM of its own) can raise a notification.
+ *
+ * Toasts sit on a plain card surface with a tinted icon rather than a tinted
+ * gradient panel: at the bottom-right of a busy console, a coloured slab reads
+ * as an error even when it is a success.
  */
 export function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
   return (
     <div
       // `pointer-events-none` on the stack so the fixed overlay never blocks
       // clicks on the dashboard; each toast re-enables them for itself.
-      className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2"
+      className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2"
       aria-live="polite"
       aria-atomic="false"
     >
       <AnimatePresence initial={false}>
         {toasts.map((toast) => {
-          const styles = variantStyles[toast.variant];
+          const { tone, icon: Icon } = VARIANTS[toast.variant];
           return (
             <motion.div
               key={toast.id}
               layout
-              initial={{ opacity: 0, y: 16, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 24, scale: 0.96 }}
-              transition={{ duration: 0.18 }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, x: 16 }}
+              transition={{ duration: 0.16 }}
               role={
                 toast.variant === "error" || toast.variant === "warning"
                   ? "alert"
                   : "status"
               }
-              className={`pointer-events-auto rounded-lg border p-3 shadow-md ${styles.container}`}
+              className="pointer-events-auto flex items-start gap-2.5 rounded-xl border border-border bg-card p-3 shadow-[0_8px_24px_rgba(16,24,40,0.10)]"
             >
-              <div className="flex items-start gap-2">
-                <div
-                  className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${styles.dot}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-semibold ${styles.title}`}>
-                    {toast.title}
-                  </div>
-                  {toast.description && (
-                    <div className="mt-0.5 break-words text-xs text-slate-500">
-                      {toast.description}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onDismiss(toast.id)}
-                  aria-label="Dismiss notification"
-                  className="-mr-1 -mt-1 flex-shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-600"
-                >
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+              <Icon
+                className={`mt-0.5 size-4 shrink-0 ${ICON_TONE[tone]}`}
+                strokeWidth={2}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  {toast.title}
+                </p>
+                {toast.description && (
+                  <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                    {toast.description}
+                  </p>
+                )}
               </div>
+              <button
+                type="button"
+                onClick={() => onDismiss(toast.id)}
+                aria-label="Dismiss notification"
+                className="-mt-0.5 -mr-0.5 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" strokeWidth={2} />
+              </button>
             </motion.div>
           );
         })}

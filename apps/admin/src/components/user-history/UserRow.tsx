@@ -2,6 +2,8 @@
 
 import { Loader2 } from "lucide-react";
 import { UserListItem } from "@/types/user";
+import { Button } from "@/components/ui/button";
+import { IdChip, StatusPill, Td, Tr } from "@/components/console";
 
 interface UserRowProps {
   user: UserListItem;
@@ -18,88 +20,81 @@ export function UserRow({
   loadingUserId,
   onUserClick,
 }: UserRowProps) {
+  const isLoading = loadingUserId === user.uid;
+  const location =
+    user.city && user.country
+      ? `${user.city}, ${user.country}`
+      : user.city || user.country || "Unknown";
+  const time = new Date(user.timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
-    <div className="grid grid-cols-[50px_minmax(180px,1fr)_130px_90px_220px_180px_140px] gap-2 py-3 border-b border-sky-100 hover:bg-sky-50/50">
-      {/* # */}
-      <div className="flex items-center text-slate-500">
+    <Tr>
+      <Td
+        align="right"
+        className="hidden text-sm tabular-nums text-muted-foreground sm:table-cell"
+      >
         {startIndex + index + 1}
-      </div>
+      </Td>
 
-      {/* USER */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 ${
-            user.gender.toLowerCase() === "male"
-              ? "bg-blue-500/20"
-              : user.gender.toLowerCase() === "female"
-                ? "bg-pink-500/20"
-                : "bg-purple-500/20"
-          }`}
-        >
-          {user.gender.toLowerCase() === "male"
-            ? "👨"
-            : user.gender.toLowerCase() === "female"
-              ? "👩"
-              : "🧑"}
+      <Td>
+        <div className="min-w-0">
+          <p className="truncate font-medium text-foreground" title={user.name}>
+            {user.name}
+          </p>
+          <p className="truncate text-xs text-muted-foreground sm:hidden">
+            <span className="capitalize">{user.gender}</span> ·{" "}
+            <span className="tabular-nums">{time}</span>
+          </p>
         </div>
-        <span className="font-semibold text-slate-900 truncate">
-          {user.name}
-        </span>
-      </div>
+      </Td>
 
-      {/* UID */}
-      <div className="flex items-center font-mono text-sm text-slate-500">
-        {user.uid}
-      </div>
+      <Td className="hidden lg:table-cell">
+        <IdChip value={user.uid} prefix="" title={`UID ${user.uid}`} />
+      </Td>
 
-      {/* GENDER */}
-      <div className="flex items-center">
-        <span
-          className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
-            user.gender.toLowerCase() === "male"
-              ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-              : user.gender.toLowerCase() === "female"
-                ? "bg-pink-500/20 text-pink-300 border border-pink-500/30"
-                : "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-          }`}
-        >
+      <Td className="hidden sm:table-cell">
+        <StatusPill tone="neutral" className="capitalize">
           {user.gender}
+        </StatusPill>
+      </Td>
+
+      <Td className="hidden text-sm tabular-nums whitespace-nowrap text-muted-foreground sm:table-cell">
+        {time}
+      </Td>
+
+      <Td className="hidden lg:table-cell">
+        <span
+          className="block truncate text-sm text-muted-foreground"
+          title={location}
+        >
+          {location}
         </span>
-      </div>
+      </Td>
 
-      {/* TIME */}
-      <div className="flex items-center text-sm text-slate-500">
-        {new Date(user.timestamp).toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </div>
-
-      {/* LOCATION */}
-      <div className="flex items-center text-sm text-slate-500 min-w-0">
-        <span className="truncate">
-          {user.city && user.country
-            ? `${user.city}, ${user.country}`
-            : user.city || user.country || "Unknown"}
-        </span>
-      </div>
-
-      {/* ACTIONS */}
-      <div className="flex items-center justify-center">
-        {loadingUserId === user.uid ? (
-          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-        ) : (
-          <button
+      <Td align="right">
+        <div className="flex shrink-0 items-center justify-end">
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => onUserClick(user)}
             disabled={loadingUserId !== null}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            View Details
-          </button>
-        )}
-      </div>
-    </div>
+            {isLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                Loading
+              </>
+            ) : (
+              "View details"
+            )}
+          </Button>
+        </div>
+      </Td>
+    </Tr>
   );
 }

@@ -21,12 +21,10 @@ export function HomeAuthGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#e8f4f8]">
-        <div className="text-center">
-          <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-solid border-[#0084d1] border-r-transparent"></div>
-          <p className="mt-4 text-slate-500 text-lg">
-            Verifying credentials...
-          </p>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <span className="size-7 animate-spin rounded-full border-2 border-border border-t-primary" />
+          <p className="text-sm text-muted-foreground">Checking your session</p>
         </div>
       </div>
     );

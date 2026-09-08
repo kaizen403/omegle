@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { Headphones, Megaphone, Send, ShieldAlert, X } from "lucide-react";
 import { Room } from "@/contexts/AdminSocketContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import {
   MonitorHeader,
   ExportMenu,
   MessageList,
   ParticipantsInfo,
   ExportSuccessIndicator,
+  IncidentStrip,
 } from "./monitor";
 
 interface RoomMonitorProps {
@@ -24,6 +28,14 @@ interface RoomMonitorProps {
   onTakeoverChange?: (mode: "listen" | "takeover") => void;
 }
 
+/**
+ * The room monitor workspace.
+ *
+ * Layout contract: the header, the tab bar and the moderator bar are all
+ * `shrink-0` and never move. The transcript is the single scrolling element
+ * (`min-h-0` parent + `overflow-y-auto`), so a room that receives a message a
+ * second cannot push the controls around under the moderator's cursor.
+ */
 export default function RoomMonitor({
   monitorRoomId,
   currentRoom,
@@ -63,7 +75,7 @@ export default function RoomMonitor({
   }, [draft, takeover, onSendAsModerator, onTakeoverChange]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex min-h-0 flex-1 flex-col">
       <MonitorHeader
         roomId={monitorRoomId}
         isRoomActive={isRoomActive}
@@ -83,60 +95,107 @@ export default function RoomMonitor({
         )}
       </MonitorHeader>
 
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full bg-gradient-to-b from-white to-sky-50 overflow-y-auto scrollbar-hide">
-          <div className="max-w-5xl mx-auto px-6 py-4">
+      <Tabs
+        defaultValue="listen"
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="shrink-0 border-b border-border bg-card px-4 py-2 sm:px-5">
+          <TabsList>
+            <TabsTrigger value="listen">
+              <Headphones className="size-4" strokeWidth={2} />
+              Listen
+            </TabsTrigger>
+            <TabsTrigger value="incidents">
+              <ShieldAlert className="size-4" strokeWidth={2} />
+              Incidents
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="listen" className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl min-w-0 px-4 py-4 sm:px-6">
             <MessageList messages={messages} currentRoom={currentRoom} />
           </div>
-        </div>
-      </div>
+        </TabsContent>
 
-      {/* Admin-only takeover bar — same sky/white theme, invisible to participants.
-          Listen is stealth; takeover messages are sent as Moderator but the bar itself never renders for users. */}
-      <div className="border-t border-sky-100 bg-white/90 backdrop-blur px-4 py-3">
-        <div className="max-w-5xl mx-auto flex items-center gap-2">
-          <button
+        <TabsContent
+          value="incidents"
+          className="min-h-0 flex-1 overflow-hidden"
+        >
+          <div className="mx-auto flex h-full w-full max-w-4xl min-w-0 flex-col px-4 py-4 sm:px-6">
+            <IncidentStrip roomId={monitorRoomId} messages={messages} />
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Admin-only moderator bar — invisible to participants.
+          Listen is stealth; takeover messages are sent as Moderator but the bar
+          itself never renders for users. */}
+      <div className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-5">
+        <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-wrap items-center gap-2">
+          <Button
             onClick={toggleTakeover}
-            className={`text-xs font-semibold px-3 py-2 rounded-lg border transition-colors ${takeover ? "bg-amber-500 text-white border-amber-500" : "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100"}`}
-            title={takeover ? "Takeover active — your messages go to the room as Moderator" : "Enter takeover to speak as Moderator (invisible to users until you send)"}
+            variant="outline"
+            size="sm"
+            className={
+              takeover
+                ? "border-warning-line bg-warning-surface text-warning hover:bg-warning-surface hover:text-warning"
+                : ""
+            }
+            title={
+              takeover
+                ? "Takeover active — your messages go to the room as Moderator"
+                : "Enter takeover to speak as Moderator (invisible to users until you send)"
+            }
           >
-            {takeover ? "Takeover: ON" : "Takeover: OFF"}
-          </button>
+            {takeover ? "Takeover on" : "Takeover off"}
+          </Button>
+
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder={
               takeover
-                ? "Type as Moderator — participants see this as Moderator message"
-                : "Enter takeover to speak (listen is invisible)"
+                ? "Type as Moderator — participants see this as a Moderator message"
+                : "Enter takeover to speak (listening is invisible)"
             }
-            className="flex-1 h-9 rounded-lg border border-sky-200 bg-sky-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#0084d1] focus:bg-white"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 focus:outline-none"
           />
-          <button
-            onClick={send}
-            disabled={!draft.trim()}
-            className="h-9 px-4 rounded-lg bg-[#0084d1] text-white text-sm font-semibold disabled:opacity-50 hover:bg-sky-600"
-          >
+
+          <Button onClick={send} disabled={!draft.trim()} size="sm">
+            <Send className="size-4" strokeWidth={2} />
             Send
-          </button>
-          <button
-            onClick={() => onSendWarning?.("Please keep the conversation respectful.")}
-            className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50"
+          </Button>
+
+          <Button
+            onClick={() =>
+              onSendWarning?.("Please keep the conversation respectful.")
+            }
+            variant="outline"
+            size="sm"
           >
+            <Megaphone className="size-4" strokeWidth={2} />
             Warn
-          </button>
+          </Button>
+
           {onForceEnd && (
-            <button
+            <Button
               onClick={onForceEnd}
-              className="h-9 px-3 rounded-lg bg-red-500/10 text-red-600 border border-red-200 text-xs font-semibold hover:bg-red-500/20"
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:bg-danger-surface hover:text-danger"
             >
+              <X className="size-4" strokeWidth={2} />
               End
-            </button>
+            </Button>
           )}
         </div>
-        <p className="max-w-5xl mx-auto mt-1.5 text-[11px] text-slate-400">
-          Listen is invisible. Takeover bar is <span className="font-medium">admin-only</span> — participants never see this bar; they only see your messages as <span className="font-mono">Moderator</span> after you send.
+
+        <p className="mx-auto mt-1.5 w-full max-w-3xl text-xs text-muted-foreground">
+          Listening is invisible. This bar is admin-only — participants never
+          see it, and only see your messages as{" "}
+          <span className="font-mono">Moderator</span> once you send.
         </p>
       </div>
     </div>

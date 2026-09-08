@@ -1,215 +1,209 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* This console is light-only by design. Redefining the `dark` variant to key
+   off a `.dark` ancestor — which is never applied — keeps every `dark:` utility
+   still sitting in the shadcn primitives inert. Without this override Tailwind
+   v4 falls back to `prefers-color-scheme`, and a viewer whose OS is in dark
+   mode would get half a screen of dark-theme styling on a light page. */
 @custom-variant dark (&:is(.dark *));
 
-#recaptcha-container-mfa {
-  position: relative;
-  z-index: 9999 !important;
-  pointer-events: auto !important;
-}
+/* ---------------------------------------------------------------------------
+   Omegle VITAP admin console — design system
 
-#recaptcha-container-mfa * {
-  pointer-events: auto !important;
-}
+   One light theme. Neutral surfaces, a single blue action colour, and semantic
+   status colours that are readable *on light backgrounds* (the old palette used
+   dark-theme values like text-green-400 on white, which is why everything
+   looked washed out).
 
-#recaptcha-container-mfa iframe {
-  z-index: 9999 !important;
-  pointer-events: auto !important;
-}
+   Rules for anything built on top of this:
+   - Sentence case. Never uppercase micro-labels.
+   - Figtree for everything; mono only for IDs; tabular-nums for live numbers.
+   - Colour carries meaning, not decoration. No gradients, glows, or blobs.
+   - Live values must not reflow the layout: fix widths, use tabular-nums.
+--------------------------------------------------------------------------- */
 
-.grecaptcha-badge:not(#recaptcha-container-mfa .grecaptcha-badge) {
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+:root {
+  --radius: 0.75rem;
+
+  /* Surfaces */
+  --background: #f6f8fb;
+  --foreground: #101828;
+  --card: #ffffff;
+  --card-foreground: #101828;
+  --popover: #ffffff;
+  --popover-foreground: #101828;
+
+  /* Action */
+  --primary: #0084d1;
+  --primary-foreground: #ffffff;
+  --secondary: #eef4fb;
+  --secondary-foreground: #0b4f7d;
+  --accent: #eef4fb;
+  --accent-foreground: #0b4f7d;
+
+  /* Quiet text and fills */
+  --muted: #f2f5f9;
+  --muted-foreground: #667085;
+
+  /* Lines */
+  --border: #e4e9f0;
+  --input: #dfe5ee;
+  --ring: #0084d1;
+
+  /* Semantic status — foreground / surface / line triplets, all light-safe */
+  --success: #067647;
+  --success-surface: #ecfdf3;
+  --success-line: #abefc6;
+
+  --warning: #b54708;
+  --warning-surface: #fffaeb;
+  --warning-line: #fedf89;
+
+  --danger: #b42318;
+  --danger-surface: #fef3f2;
+  --danger-line: #fecdca;
+
+  --info: #026aa2;
+  --info-surface: #f0f9ff;
+  --info-line: #b9e6fe;
+
+  --neutral: #475467;
+  --neutral-surface: #f2f5f9;
+  --neutral-line: #e4e9f0;
+
+  --destructive: #d92d20;
+
+  /* Charts — distinguishable at small sizes, all readable on white */
+  --chart-1: #0084d1;
+  --chart-2: #12b76a;
+  --chart-3: #f79009;
+  --chart-4: #7a5af8;
+  --chart-5: #ec4a8f;
+
+  /* Sidebar */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #344054;
+  --sidebar-primary: #0084d1;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef4fb;
+  --sidebar-accent-foreground: #026aa2;
+  --sidebar-border: #e4e9f0;
+  --sidebar-ring: #0084d1;
 }
 
 @theme inline {
-  --animate-cell-ripple: cell-ripple var(--duration, 200ms) ease-out none 1
-    var(--delay, 0ms);
-
-  @keyframes cell-ripple {
-    0% {
-      opacity: 0.3;
-    }
-    50% {
-      opacity: 0.7;
-      background-color: rgba(0, 132, 209, 0.15);
-    }
-    100% {
-      opacity: 0.3;
-    }
-  }
-
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+
+  --color-success: var(--success);
+  --color-success-surface: var(--success-surface);
+  --color-success-line: var(--success-line);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-line: var(--warning-line);
+  --color-danger: var(--danger);
+  --color-danger-surface: var(--danger-surface);
+  --color-danger-line: var(--danger-line);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-info-line: var(--info-line);
+  --color-neutral: var(--neutral);
+  --color-neutral-surface: var(--neutral-surface);
+  --color-neutral-line: var(--neutral-line);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-figtree);
+  --font-mono: var(--font-geist-mono);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-
-  --color-video-blue-bg: #c8e6f5;
-  --color-video-blue-icon-bg: #a8d8f0;
-  --color-video-blue-text: #0084d1;
-  --color-page-bg: #e8f4f8;
 }
 
-@keyframes blob {
-  0% {
-    transform: translate(0px, 0px) scale(1);
-  }
-  33% {
-    transform: translate(30px, -50px) scale(1.1);
-  }
-  66% {
-    transform: translate(-20px, 20px) scale(0.9);
-  }
-  100% {
-    transform: translate(0px, 0px) scale(1);
-  }
-}
-
-.animate-blob {
-  animation: blob 7s infinite;
-}
-
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-
-@keyframes gradient-xy {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-.animate-gradient-xy {
-  background-size: 400% 400%;
-  animation: gradient-xy 15s ease infinite;
-}
-
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-
-:root {
-  --radius: 0.625rem;
-  --background: #e8f4f8;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #0084d1;
-  --primary-foreground: #ffffff;
-  --secondary: #c8e6f5;
-  --secondary-foreground: #0f172a;
-  --muted: #d7eef6;
-  --muted-foreground: #64748b;
-  --accent: #a8d8f0;
-  --accent-foreground: #0f172a;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #b9dff0;
-  --input: #b9dff0;
-  --ring: #0084d1;
-  --chart-1: #0084d1;
-  --chart-2: #06b6d4;
-  --chart-3: #db2777;
-  --chart-4: #38bdf8;
-  --chart-5: #0369a1;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #0084d1;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8f4f8;
-  --sidebar-accent-foreground: #0084d1;
-  --sidebar-border: #c8e6f5;
-  --sidebar-ring: #0084d1;
-}
-
+/* The console is light-only. `.dark` is kept as a no-op alias so any stray
+   `dark:` variant in a component cannot flip half a screen to an unstyled
+   dark palette. */
 .dark {
-  --background: #e8f4f8;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #0084d1;
-  --primary-foreground: #ffffff;
-  --secondary: #c8e6f5;
-  --secondary-foreground: #0f172a;
-  --muted: #d7eef6;
-  --muted-foreground: #64748b;
-  --accent: #a8d8f0;
-  --accent-foreground: #0f172a;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #b9dff0;
-  --input: #b9dff0;
-  --ring: #0084d1;
-  --chart-1: #0084d1;
-  --chart-2: #06b6d4;
-  --chart-3: #db2777;
-  --chart-4: #38bdf8;
-  --chart-5: #0369a1;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #0084d1;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8f4f8;
-  --sidebar-accent-foreground: #0084d1;
-  --sidebar-border: #c8e6f5;
-  --sidebar-ring: #0084d1;
+  color-scheme: light;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings:
+      "cv11",
+      "ss01";
   }
+
+  /* Live counters, durations, and IDs must never resize their column as the
+     digits change — this is half of the "everything jumps around" problem. */
+  .tnum,
+  [data-live-number] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Single source of truth for an ID chip (room ids, uids, fingerprints). */
+  .id-chip {
+    @apply inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.75rem] leading-5 text-muted-foreground;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Turnstile / recaptcha container needs to sit above the auth card. */
+#recaptcha-container-mfa {
+  position: relative;
+  z-index: 60;
+  pointer-events: auto;
+}
+
+.grecaptcha-badge:not(#recaptcha-container-mfa .grecaptcha-badge) {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }

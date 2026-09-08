@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Room } from "@/contexts/AdminSocketContext";
+import { EmptyState } from "@/components/console";
 
 interface Message {
   message?: {
@@ -16,6 +17,13 @@ interface MessageListProps {
   currentRoom: Room | undefined;
 }
 
+/**
+ * The transcript.
+ *
+ * This is the only part of the monitor that is allowed to move. Bubbles are
+ * quiet surfaces with one hairline border; attribution (name, id, time) sits
+ * above the bubble in muted text so a fast-moving room stays readable.
+ */
 export function MessageList({ messages, currentRoom }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -25,83 +33,57 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
 
   if (messages.length === 0) {
     return (
-      <div className="h-[calc(100vh-200px)] flex items-center justify-center text-slate-500">
-        <div className="text-center">
-          <svg
-            className="w-16 h-16 mx-auto mb-4 text-slate-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-            />
-          </svg>
-          <p className="text-lg font-medium mb-1">Waiting for messages...</p>
-          <p className="text-sm text-slate-500">
-            Messages will appear here in real-time
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        title="Waiting for messages"
+        description="Messages appear here in real time. Listening is invisible to participants."
+      />
     );
   }
 
   return (
-    <div className="space-y-4 py-2">
+    <div className="space-y-3 py-2">
       {messages.map((msg, index) => {
         const senderUid = msg.message?.sender ? String(msg.message.sender) : "";
 
         let isUser1 = false;
         let senderName = `User ${senderUid.slice(-4)}`;
-        let senderGender: string | undefined = undefined;
 
         if (currentRoom) {
           isUser1 = senderUid === String(currentRoom.user1.uid);
           senderName = isUser1
             ? currentRoom.user1.name
             : currentRoom.user2.name;
-          senderGender = isUser1
-            ? currentRoom.user1.gender
-            : currentRoom.user2.gender;
         }
 
         return (
           <div
             key={index}
-            className={`flex ${isUser1 ? "justify-start" : "justify-end"} px-2`}
+            className={`flex ${isUser1 ? "justify-start" : "justify-end"}`}
           >
-            <div
-              className={`max-w-[65%] ${isUser1 ? "items-start" : "items-end"}`}
-            >
+            <div className="min-w-0 max-w-[min(34rem,80%)]">
               <div
-                className={`flex items-center gap-2 mb-1.5 ${isUser1 ? "ml-1" : "mr-1 flex-row-reverse"}`}
+                className={`mb-1 flex items-center gap-2 text-xs text-muted-foreground ${
+                  isUser1 ? "" : "flex-row-reverse"
+                }`}
               >
-                <span
-                  className={`text-xs font-semibold ${
-                    senderGender === "male"
-                      ? "text-blue-400"
-                      : senderGender === "female"
-                        ? "text-pink-400"
-                        : "text-purple-400"
-                  }`}
-                >
+                <span className="truncate font-medium text-foreground">
                   {senderName}
                 </span>
-                <span className="text-xs text-slate-500">
-                  {new Date(msg.timestamp).toLocaleTimeString()}
+                <span className="shrink-0 tabular-nums">
+                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
               </div>
               <div
-                className={`rounded-2xl backdrop-blur-sm ${
+                className={`rounded-xl border px-3.5 py-2.5 ${
                   isUser1
-                    ? "bg-blue-600/20 border border-blue-500/30 rounded-tl-sm"
-                    : "bg-purple-600/20 border border-purple-500/30 rounded-tr-sm"
+                    ? "rounded-tl-sm border-border bg-muted"
+                    : "rounded-tr-sm border-info-line bg-info-surface"
                 }`}
               >
-                <p className="text-sm text-slate-800 leading-relaxed break-words px-4 py-3">
+                <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
                   {msg.message?.content || "No content"}
                 </p>
               </div>

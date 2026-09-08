@@ -1,6 +1,7 @@
 "use client";
 
 import type { Incident, IncidentSeverity, IncidentType } from "@/types/socket";
+import { toneChip, type Tone } from "@/components/console/tone";
 
 /**
  * Patterns run entirely in the admin UI. The server is the source of truth
@@ -111,17 +112,28 @@ export function detectIncidents(text: string): DetectedIncident[] {
   return out;
 }
 
-export function severityColor(s: IncidentSeverity): string {
+/** Map a severity onto one of the console's semantic tones. */
+export function severityTone(s: IncidentSeverity): Tone {
   switch (s) {
     case "critical":
-      return "bg-red-500/20 text-red-500 border-red-500/30";
     case "high":
-      return "bg-orange-500/20 text-orange-600 border-orange-500/30";
+      return "danger";
     case "medium":
-      return "bg-amber-500/20 text-amber-600 border-amber-500/30";
+      return "warning";
     default:
-      return "bg-slate-100 text-slate-600 border-slate-200";
+      return "neutral";
   }
+}
+
+/**
+ * Chip classes for a severity.
+ *
+ * Kept for callers that style their own element; it now returns design-system
+ * tokens rather than the old dark-theme palette (`text-red-500` on a
+ * `bg-red-500/20` wash), which was close to invisible on the light console.
+ */
+export function severityColor(s: IncidentSeverity): string {
+  return toneChip[severityTone(s)];
 }
 
 export function typeLabel(t: IncidentType): string {

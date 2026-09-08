@@ -80,9 +80,9 @@ export function SystemStatusModal({
               disabled={isSubmitting}
               onChange={(event) => onMessageChange(event.target.value)}
               placeholder="e.g. Back in about 30 minutes - upgrading our servers."
-              className="min-h-20 border-sky-200 bg-white"
+              className="min-h-20 border-input bg-card"
             />
-            <div className="text-right text-xs text-slate-400">
+            <div className="text-right text-xs text-muted-foreground">
               {message.length}/{MAX_MESSAGE_LENGTH}
             </div>
           </div>
@@ -101,8 +101,8 @@ export function SystemStatusModal({
             disabled={isSubmitting}
             className={
               takingDown
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                ? "bg-danger text-white hover:bg-danger/90"
+                : "bg-success text-white hover:bg-success/90"
             }
           >
             {isSubmitting

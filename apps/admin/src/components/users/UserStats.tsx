@@ -1,3 +1,5 @@
+import { CardGrid, StatCard } from "@/components/console";
+
 interface UserStatsProps {
   totalUsers: number;
   idleUsers: number;
@@ -11,34 +13,37 @@ export default function UserStats({
   queueUsers,
   activeUsers,
 }: UserStatsProps) {
+  const share = (n: number) =>
+    totalUsers > 0
+      ? `${Math.round((n / totalUsers) * 100)}% of everyone online`
+      : "No one online";
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-      <div className="bg-gradient-to-br from-white to-sky-50 border border-sky-100 rounded-lg p-3 sm:p-4">
-        <div className="text-slate-500 text-[10px] sm:text-xs mb-1">
-          Total Users
-        </div>
-        <div className="text-xl sm:text-2xl font-bold">{totalUsers}</div>
-      </div>
-      <div className="bg-gradient-to-br from-white to-sky-50 border border-sky-100 rounded-lg p-3 sm:p-4">
-        <div className="text-slate-500 text-[10px] sm:text-xs mb-1">Idle</div>
-        <div className="text-xl sm:text-2xl font-bold text-slate-500">
-          {idleUsers}
-        </div>
-      </div>
-      <div className="bg-gradient-to-br from-white to-sky-50 border border-yellow-900/30 rounded-lg p-3 sm:p-4">
-        <div className="text-slate-500 text-[10px] sm:text-xs mb-1">
-          In Queue
-        </div>
-        <div className="text-xl sm:text-2xl font-bold text-yellow-400">
-          {queueUsers}
-        </div>
-      </div>
-      <div className="bg-gradient-to-br from-white to-sky-50 border border-green-900/30 rounded-lg p-3 sm:p-4">
-        <div className="text-slate-500 text-[10px] sm:text-xs mb-1">Active</div>
-        <div className="text-xl sm:text-2xl font-bold text-green-400">
-          {activeUsers}
-        </div>
-      </div>
-    </div>
+    <CardGrid min="13rem">
+      <StatCard
+        label="Total users"
+        value={totalUsers}
+        tone="info"
+        hint="Connected right now"
+      />
+      <StatCard
+        label="Idle"
+        value={idleUsers}
+        tone="neutral"
+        hint={share(idleUsers)}
+      />
+      <StatCard
+        label="In queue"
+        value={queueUsers}
+        tone="warning"
+        hint={share(queueUsers)}
+      />
+      <StatCard
+        label="Active"
+        value={activeUsers}
+        tone="success"
+        hint={share(activeUsers)}
+      />
+    </CardGrid>
   );
 }

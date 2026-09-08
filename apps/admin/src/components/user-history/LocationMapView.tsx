@@ -4,6 +4,8 @@
  */
 
 import React from "react";
+import { ExternalLink } from "lucide-react";
+import { MetricRow, StatusPill } from "@/components/console";
 
 interface LocationMapViewProps {
   latitude: number;
@@ -33,72 +35,60 @@ export default function LocationMapView({
   const locationName =
     city && country
       ? `${city}, ${country}`
-      : city || country || "Unknown Location";
+      : city || country || "Unknown location";
 
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="text-xl">🗺️</span>
-        Google Maps - Accurate Location
-      </h3>
+    <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-[0.9375rem] font-semibold text-foreground">
+            Location on the map
+          </h3>
+          <p className="mt-0.5 truncate text-sm text-muted-foreground">
+            {locationName}
+          </p>
+        </div>
+        <a
+          href={googleMapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+        >
+          <ExternalLink className="size-4" strokeWidth={2} />
+          Open in Google Maps
+        </a>
+      </header>
 
-      {/* Map Container */}
-      <div className="relative w-full h-96 bg-white rounded-lg overflow-hidden border border-sky-200 mb-4">
+      <div className="h-72 w-full border-b border-border bg-muted sm:h-96">
         <iframe
           src={googleMapsEmbedUrl}
-          className="w-full h-full"
+          className="h-full w-full"
           style={{ border: 0 }}
           loading="lazy"
           allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
-          title={`Google Map showing location: ${locationName}`}
+          title={`Google map showing ${locationName}`}
         />
-
-        {/* Overlay buttons */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
-          <a
-            href={googleMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 backdrop-blur-sm"
-          >
-            <span>📍</span>
-            Open in Google Maps
-          </a>
-        </div>
       </div>
 
-      {/* Coordinates Display */}
-      <div className="bg-white rounded-lg p-4 border border-sky-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              📍 Coordinates
-            </div>
-            <div className="text-slate-900 font-mono text-sm">
-              {coordinates}
-            </div>
-          </div>
-          <div>
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              🌍 Location
-            </div>
-            <div className="text-slate-900 text-sm font-medium">
+      <div className="min-w-0 divide-y divide-border px-4 py-1">
+        <MetricRow
+          label="Coordinates"
+          value={<span className="id-chip">{coordinates}</span>}
+        />
+        <MetricRow
+          label="Place"
+          value={
+            <span className="block max-w-[18rem] truncate" title={locationName}>
               {locationName}
-            </div>
-          </div>
-          <div>
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              🎯 Precision
-            </div>
-            <div className="text-slate-900 text-sm">
-              <span className="inline-block px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs font-semibold">
-                Street Level (Zoom 15)
-              </span>
-            </div>
-          </div>
-        </div>
+            </span>
+          }
+        />
+        <MetricRow
+          label="Precision"
+          value={<StatusPill tone="info">Street level</StatusPill>}
+        />
       </div>
-    </div>
+    </section>
   );
 }

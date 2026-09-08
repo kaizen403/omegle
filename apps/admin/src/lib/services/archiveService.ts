@@ -8,7 +8,59 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
-import { ChatArchive, ChatArchiveDetail } from "@/types/archive";
+import {
+  ChatArchive,
+  ChatArchiveApiRow,
+  ChatArchiveDetail,
+} from "@/types/archive";
+
+/**
+ * Rooms that predate the product cannot exist, so a timestamp older than this
+ * is corrupt rather than merely old. Archives written before the room clock
+ * was fixed carry a 1970 `createdAt` (seconds fed to a millisecond `Date`);
+ * rendering that as a real start time would show a 56-year "conversation".
+ */
+const EARLIEST_PLAUSIBLE_MS = Date.parse("2015-01-01T00:00:00.000Z");
+
+/**
+ * Normalise one wire timestamp to an ISO string, or to `null` when it is
+ * genuinely absent (missing, unparseable, or impossible).
+ */
+function toTimestamp(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const ms = new Date(value).getTime();
+  if (Number.isNaN(ms) || ms < EARLIEST_PLAUSIBLE_MS) return null;
+  return new Date(ms).toISOString();
+}
+
+/**
+ * Map the raw `chat_archives` row onto the console's vocabulary.
+ *
+ * The API returns the DB row untouched: `createdAt` is when the room opened
+ * and `archivedAt` is when it was torn down. The list and the detail modal
+ * read `startedAt`/`endedAt`, which is why every row showed "—" for its time
+ * and duration before this mapping existed.
+ */
+function toChatArchive(row: ChatArchiveApiRow): ChatArchive {
+  return {
+    id: row.id,
+    roomId: row.roomId,
+    user1Uid: row.user1Uid,
+    user2Uid: row.user2Uid,
+    user1Name: row.user1Name ?? null,
+    user2Name: row.user2Name ?? null,
+    messageCount: row.messageCount ?? 0,
+    startedAt: toTimestamp(row.createdAt),
+    endedAt: toTimestamp(row.archivedAt),
+  };
+}
+
+function toChatArchiveDetail(row: ChatArchiveApiRow): ChatArchiveDetail {
+  return {
+    ...toChatArchive(row),
+    messages: Array.isArray(row.messages) ? row.messages : [],
+  };
+}
 
 export class ArchiveService {
   /** Paginated list of archived rooms (metadata only). */
@@ -34,8 +86,9 @@ export class ArchiveService {
     }
 
     const json = await response.json();
+    const rows: ChatArchiveApiRow[] = Array.isArray(json.data) ? json.data : [];
     return {
-      data: json.data || [],
+      data: rows.map(toChatArchive),
       page: json.page || page,
       pageSize: json.pageSize || pageSize,
     };
@@ -63,6 +116,6 @@ export class ArchiveService {
     }
 
     const json = await response.json();
-    return json.data;
+    return toChatArchiveDetail(json.data);
   }
 }

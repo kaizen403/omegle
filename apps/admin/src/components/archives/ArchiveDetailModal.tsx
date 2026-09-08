@@ -1,8 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { EmptyState, IdChip } from "@/components/console";
+import { cn } from "@/lib/utils";
 import { ChatArchiveDetail } from "@/types/archive";
+import { formatDuration, formatWhen } from "./format";
 
 interface ArchiveDetailModalProps {
   detail: ChatArchiveDetail | null;
@@ -10,6 +19,25 @@ interface ArchiveDetailModalProps {
   onClose: () => void;
 }
 
+function formatTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+/**
+ * The transcript of one archived conversation.
+ *
+ * The dialog is a fixed header, a scrolling body (`min-h-0` + `overflow-y-auto`
+ * so it scrolls *inside* the dialog rather than growing it past the viewport)
+ * and a fixed footer. Bubbles are quiet: participants read as muted, anything
+ * sent by someone who is not one of the two participants — a moderator or the
+ * system — is tinted with the action colour so it is obviously not the chat.
+ */
 export function ArchiveDetailModal({
   detail,
   loading,
@@ -24,67 +52,131 @@ export function ArchiveDetailModal({
     return m;
   }, [detail]);
 
+  const open = Boolean(detail) || loading;
   if (!detail && !loading) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+      <DialogContent
+        showCloseButton
+        className="flex max-h-[85vh] w-full flex-col gap-0 overflow-hidden border-border bg-card p-0 sm:max-w-2xl"
       >
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-          <div>
-            <h3 className="font-semibold text-slate-900">Chat Archive</h3>
-            {detail && (
-              <p className="text-xs text-slate-500">
-                Room {detail.roomId} · {detail.messageCount} messages
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 text-sm"
-          >
-            Close
-          </button>
-        </div>
+        <header className="shrink-0 border-b border-border px-5 py-4 pr-12">
+          <DialogTitle className="text-[0.9375rem] font-semibold text-foreground">
+            Chat archive
+          </DialogTitle>
+          <DialogDescription asChild>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              {detail ? (
+                <>
+                  <IdChip
+                    value={detail.roomId}
+                    prefix=""
+                    className="max-w-[14rem]"
+                    title={`Room ${detail.roomId}`}
+                  />
+                  <span className="tabular-nums">
+                    {detail.messageCount} messages
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span className="truncate">
+                    {nameMap.get(detail.user1Uid)} and{" "}
+                    {nameMap.get(detail.user2Uid)}
+                  </span>
+                  {detail.startedAt && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="tabular-nums">
+                        {formatWhen(detail.startedAt)}
+                      </span>
+                    </>
+                  )}
+                  {detail.startedAt && detail.endedAt && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="tabular-nums">
+                        {formatDuration(detail.startedAt, detail.endedAt)} long
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <span>Loading the transcript for this room</span>
+              )}
+            </div>
+          </DialogDescription>
+        </header>
 
-        <div className="p-4 overflow-y-auto flex-1 space-y-2">
-          {loading && (
-            <p className="text-slate-500 text-sm">Loading messages…</p>
-          )}
-          {!loading &&
-            detail &&
-            detail.messages.map((msg) => (
-              <div
-                key={msg.timestamp}
-                className="rounded-lg p-3 text-sm bg-slate-50 border border-slate-100"
-              >
-                <div className="flex justify-between items-baseline mb-1">
-                  <span className="font-semibold text-sky-700">
-                    {nameMap.get(msg.from) ?? `UID ${msg.from}`}
-                  </span>
-                  <span className="text-[10px] text-slate-400 tabular-nums">
-                    {new Date(msg.timestamp).toLocaleTimeString("en-IN", {
-                      timeZone: "Asia/Kolkata",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
-                  </span>
-                </div>
-                <p className="text-slate-700 break-words whitespace-pre-wrap">
-                  {msg.text}
-                </p>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+          {loading &&
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="min-w-0 space-y-1.5">
+                <div className="h-3 w-28 animate-pulse rounded bg-muted" />
+                <div className="h-10 w-full animate-pulse rounded-lg bg-muted" />
               </div>
             ))}
+
+          {!loading && detail && detail.messages.length === 0 && (
+            <EmptyState
+              title="No messages in this archive"
+              description="The room was archived before either participant sent anything."
+            />
+          )}
+
+          {!loading &&
+            detail &&
+            detail.messages.map((msg, index) => {
+              const participant = nameMap.get(msg.from);
+              const isModerator = !participant;
+              const author = participant ?? msg.fromName ?? `UID ${msg.from}`;
+
+              return (
+                <div key={`${msg.timestamp}-${index}`} className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span
+                      className={cn(
+                        "truncate text-xs font-medium",
+                        isModerator ? "text-primary" : "text-foreground",
+                      )}
+                    >
+                      {author}
+                      {isModerator && " (moderator)"}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {formatTime(msg.timestamp)}
+                    </span>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 rounded-lg border px-3 py-2 text-sm break-words whitespace-pre-wrap",
+                      isModerator
+                        ? "border-info-line bg-info-surface text-foreground"
+                        : "border-border bg-muted text-foreground",
+                    )}
+                  >
+                    {msg.text}
+                  </p>
+                </div>
+              );
+            })}
         </div>
-      </motion.div>
-    </div>
+
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border px-5 py-3">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {detail
+              ? `${detail.messages.length} of ${detail.messageCount} messages`
+              : "Loading messages…"}
+          </span>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </footer>
+      </DialogContent>
+    </Dialog>
   );
 }

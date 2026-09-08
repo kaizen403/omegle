@@ -1,26 +1,17 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Bot, RefreshCw, Users } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  EmptyState,
+  Section,
+  StatusPill,
+  TableShell,
+  TableSkeleton,
+  Td,
+  Th,
+  Tr,
+} from "@/components/console";
 import { BotInfo } from "./types";
 
 interface ActiveBotsTableProps {
@@ -34,122 +25,95 @@ export function ActiveBotsTable({
   loading,
   onRefresh,
 }: ActiveBotsTableProps) {
-  // Track if we've already animated (to prevent re-animation on data updates)
-  const hasAnimated = useRef(false);
-
-  // Only animate on first render - use effect to update ref
-  useEffect(() => {
-    if (bots.length > 0 && !loading) {
-      hasAnimated.current = true;
-    }
-  }, [bots.length, loading]);
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
+    <Section
+      title="Active bots"
+      description="Bot instances that are currently spawned."
+      contentClassName="p-0"
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRefresh}
+          disabled={loading}
+        >
+          <RefreshCw
+            className={`size-4 ${loading ? "animate-spin" : ""}`}
+            strokeWidth={2}
+          />
+          Refresh
+        </Button>
+      }
     >
-      <Card className="bg-white/50 border-sky-100">
-        <CardHeader className="p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                <Users className="h-4 w-4 sm:h-5 sm:w-5" />
-                Active Bots
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">
-                Currently spawned bot instances
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRefresh}
-              disabled={loading}
-              className="border-sky-200 self-end sm:self-auto"
-            >
-              <RefreshCw
-                className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+      {!loading && bots.length === 0 ? (
+        <EmptyState
+          title="No bots are running"
+          description="Enable the bot system to spawn bots. They will show up here once they join."
+        />
+      ) : (
+        <TableShell>
+          <thead>
+            <tr>
+              <Th>Name</Th>
+              <Th className="hidden md:table-cell" align="right" width="4.5rem">
+                Age
+              </Th>
+              <Th className="hidden md:table-cell">Branch</Th>
+              <Th className="hidden lg:table-cell" width="6rem">
+                Year
+              </Th>
+              <Th width="8rem">Status</Th>
+              <Th align="right" width="7rem">
+                Messages
+              </Th>
+            </tr>
+          </thead>
           {loading ? (
-            <div className="space-y-2">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : bots.length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
-              <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No bots are currently active</p>
-              <p className="text-sm mt-1">Enable bots to spawn them</p>
-            </div>
+            <TableSkeleton rows={4} cols={6} />
           ) : (
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-[600px] sm:min-w-0 px-4 sm:px-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-sky-100">
-                      <TableHead className="text-xs sm:text-sm">Name</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Age</TableHead>
-                      <TableHead className="text-xs sm:text-sm">
-                        Branch
-                      </TableHead>
-                      <TableHead className="text-xs sm:text-sm">Year</TableHead>
-                      <TableHead className="text-xs sm:text-sm">
-                        Status
-                      </TableHead>
-                      <TableHead className="text-xs sm:text-sm">
-                        Messages
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {bots.map((bot) => (
-                      <TableRow
-                        key={bot.uid}
-                        className="border-sky-100 hover:bg-sky-50/50 transition-colors"
-                      >
-                        <TableCell className="font-medium text-xs sm:text-sm">
-                          {bot.name}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {bot.age}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {bot.branch}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {bot.year}
-                        </TableCell>
-                        <TableCell>
-                          {bot.isMatched ? (
-                            <Badge className="bg-emerald-600 text-xs">
-                              In Chat
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs">
-                              Available
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {bot.messageCount}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            <tbody>
+              {bots.map((bot) => (
+                <Tr key={bot.uid}>
+                  <Td className="max-w-[16rem]">
+                    <span
+                      className="block truncate font-medium"
+                      title={bot.name}
+                    >
+                      {bot.name}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground md:hidden">
+                      {bot.branch} · {bot.year} · {bot.age}
+                    </span>
+                  </Td>
+                  <Td
+                    className="hidden tabular-nums md:table-cell"
+                    align="right"
+                  >
+                    {bot.age}
+                  </Td>
+                  <Td className="hidden max-w-[12rem] md:table-cell">
+                    <span className="block truncate" title={bot.branch}>
+                      {bot.branch}
+                    </span>
+                  </Td>
+                  <Td className="hidden lg:table-cell">{bot.year}</Td>
+                  <Td>
+                    <StatusPill
+                      tone={bot.isMatched ? "success" : "neutral"}
+                      dot
+                    >
+                      {bot.isMatched ? "In chat" : "Available"}
+                    </StatusPill>
+                  </Td>
+                  <Td align="right" className="tabular-nums">
+                    {bot.messageCount}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
           )}
-        </CardContent>
-      </Card>
-    </motion.div>
+        </TableShell>
+      )}
+    </Section>
   );
 }

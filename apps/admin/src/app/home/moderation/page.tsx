@@ -2,11 +2,24 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ExternalLink } from "lucide-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import PageHeader from "@/components/layout/PageHeader";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useAdminSocketContext } from "@/contexts/AdminSocketContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import {
+  EmptyState,
+  IdChip,
+  PageBody,
+  Section,
+  StatusPill,
+  TableShell,
+  Td,
+  Th,
+  Tr,
+} from "@/components/console";
 import RoomTable from "@/components/rooms/RoomTable";
 import { IncidentDashboard } from "@/components/incidents/IncidentDashboard";
 import { detectIncidents } from "@/lib/incidentDetector";
@@ -77,30 +90,42 @@ export default function ModerationPage() {
     <AdminLayout onLogout={logout}>
       <PageHeader title="Moderation" showConnectionStatus={true} />
 
-      <div className="p-4 md:p-6">
+      <PageBody>
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="bg-slate-100 p-1 h-10">
-            <TabsTrigger value="live" className="text-xs">
-              Live Rooms{" "}
-              <span className="ml-1 rounded-full bg-white px-1.5 py-0.5 text-[11px]">
+          <TabsList className="h-auto flex-wrap justify-start gap-0.5 bg-muted p-0.5">
+            <TabsTrigger
+              value="live"
+              className="h-8 flex-none gap-1.5 px-2.5 data-[state=active]:bg-card"
+            >
+              Live rooms
+              <span className="text-xs text-muted-foreground tabular-nums">
                 {rooms.length}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="incidents" className="text-xs">
-              Incidents{" "}
+            <TabsTrigger
+              value="incidents"
+              className="h-8 flex-none gap-1.5 px-2.5 data-[state=active]:bg-card"
+            >
+              Incidents
               {incidents.length > 0 && (
-                <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-white text-[11px]">
+                <span className="text-xs text-danger tabular-nums">
                   {incidents.length}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="fingerprints" className="text-xs">
+            <TabsTrigger
+              value="fingerprints"
+              className="h-8 flex-none gap-1.5 px-2.5 data-[state=active]:bg-card"
+            >
               Fingerprints
             </TabsTrigger>
-            <TabsTrigger value="flagged" className="text-xs">
-              Flagged Users{" "}
+            <TabsTrigger
+              value="flagged"
+              className="h-8 flex-none gap-1.5 px-2.5 data-[state=active]:bg-card"
+            >
+              Flagged users
               {flaggedUids.size > 0 && (
-                <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-white text-[11px]">
+                <span className="text-xs text-warning tabular-nums">
                   {flaggedUids.size}
                 </span>
               )}
@@ -108,15 +133,11 @@ export default function ModerationPage() {
           </TabsList>
 
           <TabsContent value="live" className="mt-4">
-            <div className="mb-3 flex items-center gap-2 text-xs text-slate-600">
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />{" "}
-                Listen is invisible · Takeover is visible to users
-              </span>
-              <span className="ml-auto">
-                Click Monitor to enter Listen/Takeover tabs. Socket:{" "}
-                <span className="font-mono">monitor_room</span> →{" "}
-                <span className="font-mono">room_message</span>
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              <span>Listen is invisible to users</span>
+              <span>Takeover is visible to users</span>
+              <span className="min-w-0">
+                Open monitor on a room to listen or take over
               </span>
             </div>
             <RoomTable
@@ -138,19 +159,11 @@ export default function ModerationPage() {
           </TabsContent>
 
           <TabsContent value="fingerprints" className="mt-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="font-semibold text-slate-800">
-                Fingerprints — stored in DB
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                When the web app sends{" "}
-                <span className="font-mono">fingerprint:report</span>, the API
-                upserts <span className="font-mono">user_fingerprints</span>.
-                Admin socket enriches each user with{" "}
-                <span className="font-mono">fingerprintHash</span>. This table
-                shows live users grouped by fingerprint.
-              </p>
-
+            <Section
+              title="Fingerprints"
+              description="Live users grouped by the device fingerprint stored against them. Two users sharing a fingerprint are likely the same person."
+              contentClassName="p-0"
+            >
               {(() => {
                 const byFp = new Map<string, typeof users>();
                 for (const u of users) {
@@ -173,111 +186,134 @@ export default function ModerationPage() {
 
                 if (users.length === 0)
                   return (
-                    <p className="mt-3 text-sm text-slate-500">
-                      No users connected — fingerprints appear here when live.
-                    </p>
+                    <EmptyState
+                      title="No users connected"
+                      description="Fingerprints appear here while users are online."
+                    />
                   );
 
                 return (
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="text-xs uppercase text-slate-500">
-                        <tr>
-                          <th className="text-left py-2">Fingerprint</th>
-                          <th className="text-left py-2">Users</th>
-                          <th className="text-left py-2">Risk</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {entries.slice(0, 50).map(([hash, group]) => (
-                          <tr key={hash}>
-                            <td className="py-2 font-mono text-xs">
-                              {hash.slice(0, 18)}
-                              {hash.length > 18 ? "…" : ""}{" "}
+                  <TableShell minWidth={640}>
+                    <thead>
+                      <tr>
+                        <Th width="38%">Fingerprint</Th>
+                        <Th>Users</Th>
+                        <Th align="right" width="90px">
+                          Risk
+                        </Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.slice(0, 50).map(([hash, group]) => (
+                        <Tr key={hash}>
+                          <Td>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <IdChip
+                                value={
+                                  hash.slice(0, 18) +
+                                  (hash.length > 18 ? "…" : "")
+                                }
+                                prefix=""
+                                title={hash}
+                              />
                               {group.length > 1 && (
-                                <span className="ml-2 rounded-full bg-amber-100 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                                  {group.length} linked — possible alt
-                                </span>
+                                <StatusPill tone="warning">
+                                  <span className="tabular-nums">
+                                    {group.length}
+                                  </span>{" "}
+                                  linked — possible alt
+                                </StatusPill>
                               )}
-                            </td>
-                            <td className="py-2 text-xs text-slate-700">
+                            </div>
+                          </Td>
+                          <Td className="text-sm text-muted-foreground">
+                            <span className="block max-w-[30rem] truncate">
                               {group
                                 .map(
                                   (u) =>
                                     `${u.name} #${String(u.uid).slice(-6)}`,
                                 )
                                 .join(", ")}
-                            </td>
-                            <td className="py-2 text-xs text-slate-500">
-                              {hash.startsWith("no-fp") ? "—" : "low"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                            </span>
+                          </Td>
+                          <Td
+                            align="right"
+                            className="text-sm text-muted-foreground"
+                          >
+                            {hash.startsWith("no-fp") ? "—" : "Low"}
+                          </Td>
+                        </Tr>
+                      ))}
+                    </tbody>
+                  </TableShell>
                 );
               })()}
-            </div>
+            </Section>
           </TabsContent>
 
           <TabsContent value="flagged" className="mt-4">
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <h3 className="font-semibold text-amber-900">
-                Flagged users (have incidents in monitored rooms)
-              </h3>
-              <p className="text-xs text-amber-800 mt-1">
-                Derived from current monitored messages. With server
-                persistence, this would query{" "}
-                <span className="font-mono">chat_incidents</span> joined to{" "}
-                <span className="font-mono">user_fingerprints</span>.
-              </p>
-
+            <Section
+              title="Flagged users"
+              description="Users with at least one incident in a room you are monitoring."
+              contentClassName="p-0"
+            >
               {flaggedUids.size === 0 ? (
-                <p className="mt-3 text-sm text-amber-800/80">
-                  No flagged users right now. Start monitoring rooms to collect
-                  incidents.
-                </p>
+                <EmptyState
+                  title="No flagged users right now"
+                  description="Monitor a room to start collecting incidents."
+                />
               ) : (
-                <div className="mt-3 grid gap-2">
+                <ul className="divide-y divide-border">
                   {Array.from(flaggedUids).map((uid) => {
                     const u = users.find((x) => x.uid === uid);
                     const uIncidents = incidents.filter((i) => i.uid === uid);
+                    const name = u?.name ?? `UID ${String(uid).slice(-6)}`;
                     return (
-                      <div
+                      <li
                         key={uid}
-                        className="rounded-lg border border-amber-200 bg-white p-3 flex items-center justify-between gap-3"
+                        className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 sm:px-5"
                       >
-                        <div>
-                          <div className="font-medium text-slate-800">
-                            {u?.name ?? `UID ${String(uid).slice(-6)}`}{" "}
-                            <span className="font-mono text-xs text-slate-500">
-                              #{uid}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-medium text-foreground">
+                              {name}
                             </span>
+                            <IdChip value={String(uid)} />
                           </div>
-                          <div className="text-xs text-slate-600">
-                            {uIncidents.length} incident(s) —{" "}
-                            {uIncidents.map((i) => i.type).join(", ")}
+                          <div className="mt-0.5 min-w-0 truncate text-xs text-muted-foreground">
+                            <span className="tabular-nums">
+                              {uIncidents.length}
+                            </span>{" "}
+                            {uIncidents.length === 1 ? "incident" : "incidents"}
+                            {uIncidents.length > 0 &&
+                              ` — ${uIncidents.map((i) => i.type).join(", ")}`}
                           </div>
                         </div>
-                        <button
-                          onClick={() =>
-                            u?.roomId &&
-                            router.push(`/home/rooms?monitor=${u.roomId}`)
-                          }
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-white"
-                        >
-                          Open room
-                        </button>
-                      </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <StatusPill tone="warning" dot>
+                            Flagged
+                          </StatusPill>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              u?.roomId &&
+                              router.push(`/home/rooms?monitor=${u.roomId}`)
+                            }
+                          >
+                            <ExternalLink className="size-4" strokeWidth={2} />
+                            Open room
+                          </Button>
+                        </div>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               )}
-            </div>
+            </Section>
           </TabsContent>
         </Tabs>
-      </div>
+      </PageBody>
     </AdminLayout>
   );
 }

@@ -1,26 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Send,
-  Bot,
-  User,
-  RefreshCw,
-  Trash2,
-  MessageCircle,
-} from "lucide-react";
+import { RefreshCw, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
+import { EmptyState, Section, StatusPill } from "@/components/console";
 
 interface Message {
   id: string;
@@ -36,12 +20,6 @@ interface BotTestChatProps {
 
 const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
-
-const messageVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, scale: 0.95 },
-};
 
 export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -124,189 +102,136 @@ export function BotTestChat({ token, isEnabled }: BotTestChatProps) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3 }}
-    >
-      <Card className="bg-white/50 border-sky-100">
-        <CardHeader className="p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                Test Bot Chat
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">
-                Send test messages to see how the bot responds
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              {isEnabled ? (
-                <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }}>
-                  <Badge className="bg-emerald-600 text-xs">Bot Active</Badge>
-                </motion.div>
-              ) : (
-                <Badge variant="secondary" className="text-xs">
-                  Bot Disabled
-                </Badge>
-              )}
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={clearChat}
-                  disabled={messages.length === 0}
-                  className="border-sky-200"
-                >
-                  <Trash2 className="h-4 w-4 sm:mr-1" />
-                  <span className="hidden sm:inline">Clear</span>
-                </Button>
-              </motion.div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0 sm:pt-0">
-          {/* Chat Messages */}
-          <ScrollArea
-            className="h-[200px] sm:h-[300px] rounded-lg border border-sky-100 bg-[#e8f4f8]/50 p-3 sm:p-4"
-            ref={scrollRef}
+    <Section
+      title="Test chat"
+      description="Send a message and see exactly what a bot would reply."
+      contentClassName="p-0"
+      actions={
+        <>
+          <StatusPill tone={isEnabled ? "success" : "neutral"} dot>
+            {isEnabled ? "Bots on" : "Bots off"}
+          </StatusPill>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={clearChat}
+            disabled={messages.length === 0}
           >
-            {messages.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-full text-slate-500"
-              >
-                <motion.div
-                  animate={{ y: [0, -10, 0] }}
-                  transition={{ repeat: Infinity, duration: 2 }}
-                >
-                  <Bot className="h-10 w-10 sm:h-12 sm:w-12 mb-3 opacity-50" />
-                </motion.div>
-                <p className="text-xs sm:text-sm">No messages yet</p>
-                <p className="text-[10px] sm:text-xs mt-1">
-                  Send a message to test the bot
-                </p>
-              </motion.div>
-            ) : (
-              <div className="space-y-3 sm:space-y-4">
-                <AnimatePresence mode="popLayout">
-                  {messages.map((message) => (
-                    <motion.div
-                      key={message.id}
-                      variants={messageVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      layout
-                      className={`flex gap-2 sm:gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            <Trash2 className="size-4" strokeWidth={2} />
+            <span className="hidden sm:inline">Clear</span>
+          </Button>
+        </>
+      }
+    >
+      <div className="flex h-[26rem] min-h-0 flex-col">
+        {/* Transcript — scrolls inside the panel, never grows the page. */}
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 overflow-y-auto bg-muted/40 px-4 py-4 sm:px-5"
+        >
+          {messages.length === 0 ? (
+            <EmptyState
+              title="No messages yet"
+              description={
+                isEnabled
+                  ? "Send a message below to see how the bot replies."
+                  : "Turn the bot system on above, then send a message here."
+              }
+              className="h-full py-0"
+            />
+          ) : (
+            <div className="space-y-3">
+              {messages.map((message) => {
+                const mine = message.role === "user";
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`min-w-0 max-w-[85%] rounded-xl px-3 py-2 sm:max-w-[75%] ${
+                        mine
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border bg-card text-foreground"
+                      }`}
                     >
-                      {message.role === "bot" && (
-                        <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-purple-900/50 flex items-center justify-center">
-                          <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
-                        </div>
-                      )}
-                      <div
-                        className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 ${
-                          message.role === "user"
-                            ? "bg-blue-600 text-white"
-                            : "bg-sky-50 text-slate-800"
+                      <p className="text-sm leading-6 whitespace-pre-wrap break-words">
+                        {message.content}
+                      </p>
+                      <p
+                        className={`mt-1 text-[0.6875rem] tabular-nums ${
+                          mine
+                            ? "text-primary-foreground/70"
+                            : "text-muted-foreground"
                         }`}
                       >
-                        <p className="text-xs sm:text-sm whitespace-pre-wrap">
-                          {message.content}
-                        </p>
-                        <p className="text-[9px] sm:text-[10px] opacity-50 mt-0.5 sm:mt-1">
-                          {message.timestamp.toLocaleTimeString()}
-                        </p>
-                      </div>
-                      {message.role === "user" && (
-                        <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-blue-900/50 flex items-center justify-center">
-                          <User className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {sending && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-2 sm:gap-3 justify-start"
-                  >
-                    <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-purple-900/50 flex items-center justify-center">
-                      <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
+                        {message.timestamp.toLocaleTimeString("en-IN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                        })}
+                      </p>
                     </div>
-                    <div className="bg-sky-50 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                        <span className="text-xs sm:text-sm">Thinking...</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            )}
-          </ScrollArea>
+                  </div>
+                );
+              })}
 
-          {/* Error Message */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-sm"
-              >
-                {error}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {sending && (
+                <div className="flex justify-start">
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                    <RefreshCw
+                      className="size-4 animate-spin"
+                      strokeWidth={2}
+                    />
+                    Thinking…
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-          {/* Input Area */}
-          <div className="flex gap-2">
+        {/* Composer — fixed to the bottom of the panel. */}
+        <div className="shrink-0 border-t border-border px-4 py-3 sm:px-5">
+          {error && (
+            <div className="mb-2 rounded-lg border border-danger-line bg-danger-surface px-3 py-2 text-sm text-danger">
+              <p className="min-w-0">{error}</p>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
                 isEnabled
-                  ? "Type a message to test the bot..."
-                  : "Enable bots first to test..."
+                  ? "Type a message to test the bot…"
+                  : "Enable bots first to test"
               }
               disabled={!isEnabled || sending}
-              className="bg-sky-50 border-sky-200"
+              className="h-9 min-w-0 flex-1"
             />
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                onClick={sendMessage}
-                disabled={!isEnabled || !input.trim() || sending}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                {sending ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </motion.div>
-          </div>
-
-          {!isEnabled && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-xs text-amber-400"
+            <Button
+              onClick={sendMessage}
+              disabled={!isEnabled || !input.trim() || sending}
+              size="icon"
+              aria-label="Send message"
+              className="shrink-0"
             >
-              ⚠️ Enable the bot system above to test chat functionality
-            </motion.p>
+              {sending ? (
+                <RefreshCw className="size-4 animate-spin" strokeWidth={2} />
+              ) : (
+                <Send className="size-4" strokeWidth={2} />
+              )}
+            </Button>
+          </div>
+          {!isEnabled && (
+            <p className="mt-2 text-xs text-warning">
+              Enable the bot system above to test chat.
+            </p>
           )}
-        </CardContent>
-      </Card>
-    </motion.div>
+        </div>
+      </div>
+    </Section>
   );
 }

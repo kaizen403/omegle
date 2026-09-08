@@ -48,8 +48,8 @@ export default function PasswordInput({
   const isComplete = password.every((digit) => digit !== "");
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      <div className="flex gap-2">
+    <div className="flex w-full flex-col items-center gap-5">
+      <div className="flex items-center justify-center gap-2">
         {password.map((digit, index) => (
           <input
             key={index}
@@ -63,19 +63,20 @@ export default function PasswordInput({
             onChange={(e) => handleChange(index, e.target.value)}
             onKeyDown={(e) => handleKeyDown(index, e)}
             disabled={disabled}
-            className="w-12 h-14 text-center text-2xl font-semibold bg-white border-2 border-sky-100 rounded-lg focus:border-sky-400 focus:outline-none text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={`Digit ${index + 1} of 6`}
+            className="h-12 w-10 shrink-0 rounded-md border border-input bg-card text-center text-lg font-semibold tabular-nums text-foreground shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition-colors duration-150 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-11"
             autoFocus={index === 0}
           />
         ))}
       </div>
 
-      <div className="flex gap-3 w-full">
+      <div className="flex w-full flex-wrap gap-3">
         {onCancel && (
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={onCancel}
             disabled={disabled}
-            className="flex-1"
+            className="h-10 min-w-0 flex-1"
           >
             Cancel
           </Button>
@@ -84,7 +85,7 @@ export default function PasswordInput({
           variant="default"
           onClick={handleSubmit}
           disabled={!isComplete || disabled}
-          className="flex-1"
+          className="h-10 min-w-0 flex-1"
         >
           Submit
         </Button>

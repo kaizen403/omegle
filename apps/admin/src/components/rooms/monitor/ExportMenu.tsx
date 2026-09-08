@@ -1,7 +1,21 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import {
+  ChevronDown,
+  Clipboard,
+  Download,
+  FileJson,
+  FileText,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Room } from "@/contexts/AdminSocketContext";
 
 interface Message {
@@ -143,123 +157,51 @@ export function ExportMenu({
   if (messages.length === 0) return null;
 
   return (
-    <div className="relative">
-      <Button
-        onClick={() => setShowMenu(!showMenu)}
-        variant="ghost"
-        size="sm"
-        className="text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 border border-blue-900/30 hover:border-blue-700/50"
-      >
-        <svg
-          className="w-4 h-4 mr-1.5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
+    <DropdownMenu open={showMenu} onOpenChange={setShowMenu}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Download className="size-4" strokeWidth={2} />
+          Export
+          <ChevronDown
+            className={`size-3.5 transition-transform ${showMenu ? "rotate-180" : ""}`}
             strokeWidth={2}
-            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
-        </svg>
-        Export
-        <svg
-          className={`w-3 h-3 ml-1 transition-transform ${showMenu ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </Button>
+        </Button>
+      </DropdownMenuTrigger>
 
-      {showMenu && (
-        <div className="absolute top-full right-0 mt-2 w-48 bg-sky-50 border border-sky-200 rounded-lg shadow-2xl overflow-hidden z-50">
-          <button
-            onClick={() => {
-              exportAsJSON();
-              setShowMenu(false);
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-sky-50 transition-colors"
-          >
-            <svg
-              className="w-4 h-4 text-blue-400 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-              />
-            </svg>
-            <div className="text-left min-w-0">
-              <div className="font-medium">Export as JSON</div>
-              <div className="text-xs text-slate-500 truncate">
-                Structured data
-              </div>
-            </div>
-          </button>
-          <button
-            onClick={() => {
-              exportAsTXT();
-              setShowMenu(false);
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-sky-50 transition-colors"
-          >
-            <svg
-              className="w-4 h-4 text-green-400 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <div className="text-left min-w-0">
-              <div className="font-medium">Export as TXT</div>
-              <div className="text-xs text-slate-500 truncate">Plain text</div>
-            </div>
-          </button>
-          <button
-            onClick={() => {
-              copyToClipboard();
-              setShowMenu(false);
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-sky-50 transition-colors border-t border-sky-200"
-          >
-            <svg
-              className="w-4 h-4 text-purple-400 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
-            <div className="text-left min-w-0">
-              <div className="font-medium">Copy to Clipboard</div>
-              <div className="text-xs text-slate-500 truncate">Quick copy</div>
-            </div>
-          </button>
-        </div>
-      )}
-    </div>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem onSelect={() => exportAsJSON()}>
+          <FileJson className="size-4" strokeWidth={2} />
+          <span className="min-w-0">
+            <span className="block font-medium">Export as JSON</span>
+            <span className="block text-xs text-muted-foreground">
+              Structured data
+            </span>
+          </span>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem onSelect={() => exportAsTXT()}>
+          <FileText className="size-4" strokeWidth={2} />
+          <span className="min-w-0">
+            <span className="block font-medium">Export as text</span>
+            <span className="block text-xs text-muted-foreground">
+              Plain transcript
+            </span>
+          </span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem onSelect={() => copyToClipboard()}>
+          <Clipboard className="size-4" strokeWidth={2} />
+          <span className="min-w-0">
+            <span className="block font-medium">Copy to clipboard</span>
+            <span className="block text-xs text-muted-foreground">
+              Quick copy
+            </span>
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

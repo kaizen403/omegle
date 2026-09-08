@@ -5,6 +5,7 @@ import { useAdminSocketContext } from "@/contexts/AdminSocketContext";
 import AdminLayout from "@/components/layout/AdminLayout";
 import PageHeader from "@/components/layout/PageHeader";
 import { useAuth } from "@/contexts/AuthProvider";
+import { PageBody, Section, EmptyState, type Tone } from "@/components/console";
 import {
   OverallStatusCard,
   CloudRunInfo,
@@ -46,11 +47,11 @@ export default function HealthPage() {
     }
   }, [isAuthenticated, getSystemHealth, getRedisMetrics]);
 
-  const getHealthStatus = useCallback(() => {
-    if (!systemHealth) return { status: "unknown", color: "text-slate-500" };
+  const getHealthStatus = useCallback((): { status: string; color: Tone } => {
+    if (!systemHealth) return { status: "unknown", color: "neutral" };
     if (!systemHealth.redisHealthy)
-      return { status: "degraded", color: "text-yellow-500" };
-    return { status: "healthy", color: "text-green-500" };
+      return { status: "degraded", color: "warning" };
+    return { status: "healthy", color: "success" };
   }, [systemHealth]);
 
   const healthStatus = getHealthStatus();
@@ -59,19 +60,14 @@ export default function HealthPage() {
     <AdminLayout onLogout={logout}>
       <PageHeader title="System Health" showConnectionStatus={true} />
 
-      <div className="p-6 space-y-6">
+      <PageBody>
         <OverallStatusCard
           status={healthStatus.status}
           color={healthStatus.color}
           isConnected={isConnected}
         />
 
-        {systemHealth?.cloudRun && (
-          <CloudRunInfo
-            cloudRun={systemHealth.cloudRun}
-            nodeVersion={systemHealth.nodeVersion}
-          />
-        )}
+        {error && <ConnectionError error={error} />}
 
         {systemHealth ? (
           <SystemMetrics
@@ -84,31 +80,41 @@ export default function HealthPage() {
             cpu={systemHealth.cpu}
           />
         ) : (
-          <div className="bg-white border border-sky-100 rounded-lg p-6">
-            <div className="text-slate-500 text-center py-8">
-              Loading system metrics...
-            </div>
-          </div>
+          <Section title="System metrics">
+            <EmptyState
+              title="Waiting for system metrics"
+              description="Health data is polled every few seconds."
+            />
+          </Section>
         )}
 
-        <RedisHealth redisMetrics={redisMetrics} />
+        {/* Two columns on large screens so eleven panels are not one endless
+            scroll. Each panel still reads cleanly at half width. */}
+        <div className="grid min-w-0 items-start gap-6 lg:grid-cols-2">
+          <RedisHealth redisMetrics={redisMetrics} />
 
-        <TurnHealth systemHealth={systemHealth} />
+          {/* systemHealth.matchmaking has shipped with every 3s health poll
+              all along; this is the panel that finally renders it. */}
+          <MatchmakingMetrics systemHealth={systemHealth} />
 
-        <KubernetesHealth systemHealth={systemHealth} />
+          <NetworkMetrics systemHealth={systemHealth} />
 
-        {/* systemHealth.matchmaking has shipped with every 3s health poll
-            all along; this is the panel that finally renders it. */}
-        <MatchmakingMetrics systemHealth={systemHealth} />
+          <PerformanceMetrics systemHealth={systemHealth} />
 
-        <NetworkMetrics systemHealth={systemHealth} />
+          <ErrorTracking systemHealth={systemHealth} />
 
-        <ErrorTracking systemHealth={systemHealth} />
+          <TurnHealth systemHealth={systemHealth} />
 
-        <PerformanceMetrics systemHealth={systemHealth} />
+          {systemHealth?.cloudRun && (
+            <CloudRunInfo
+              cloudRun={systemHealth.cloudRun}
+              nodeVersion={systemHealth.nodeVersion}
+            />
+          )}
 
-        {error && <ConnectionError error={error} />}
-      </div>
+          <KubernetesHealth systemHealth={systemHealth} />
+        </div>
+      </PageBody>
     </AdminLayout>
   );
 }

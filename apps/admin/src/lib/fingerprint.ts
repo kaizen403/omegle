@@ -1,6 +1,7 @@
 "use client";
 
 import type { UserFingerprint } from "@/types/socket";
+import { toneChip, type Tone } from "@/components/console/tone";
 
 /**
  * Admin-side helpers for fingerprint display.
@@ -22,28 +23,41 @@ export function fingerprintSummary(fp?: UserFingerprint | null): string {
   return parts.join(" · ") || shortHash(fp.hash);
 }
 
+/**
+ * Risk score → badge.
+ *
+ * Returns a `tone` for use with the console's `StatusPill`; `className` is kept
+ * for callers that style their own element, and now emits design-system tokens
+ * instead of the old dark-theme palette (`text-red-600` on a `bg-red-500/15`
+ * wash, which was barely legible on the light console).
+ */
 export function riskBadge(score?: number): {
   label: string;
   className: string;
+  tone: Tone;
 } {
   if (score === undefined || score === null)
     return {
-      label: "unknown",
-      className: "bg-slate-100 text-slate-600 border-slate-200",
+      label: "Unknown",
+      className: toneChip.neutral,
+      tone: "neutral",
     };
   if (score >= 80)
     return {
-      label: `high ${score}`,
-      className: "bg-red-500/15 text-red-600 border-red-500/25",
+      label: `High ${score}`,
+      className: toneChip.danger,
+      tone: "danger",
     };
   if (score >= 50)
     return {
-      label: `med ${score}`,
-      className: "bg-amber-500/15 text-amber-700 border-amber-500/25",
+      label: `Medium ${score}`,
+      className: toneChip.warning,
+      tone: "warning",
     };
   return {
-    label: `low ${score}`,
-    className: "bg-emerald-500/12 text-emerald-700 border-emerald-500/20",
+    label: `Low ${score}`,
+    className: toneChip.success,
+    tone: "success",
   };
 }
 

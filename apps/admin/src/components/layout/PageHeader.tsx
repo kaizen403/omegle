@@ -3,6 +3,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAdminSocketContext } from "@/contexts/AdminSocketContext";
+import { StatusDot } from "@/components/console";
 
 interface PageHeaderProps {
   title: string;
@@ -11,81 +12,86 @@ interface PageHeaderProps {
   showConnectionStatus?: boolean;
 }
 
+/**
+ * The sticky bar at the top of every page.
+ *
+ * Layout notes, because this bar was the worst offender for collisions:
+ * - The title group is `min-w-0` and truncates; the action group is `shrink-0`.
+ *   Previously both were free to grow, so a long title pushed the clock and
+ *   the page action off the edge and they overlapped the title.
+ * - The clock is `tabular-nums` with a fixed slot, so ticking seconds cannot
+ *   change its width and shove the buttons left once a second.
+ * - Below `sm` the clock is dropped entirely rather than squeezed.
+ */
 export default function PageHeader({
   title,
+  description,
   action,
   showConnectionStatus = false,
 }: PageHeaderProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
   const socketContext = useAdminSocketContext();
-  const isConnected = showConnectionStatus ? socketContext.isConnected : false;
-  const isAuthenticated = showConnectionStatus
-    ? socketContext.isAuthenticated
-    : false;
+  const isLive =
+    showConnectionStatus &&
+    socketContext.isConnected &&
+    socketContext.isAuthenticated;
 
+  const [now, setNow] = useState<Date | null>(null);
+
+  // Starts null and fills in after mount: the server cannot know the client's
+  // clock, and rendering it during SSR is what required suppressHydrationWarning.
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    setNow(new Date());
+    const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <div className="border-b border-sky-100 bg-white/90 backdrop-blur-md sticky top-0 z-30">
-      <div className="p-3 sm:p-4">
-        <div className="flex justify-between items-center gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <SidebarTrigger className="text-slate-500 hover:text-[#0084d1] flex-shrink-0" />
-            <h1 className="text-lg sm:text-2xl font-bold truncate text-slate-900">
-              {title}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            {showConnectionStatus && (
-              <div className="hidden sm:flex items-center gap-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${isConnected && isAuthenticated ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
-                ></div>
-                <span className="text-xs text-slate-500 whitespace-nowrap">
-                  {isConnected && isAuthenticated
-                    ? "Connected"
-                    : "Disconnected"}
-                </span>
-              </div>
-            )}
-            {action}
-            <div
-              className="flex flex-col items-end gap-0.5 sm:gap-1"
-              suppressHydrationWarning
+    <header className="sticky top-0 z-30 shrink-0 border-b border-border bg-card/85 backdrop-blur">
+      <div className="flex h-14 items-center gap-3 px-3 sm:px-5">
+        <SidebarTrigger className="-ml-1 shrink-0 text-muted-foreground hover:text-foreground" />
+
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold text-foreground">
+            {title}
+          </h1>
+          {description && (
+            <p className="truncate text-xs text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {showConnectionStatus && (
+            <span
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              title={isLive ? "Connected to server" : "Disconnected"}
             >
-              <div
-                className="text-sm sm:text-xl font-bold tabular-nums"
-                suppressHydrationWarning
-              >
-                {currentTime.toLocaleTimeString("en-IN", {
+              <StatusDot tone={isLive ? "success" : "danger"} pulse={isLive} />
+              <span className="hidden sm:inline">
+                {isLive ? "Live" : "Offline"}
+              </span>
+            </span>
+          )}
+
+          {action}
+
+          <time
+            className="hidden text-right text-xs text-muted-foreground tabular-nums sm:block"
+            suppressHydrationWarning
+          >
+            {now
+              ? now.toLocaleTimeString("en-IN", {
                   timeZone: "Asia/Kolkata",
                   hour: "2-digit",
                   minute: "2-digit",
                   second: "2-digit",
-                  hour12: true,
-                })}
-              </div>
-              <div
-                className="text-[10px] sm:text-xs text-slate-500 whitespace-nowrap"
-                suppressHydrationWarning
-              >
-                {currentTime.toLocaleDateString("en-IN", {
-                  timeZone: "Asia/Kolkata",
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}{" "}
-                IST
-              </div>
-            </div>
-          </div>
+                  hour12: false,
+                }) + " IST"
+              : "--:--:-- IST"}
+          </time>
         </div>
       </div>
-    </div>
+    </header>
   );
 }

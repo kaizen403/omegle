@@ -1,5 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/console";
+
 interface EmptyStatesProps {
   loading: boolean;
   hasUsers: boolean;
@@ -17,10 +20,16 @@ export function EmptyStates({
 }: EmptyStatesProps) {
   if (loading) {
     return (
-      <div className="p-8 sm:p-16 text-center">
-        <div className="inline-block animate-spin rounded-full h-10 sm:h-12 w-10 sm:w-12 border-4 border-sky-200 border-t-blue-500"></div>
-        <p className="text-slate-500 text-sm sm:text-base mt-3 sm:mt-4">
-          Loading users...
+      <div className="space-y-3 p-4 sm:p-5">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-3.5 w-full animate-pulse rounded bg-muted"
+            aria-hidden={i > 0 || undefined}
+          />
+        ))}
+        <p className="pt-1 text-center text-sm text-muted-foreground">
+          Loading users
         </p>
       </div>
     );
@@ -28,27 +37,24 @@ export function EmptyStates({
 
   if (!hasUsers) {
     return (
-      <div className="p-8 sm:p-16 text-center">
-        <div className="text-6xl mb-4">🔍</div>
-        <p className="text-slate-500 text-lg">No users found for this date</p>
-      </div>
+      <EmptyState
+        title="No users for this date"
+        description="Pick another date to see who visited."
+      />
     );
   }
 
   if (!hasFilteredUsers) {
     return (
-      <div className="p-16 text-center">
-        <div className="text-6xl mb-4">🔍</div>
-        <p className="text-slate-500 text-lg">
-          No users found matching &quot;{searchName}&quot;
-        </p>
-        <button
-          onClick={onClearSearch}
-          className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          Clear Search
-        </button>
-      </div>
+      <EmptyState
+        title={`No users match "${searchName}"`}
+        description="Try a different name, or clear the search to see everyone."
+        action={
+          <Button variant="outline" className="h-9" onClick={onClearSearch}>
+            Clear search
+          </Button>
+        }
+      />
     );
   }
 

@@ -1,23 +1,10 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  RefreshCw,
-  TestTube,
-  Cloud,
-  Key,
-  Globe,
-  Settings2,
-  Bot,
-  Cpu,
-  CheckCircle2,
-  Edit2,
-} from "lucide-react";
+import { Pencil, RefreshCw, TestTube } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -26,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Section, StatusPill } from "@/components/console";
 import { AIProvider, BotConfig, BotStatus, ProviderConfigState } from "./types";
 
 interface ProviderConfigProps {
@@ -44,26 +32,40 @@ interface ProviderConfigProps {
   onTestConnection: () => void;
 }
 
-function getProviderIcon(provider: AIProvider): ReactNode {
-  switch (provider) {
-    case "bedrock":
-      return <Cloud className="h-4 w-4" />;
-    case "openai":
-      return <Cpu className="h-4 w-4" />;
-    case "azure":
-      return <Globe className="h-4 w-4" />;
-    case "anthropic":
-      return <Bot className="h-4 w-4" />;
-  }
+/**
+ * One labelled form control with optional help text. Every setting in this
+ * panel uses it, so labels, spacing and help text line up down the column.
+ */
+function Field({
+  label,
+  htmlFor,
+  help,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  help?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <Label htmlFor={htmlFor} className="text-sm font-medium">
+        {label}
+      </Label>
+      {children}
+      {help && <p className="text-xs text-muted-foreground">{help}</p>}
+    </div>
+  );
 }
 
-const tabContentVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -10 },
-};
-
-// Component for API Key field with edit mode
+/**
+ * The API key field.
+ *
+ * A saved key is shown as a confirmation row rather than a masked input, so
+ * nobody wonders whether the dots are a real value. Entering a new key is an
+ * explicit "Change" action. The input is `type="password"` and truncates: a
+ * long key must never wrap and push the panel around.
+ */
 function ApiKeyField({
   hasExistingKey,
   value,
@@ -82,57 +84,60 @@ function ApiKeyField({
   // Show edit mode if user is entering a new key or wants to change
   const showInput = !hasExistingKey || isEditing || value.length > 0;
 
-  return (
-    <div className="space-y-2">
-      <Label className="text-sm flex items-center gap-2">
-        <Key className="h-3 w-3" />
-        API Key
-      </Label>
-
-      {hasExistingKey && !showInput && isCurrentProvider ? (
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 p-2 bg-sky-50 border border-sky-200 rounded-md">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span className="text-sm text-slate-600">API key configured</span>
-            <Badge
-              variant="outline"
-              className="ml-auto text-xs border-emerald-600 text-emerald-500"
-            >
-              Saved
-            </Badge>
-          </div>
+  if (hasExistingKey && !showInput && isCurrentProvider) {
+    return (
+      <Field label="API key">
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2">
+          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+            API key saved
+          </span>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setIsEditing(true)}
-            className="text-slate-500 hover:text-[#0084d1]"
+            className="shrink-0"
           >
-            <Edit2 className="h-4 w-4" />
+            <Pencil className="size-4" strokeWidth={2} />
+            Change
           </Button>
         </div>
-      ) : (
-        <div className="space-y-1">
-          <Input
-            type="password"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={
-              hasExistingKey && isCurrentProvider
-                ? "Enter new API key to replace existing"
-                : placeholder
-            }
-            className="bg-sky-50 border-sky-200"
-          />
-          {hasExistingKey && isCurrentProvider && (
-            <p className="text-xs text-slate-500">
-              Leave empty to keep existing key, or enter a new key to replace it
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+      </Field>
+    );
+  }
+
+  return (
+    <Field
+      label="API key"
+      htmlFor="provider-api-key"
+      help={
+        hasExistingKey && isCurrentProvider
+          ? "Leave this empty to keep the saved key, or paste a new one to replace it."
+          : "Stored on the server and never shown again after saving."
+      }
+    >
+      <Input
+        id="provider-api-key"
+        type="password"
+        autoComplete="off"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={
+          hasExistingKey && isCurrentProvider
+            ? "Enter a new key to replace the saved one"
+            : placeholder
+        }
+        className="h-9 w-full truncate font-mono text-sm"
+      />
+    </Field>
   );
 }
+
+const PROVIDER_TABS: ReadonlyArray<{ value: AIProvider; label: string }> = [
+  { value: "bedrock", label: "Bedrock" },
+  { value: "openai", label: "OpenAI" },
+  { value: "azure", label: "Azure" },
+  { value: "anthropic", label: "Claude" },
+];
 
 export function ProviderConfig({
   status,
@@ -165,86 +170,65 @@ export function ProviderConfig({
   const isCurrentProvider =
     config?.providerConfig?.provider === selectedProvider;
 
+  const modelOptions = (provider: AIProvider) =>
+    Object.entries<string>(config?.providerModels?.[provider] ?? {});
+
   return (
-    <div className="space-y-3 sm:space-y-4">
-      <Label className="text-sm sm:text-base font-medium flex items-center gap-2">
-        <Settings2 className="h-4 w-4" />
-        AI Provider
-      </Label>
+    <Section
+      title="AI provider"
+      description="Which model answers as the bots, and the credentials it uses."
+      actions={
+        hasExistingKey ? (
+          <StatusPill tone="success">Key saved</StatusPill>
+        ) : (
+          <StatusPill tone="warning">No key</StatusPill>
+        )
+      }
+    >
+      <div className="max-w-xl space-y-4">
+        {status?.provider && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm">
+            <span className="min-w-0 truncate text-muted-foreground">
+              In use:{" "}
+              <span className="font-medium text-foreground">
+                {config?.providers?.[status.provider]?.name || status.provider}
+              </span>
+            </span>
+          </div>
+        )}
 
-      {status?.provider && (
-        <div className="p-2 bg-sky-50/50 rounded text-xs sm:text-sm text-slate-600 flex items-center gap-2">
-          {getProviderIcon(status.provider)}
-          <span>
-            Current:{" "}
-            <strong>
-              {config?.providers?.[status.provider]?.name || status.provider}
-            </strong>
-          </span>
-          {hasExistingKey && (
-            <Badge className="ml-auto bg-emerald-600/20 text-emerald-400 border-emerald-600/50">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Configured
-            </Badge>
-          )}
-        </div>
-      )}
+        <Tabs
+          value={selectedProvider}
+          onValueChange={(v) => onProviderChange(v as AIProvider)}
+          className="gap-4"
+        >
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-4">
+            {PROVIDER_TABS.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="h-8 min-w-0 px-2 text-sm"
+              >
+                <span className="truncate">{tab.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-      <Tabs
-        value={selectedProvider}
-        onValueChange={(v) => onProviderChange(v as AIProvider)}
-      >
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-sky-50 h-auto gap-1 p-1">
-          <TabsTrigger
-            value="bedrock"
-            className="text-xs px-2 py-2 data-[state=active]:bg-zinc-700"
-          >
-            <Cloud className="h-3 w-3 mr-1 hidden sm:inline" />
-            Bedrock
-          </TabsTrigger>
-          <TabsTrigger
-            value="openai"
-            className="text-xs px-2 py-2 data-[state=active]:bg-zinc-700"
-          >
-            <Cpu className="h-3 w-3 mr-1 hidden sm:inline" />
-            OpenAI
-          </TabsTrigger>
-          <TabsTrigger
-            value="azure"
-            className="text-xs px-2 py-2 data-[state=active]:bg-zinc-700"
-          >
-            <Globe className="h-3 w-3 mr-1 hidden sm:inline" />
-            Azure
-          </TabsTrigger>
-          <TabsTrigger
-            value="anthropic"
-            className="text-xs px-2 py-2 data-[state=active]:bg-zinc-700"
-          >
-            <Bot className="h-3 w-3 mr-1 hidden sm:inline" />
-            Claude
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Bedrock Config */}
-        <TabsContent value="bedrock" className="space-y-3 mt-3">
-          <motion.div
-            key="bedrock-content"
-            variants={tabContentVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-3"
-          >
+          {/* Bedrock */}
+          <TabsContent value="bedrock" className="space-y-4">
             <ApiKeyField
               hasExistingKey={hasExistingKey}
               value={apiKey}
               onChange={onApiKeyChange}
-              placeholder="Enter Bedrock API key"
+              placeholder="Enter the Bedrock API key"
               isCurrentProvider={isCurrentProvider}
             />
-            <div className="space-y-2">
-              <Label className="text-sm">Region</Label>
+            <Field
+              label="Region"
+              help="The AWS region the model is invoked in."
+            >
               <Select value={region} onValueChange={onRegionChange}>
-                <SelectTrigger className="bg-sky-50 border-sky-200">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -258,37 +242,25 @@ export function ProviderConfig({
                   </SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm">Model</Label>
+            </Field>
+            <Field label="Model">
               <Select value={modelId} onValueChange={onModelIdChange}>
-                <SelectTrigger className="bg-sky-50 border-sky-200">
-                  <SelectValue placeholder="Select model" />
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  {config?.providerModels?.bedrock &&
-                    Object.entries(config.providerModels.bedrock).map(
-                      ([id, name]) => (
-                        <SelectItem key={id} value={id}>
-                          {name}
-                        </SelectItem>
-                      ),
-                    )}
+                  {modelOptions("bedrock").map(([id, name]) => (
+                    <SelectItem key={id} value={id}>
+                      {name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            </div>
-          </motion.div>
-        </TabsContent>
+            </Field>
+          </TabsContent>
 
-        {/* OpenAI Config */}
-        <TabsContent value="openai" className="space-y-3 mt-3">
-          <motion.div
-            key="openai-content"
-            variants={tabContentVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-3"
-          >
+          {/* OpenAI */}
+          <TabsContent value="openai" className="space-y-4">
             <ApiKeyField
               hasExistingKey={hasExistingKey}
               value={apiKey}
@@ -296,91 +268,82 @@ export function ProviderConfig({
               placeholder="sk-..."
               isCurrentProvider={isCurrentProvider}
             />
-            <div className="space-y-2">
-              <Label className="text-sm">Model</Label>
+            <Field label="Model">
               <Select value={modelId} onValueChange={onModelIdChange}>
-                <SelectTrigger className="bg-sky-50 border-sky-200">
-                  <SelectValue placeholder="Select model" />
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  {config?.providerModels?.openai &&
-                    Object.entries(config.providerModels.openai).map(
-                      ([id, name]) => (
-                        <SelectItem key={id} value={id}>
-                          {name}
-                        </SelectItem>
-                      ),
-                    )}
+                  {modelOptions("openai").map(([id, name]) => (
+                    <SelectItem key={id} value={id}>
+                      {name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm">Base URL (optional)</Label>
+            </Field>
+            <Field
+              label="Base URL"
+              htmlFor="openai-base-url"
+              help="Optional. Point this at a compatible gateway instead of OpenAI."
+            >
               <Input
+                id="openai-base-url"
                 value={baseUrl}
                 onChange={(e) => onBaseUrlChange(e.target.value)}
                 placeholder="https://api.openai.com/v1"
-                className="bg-sky-50 border-sky-200"
+                title={baseUrl || undefined}
+                className="h-9 w-full truncate"
               />
-            </div>
-          </motion.div>
-        </TabsContent>
+            </Field>
+          </TabsContent>
 
-        {/* Azure Config */}
-        <TabsContent value="azure" className="space-y-3 mt-3">
-          <motion.div
-            key="azure-content"
-            variants={tabContentVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-3"
-          >
+          {/* Azure */}
+          <TabsContent value="azure" className="space-y-4">
             <ApiKeyField
               hasExistingKey={hasExistingKey}
               value={apiKey}
               onChange={onApiKeyChange}
-              placeholder="Enter Azure OpenAI key"
+              placeholder="Enter the Azure OpenAI key"
               isCurrentProvider={isCurrentProvider}
             />
-            <div className="space-y-2">
-              <Label className="text-sm">Endpoint</Label>
+            <Field label="Endpoint" htmlFor="azure-endpoint">
               <Input
+                id="azure-endpoint"
                 value={endpoint}
                 onChange={(e) => onEndpointChange(e.target.value)}
                 placeholder="https://your-resource.openai.azure.com"
-                className="bg-sky-50 border-sky-200"
+                title={endpoint || undefined}
+                className="h-9 w-full truncate"
               />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm">Deployment Name</Label>
+            </Field>
+            <Field
+              label="Deployment name"
+              htmlFor="azure-deployment"
+              help="The name you gave the model deployment in Azure."
+            >
               <Input
+                id="azure-deployment"
                 value={deploymentName}
                 onChange={(e) => onDeploymentNameChange(e.target.value)}
                 placeholder="gpt-4o-deployment"
-                className="bg-sky-50 border-sky-200"
+                title={deploymentName || undefined}
+                className="h-9 w-full truncate"
               />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm">API Version</Label>
+            </Field>
+            <Field label="API version" htmlFor="azure-api-version">
               <Input
+                id="azure-api-version"
                 value={apiVersion}
                 onChange={(e) => onApiVersionChange(e.target.value)}
                 placeholder="2024-02-15-preview"
-                className="bg-sky-50 border-sky-200"
+                className="h-9 w-full truncate font-mono text-sm"
               />
-            </div>
-          </motion.div>
-        </TabsContent>
+            </Field>
+          </TabsContent>
 
-        {/* Anthropic Config */}
-        <TabsContent value="anthropic" className="space-y-3 mt-3">
-          <motion.div
-            key="anthropic-content"
-            variants={tabContentVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-3"
-          >
+          {/* Anthropic */}
+          <TabsContent value="anthropic" className="space-y-4">
             <ApiKeyField
               hasExistingKey={hasExistingKey}
               value={apiKey}
@@ -388,42 +351,40 @@ export function ProviderConfig({
               placeholder="sk-ant-..."
               isCurrentProvider={isCurrentProvider}
             />
-            <div className="space-y-2">
-              <Label className="text-sm">Model</Label>
+            <Field label="Model">
               <Select value={modelId} onValueChange={onModelIdChange}>
-                <SelectTrigger className="bg-sky-50 border-sky-200">
-                  <SelectValue placeholder="Select model" />
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  {config?.providerModels?.anthropic &&
-                    Object.entries(config.providerModels.anthropic).map(
-                      ([id, name]) => (
-                        <SelectItem key={id} value={id}>
-                          {name}
-                        </SelectItem>
-                      ),
-                    )}
+                  {modelOptions("anthropic").map(([id, name]) => (
+                    <SelectItem key={id} value={id}>
+                      {name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            </div>
-          </motion.div>
-        </TabsContent>
-      </Tabs>
+            </Field>
+          </TabsContent>
+        </Tabs>
 
-      {/* Test Connection Button */}
-      <Button
-        variant="outline"
-        onClick={onTestConnection}
-        disabled={testing || (!apiKey && !hasExistingKey)}
-        className="w-full border-sky-200"
-      >
-        {testing ? (
-          <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-        ) : (
-          <TestTube className="h-4 w-4 mr-2" />
-        )}
-        Test Connection
-      </Button>
-    </div>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onTestConnection}
+            disabled={testing || (!apiKey && !hasExistingKey)}
+            className="shrink-0"
+          >
+            {testing ? (
+              <RefreshCw className="size-4 animate-spin" strokeWidth={2} />
+            ) : (
+              <TestTube className="size-4" strokeWidth={2} />
+            )}
+            Test connection
+          </Button>
+        </div>
+      </div>
+    </Section>
   );
 }

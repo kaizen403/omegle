@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { BarMeter, Section } from "@/components/console";
 
 interface UserDistributionChartProps {
   idleUsers: number;
@@ -9,63 +9,41 @@ interface UserDistributionChartProps {
   totalUsers: number;
 }
 
+/**
+ * Where the connected users currently are. One meter per state, all measured
+ * against the same total so the three bars are directly comparable.
+ */
 export function UserDistributionChart({
   idleUsers,
   queueUsers,
   activeUsers,
   totalUsers,
 }: UserDistributionChartProps) {
-  const getPercentage = (value: number) =>
-    totalUsers > 0 ? (value / totalUsers) * 100 : 0;
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.15 }}
-      className="bg-white border border-sky-100 rounded-lg p-4 sm:p-6"
+    <Section
+      title="User distribution"
+      description="Share of connected users in each state."
     >
-      <h3 className="text-lg font-semibold mb-6">User Distribution</h3>
       <div className="space-y-4">
-        <div>
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-slate-500">Idle</span>
-            <span className="font-medium">{idleUsers}</span>
-          </div>
-          <div className="w-full bg-sky-50 rounded-full h-3 overflow-hidden">
-            <div
-              style={{ width: `${getPercentage(idleUsers)}%` }}
-              className="bg-zinc-600 h-full rounded-full transition-all duration-300"
-            />
-          </div>
-        </div>
-
-        <div>
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-slate-500">In Queue</span>
-            <span className="font-medium text-yellow-400">{queueUsers}</span>
-          </div>
-          <div className="w-full bg-sky-50 rounded-full h-3 overflow-hidden">
-            <div
-              style={{ width: `${getPercentage(queueUsers)}%` }}
-              className="bg-yellow-600 h-full rounded-full transition-all duration-300"
-            />
-          </div>
-        </div>
-
-        <div>
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-slate-500">Active</span>
-            <span className="font-medium text-green-400">{activeUsers}</span>
-          </div>
-          <div className="w-full bg-sky-50 rounded-full h-3 overflow-hidden">
-            <div
-              style={{ width: `${getPercentage(activeUsers)}%` }}
-              className="bg-green-600 h-full rounded-full transition-all duration-300"
-            />
-          </div>
-        </div>
+        <BarMeter
+          label="Idle"
+          value={idleUsers}
+          total={totalUsers}
+          tone="neutral"
+        />
+        <BarMeter
+          label="In queue"
+          value={queueUsers}
+          total={totalUsers}
+          tone="warning"
+        />
+        <BarMeter
+          label="Active"
+          value={activeUsers}
+          total={totalUsers}
+          tone="success"
+        />
       </div>
-    </motion.div>
+    </Section>
   );
 }

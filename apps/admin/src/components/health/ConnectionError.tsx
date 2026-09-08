@@ -1,22 +1,14 @@
 "use client";
 
-import { motion } from "framer-motion";
-
 interface ConnectionErrorProps {
   error: string;
 }
 
 export function ConnectionError({ error }: ConnectionErrorProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-red-900/20 border border-red-900 rounded-lg p-4"
-    >
-      <div className="text-red-400 text-sm font-semibold mb-1">
-        Connection Error
-      </div>
-      <div className="text-red-300 text-sm">{error}</div>
-    </motion.div>
+    <div className="min-w-0 rounded-xl border border-danger-line bg-danger-surface px-4 py-3.5">
+      <p className="text-sm font-semibold text-danger">Connection error</p>
+      <p className="mt-0.5 text-sm break-words text-danger/90">{error}</p>
+    </div>
   );
 }

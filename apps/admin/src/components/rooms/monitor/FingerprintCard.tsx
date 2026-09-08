@@ -2,6 +2,14 @@
 
 import type { UserFingerprint } from "@/types/socket";
 import { riskBadge, shortHash, timeAgo } from "@/lib/fingerprint";
+import { MetricRow, StatusPill, type Tone } from "@/components/console";
+
+function riskTone(score?: number): Tone {
+  if (score === undefined || score === null) return "neutral";
+  if (score >= 80) return "danger";
+  if (score >= 50) return "warning";
+  return "success";
+}
 
 export function FingerprintCard({
   fp,
@@ -12,17 +20,15 @@ export function FingerprintCard({
 }) {
   if (!fp) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          {title}
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          No fingerprint yet — user hasn’t sent it or DB not backfilled.
+      <div className="rounded-xl border border-border bg-muted/40 p-4">
+        <div className="text-sm font-medium text-foreground">{title}</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          No fingerprint yet — the user hasn’t sent one, or the database is not
+          backfilled.
         </p>
-        <p className="mt-1 text-xs text-slate-400">
-          Expected DB table:{" "}
-          <span className="font-mono">user_fingerprints</span> (hash,
-          canvas_hash, ip, ua, linked_uids, risk_score)
+        <p className="mt-1 text-xs text-muted-foreground">
+          Expected table <span className="font-mono">user_fingerprints</span>{" "}
+          (hash, canvas_hash, ip, ua, linked_uids, risk_score)
         </p>
       </div>
     );
@@ -31,76 +37,61 @@ export function FingerprintCard({
   const risk = riskBadge(fp.riskScore);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 text-sm font-medium text-foreground">
           {title}
         </div>
-        <span
-          className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${risk.className}`}
-        >
-          risk {risk.label}
-        </span>
+        <StatusPill tone={riskTone(fp.riskScore)}>Risk {risk.label}</StatusPill>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg bg-slate-50 p-2">
-          <div className="text-slate-500">Fingerprint</div>
-          <div className="font-mono font-medium text-slate-800">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="min-w-0 rounded-lg bg-muted p-2.5">
+          <div className="text-xs text-muted-foreground">Fingerprint</div>
+          <div className="truncate font-mono text-sm font-medium text-foreground">
             {shortHash(fp.hash, 12)}
           </div>
-          <div className="text-slate-400">{fp.hash?.slice(12, 24) ?? ""}</div>
+          <div className="truncate font-mono text-xs text-muted-foreground">
+            {fp.hash?.slice(12, 24) ?? ""}
+          </div>
         </div>
-        <div className="rounded-lg bg-slate-50 p-2">
-          <div className="text-slate-500">Seen</div>
-          <div className="font-medium text-slate-800">{fp.seenCount}×</div>
-          <div className="text-slate-400">
+        <div className="min-w-0 rounded-lg bg-muted p-2.5">
+          <div className="text-xs text-muted-foreground">Seen</div>
+          <div className="text-sm font-medium tabular-nums text-foreground">
+            {fp.seenCount}×
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
             {timeAgo(fp.lastSeenAt)} · first {timeAgo(fp.firstSeenAt)}
           </div>
         </div>
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        <div>
-          <dt className="text-slate-500">Canvas</dt>
-          <dd className="font-mono text-slate-700">
-            {shortHash(fp.canvasHash)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">WebGL</dt>
-          <dd className="font-mono text-slate-700">
-            {shortHash(fp.webglHash)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Platform</dt>
-          <dd className="text-slate-700">{fp.platform ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Screen</dt>
-          <dd className="text-slate-700">{fp.screen ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">TZ</dt>
-          <dd className="text-slate-700">{fp.timezone ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Lang</dt>
-          <dd className="text-slate-700">{fp.language ?? "—"}</dd>
-        </div>
-      </dl>
+      <div className="mt-2 grid gap-x-4 sm:grid-cols-2">
+        <MetricRow
+          label="Canvas"
+          value={<span className="font-mono">{shortHash(fp.canvasHash)}</span>}
+        />
+        <MetricRow
+          label="WebGL"
+          value={<span className="font-mono">{shortHash(fp.webglHash)}</span>}
+        />
+        <MetricRow label="Platform" value={fp.platform ?? "—"} />
+        <MetricRow label="Screen" value={fp.screen ?? "—"} />
+        <MetricRow label="Timezone" value={fp.timezone ?? "—"} />
+        <MetricRow label="Language" value={fp.language ?? "—"} />
+      </div>
 
       {fp.linkedUids && fp.linkedUids.length > 1 && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs">
-          <div className="font-semibold text-amber-800">
-            Linked identities: {fp.linkedUids.length}
+        <div className="mt-3 rounded-lg border border-warning-line bg-warning-surface p-2.5">
+          <div className="text-sm font-medium text-warning">
+            Linked identities:{" "}
+            <span className="tabular-nums">{fp.linkedUids.length}</span>
           </div>
-          <div className="font-mono text-amber-900 break-all">
+          <div className="mt-0.5 font-mono text-xs break-all text-warning/90">
             {fp.linkedUids.join(", ")}
           </div>
-          <div className="text-amber-700/80 mt-1">
-            Same fingerprint seen across UIDs — possible alt / ban evasion.
+          <div className="mt-1 text-xs text-muted-foreground">
+            Same fingerprint seen across accounts — possible alt or ban evasion.
           </div>
         </div>
       )}

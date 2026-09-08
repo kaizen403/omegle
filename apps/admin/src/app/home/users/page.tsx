@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
+import { AlertTriangle } from "lucide-react";
 import { useAdminSocketContext } from "@/contexts/AdminSocketContext";
 import AdminLayout from "@/components/layout/AdminLayout";
 import PageHeader from "@/components/layout/PageHeader";
 import { useAuth } from "@/contexts/AuthProvider";
+import { PageBody } from "@/components/console";
 import UserStats from "@/components/users/UserStats";
 import UserFilters from "@/components/users/UserFilters";
 import UserTable from "@/components/users/UserTable";
@@ -33,6 +34,14 @@ export default function UsersPage() {
   const [showBulkKickModal, setShowBulkKickModal] = useState(false);
   const [singleKickUserId, setSingleKickUserId] = useState<number | null>(null);
 
+  /**
+   * Filter only — never sort.
+   *
+   * `users` arrives already ordered by `lib/ordering.ts` (state, then uid),
+   * which is stable while a row is on screen. The old code re-sorted by
+   * `roomId` here; roomId changes on every re-match, so the whole table
+   * reshuffled every few seconds and names visibly rotated up and down.
+   */
   const filteredUsers = useMemo(() => {
     let filtered = users;
     if (filter !== "all") {
@@ -48,24 +57,6 @@ export default function UsersPage() {
           (u.roomId && u.roomId.toLowerCase().includes(query)),
       );
     }
-
-    // Sort users: group paired users consecutively
-    filtered.sort((a, b) => {
-      // Users with roomId come first, sorted by roomId
-      if (a.roomId && b.roomId) {
-        return a.roomId.localeCompare(b.roomId);
-      }
-      if (a.roomId && !b.roomId) return -1;
-      if (!a.roomId && b.roomId) return 1;
-
-      // Then by state (active > queue > idle)
-      const stateOrder: Record<string, number> = {
-        active: 0,
-        queue: 1,
-        idle: 2,
-      };
-      return (stateOrder[a.state] || 2) - (stateOrder[b.state] || 2);
-    });
 
     return filtered;
   }, [users, filter, searchQuery]);
@@ -139,66 +130,51 @@ export default function UsersPage() {
     <AdminLayout onLogout={logout}>
       <PageHeader title="Users" showConnectionStatus={true} />
 
-      <div className="p-4 md:p-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <UserStats
-            totalUsers={stats.totalUsers}
-            idleUsers={stats.idleUsers}
-            queueUsers={stats.queueUsers}
-            activeUsers={stats.activeUsers}
-          />
-        </motion.div>
+      <PageBody>
+        <UserStats
+          totalUsers={stats.totalUsers}
+          idleUsers={stats.idleUsers}
+          queueUsers={stats.queueUsers}
+          activeUsers={stats.activeUsers}
+        />
 
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4"
-          >
-            <div className="flex items-center gap-2 text-red-400">
-              <span>⚠️</span>
-              <span className="font-semibold">Error: {error}</span>
-            </div>
-          </motion.div>
+          <div className="flex items-start gap-2.5 rounded-xl border border-danger-line bg-danger-surface px-4 py-3">
+            <AlertTriangle
+              className="mt-0.5 size-4 shrink-0 text-danger"
+              strokeWidth={2}
+            />
+            <p className="min-w-0 text-sm font-medium text-danger">{error}</p>
+          </div>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <UserFilters
-            filter={filter}
-            onFilterChange={setFilter}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedCount={selectedUsers.size}
-            onBulkKick={handleBulkKick}
-            onSelectAll={selectAll}
-            onDeselectAll={deselectAll}
-            hasSelection={selectedUsers.size > 0}
-            onRefresh={refreshData}
-          />
-        </motion.div>
+        <UserFilters
+          filter={filter}
+          onFilterChange={setFilter}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedCount={selectedUsers.size}
+          onBulkKick={handleBulkKick}
+          onSelectAll={selectAll}
+          onDeselectAll={deselectAll}
+          hasSelection={selectedUsers.size > 0}
+          onRefresh={refreshData}
+          counts={{
+            all: stats.totalUsers,
+            idle: stats.idleUsers,
+            queue: stats.queueUsers,
+            active: stats.activeUsers,
+          }}
+        />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <UserTable
-            users={filteredUsers as User[]}
-            selectedUsers={selectedUsers}
-            onToggleSelection={toggleUserSelection}
-            onKickUser={handleKick}
-            isSuperAdmin={admin?.role === "super-admin"}
-          />
-        </motion.div>
-      </div>
+        <UserTable
+          users={filteredUsers as User[]}
+          selectedUsers={selectedUsers}
+          onToggleSelection={toggleUserSelection}
+          onKickUser={handleKick}
+          isSuperAdmin={admin?.role === "super-admin"}
+        />
+      </PageBody>
 
       {showBulkKickModal && (
         <BulkKickModal

@@ -1,7 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { CalendarIcon, Search, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -9,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Toolbar, ToolbarActions, ToolbarMain } from "@/components/console";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -26,34 +26,33 @@ export function DateSelector({
   onSearch,
 }: DateSelectorProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 sm:mb-6 flex items-start gap-2 sm:gap-3"
-    >
-      <div className="flex flex-col gap-2 sm:gap-3 w-full">
-        <label
-          htmlFor="date"
-          className="text-slate-600 text-sm sm:text-base font-medium"
-        >
-          📅 Select Date
-        </label>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+    <div className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-4">
+      <Toolbar>
+        <ToolbarMain>
+          <label
+            htmlFor="date"
+            className="shrink-0 text-sm font-medium text-foreground"
+          >
+            Select date
+          </label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
+                id="date"
                 variant="outline"
                 className={cn(
-                  "w-full sm:w-64 justify-start text-left font-normal bg-white border-sky-200 hover:bg-sky-50 text-slate-900",
+                  "h-9 w-full justify-start text-left font-normal sm:w-60",
                   !tempDate && "text-muted-foreground",
                 )}
                 disabled={loading}
               >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {tempDate ? format(tempDate, "PPP") : <span>Pick a date</span>}
+                <CalendarIcon className="size-4" strokeWidth={2} />
+                <span className="truncate">
+                  {tempDate ? format(tempDate, "PPP") : "Pick a date"}
+                </span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-white border-sky-200">
+            <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="single"
                 selected={tempDate}
@@ -62,29 +61,30 @@ export function DateSelector({
                   date > new Date() || date < new Date("1900-01-01")
                 }
                 initialFocus
-                className="bg-sky-50"
               />
             </PopoverContent>
           </Popover>
+        </ToolbarMain>
+        <ToolbarActions>
           <Button
+            className="h-9"
             onClick={onSearch}
             disabled={loading || !tempDate}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Searching...
+                <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                Searching
               </>
             ) : (
               <>
-                <Search className="mr-2 h-4 w-4" />
+                <Search className="size-4" strokeWidth={2} />
                 Search
               </>
             )}
           </Button>
-        </div>
-      </div>
-    </motion.div>
+        </ToolbarActions>
+      </Toolbar>
+    </div>
   );
 }

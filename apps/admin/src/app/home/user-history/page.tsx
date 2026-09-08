@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthProvider";
 import AdminLayout from "@/components/layout/AdminLayout";
 import PageHeader from "@/components/layout/PageHeader";
+import { PageBody, Section, TableShell } from "@/components/console";
 import { UserService } from "@/lib/services/userService";
 import { UserListItem, UserVisit } from "@/types/user";
 import {
@@ -161,9 +161,12 @@ export default function UserHistoryPage() {
 
   return (
     <AdminLayout onLogout={logout}>
-      <PageHeader title="User History" />
+      <PageHeader
+        title="User history"
+        description="Who visited on a given day"
+      />
 
-      <div className="p-4 sm:p-6">
+      <PageBody>
         <DateSelector
           tempDate={tempDate}
           onTempDateChange={setTempDate}
@@ -171,12 +174,7 @@ export default function UserHistoryPage() {
           onSearch={handleSearch}
         />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="bg-white border border-sky-100 rounded-lg overflow-hidden"
-        >
+        <Section className="overflow-hidden" contentClassName="p-0">
           <UsersListHeader
             selectedDate={selectedDate}
             filteredCount={filteredUsers.length}
@@ -195,23 +193,21 @@ export default function UserHistoryPage() {
             />
           ) : (
             <>
-              <div className="overflow-x-auto -mx-4 sm:mx-0">
-                <div className="min-w-[990px] px-4">
-                  <UsersTableHeader />
-                  <div>
-                    {currentUsers.map((user, index) => (
-                      <UserRow
-                        key={`${user.uid}-${user.timestamp}`}
-                        user={user}
-                        index={index}
-                        startIndex={startIndex}
-                        loadingUserId={loadingUserId}
-                        onUserClick={handleUserClick}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <TableShell>
+                <UsersTableHeader />
+                <tbody>
+                  {currentUsers.map((user, index) => (
+                    <UserRow
+                      key={`${user.uid}-${user.timestamp}`}
+                      user={user}
+                      index={index}
+                      startIndex={startIndex}
+                      loadingUserId={loadingUserId}
+                      onUserClick={handleUserClick}
+                    />
+                  ))}
+                </tbody>
+              </TableShell>
 
               <UserHistoryPagination
                 currentPage={currentPage}
@@ -225,14 +221,14 @@ export default function UserHistoryPage() {
               />
             </>
           )}
-        </motion.div>
+        </Section>
 
         <UserDetailsModal
           user={selectedUser}
           loading={loadingDetails}
           onClose={closeModal}
         />
-      </div>
+      </PageBody>
     </AdminLayout>
   );
 }

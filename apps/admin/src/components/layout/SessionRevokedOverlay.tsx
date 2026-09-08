@@ -15,67 +15,45 @@ export function SessionRevokedOverlay({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+      transition={{ duration: 0.15 }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="session-revoked-title"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-foreground/40 px-4"
       style={{ pointerEvents: "all" }}
     >
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="max-w-md w-full mx-4 p-8 bg-white border border-red-500/50 rounded-2xl shadow-2xl"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15 }}
+        className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
       >
-        <div className="text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-500/20 border-2 border-red-500/50 mb-6"
-          >
-            <ShieldAlert className="w-10 h-10 text-red-400" />
-          </motion.div>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="text-2xl font-bold text-slate-900 mb-3"
-          >
-            Session Revoked
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="text-slate-500 mb-8 leading-relaxed"
-          >
-            Your session has been revoked by a super administrator. You have
-            been logged out and must sign in again to continue.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <Button
-              onClick={onLogout}
-              className="w-full bg-red-600 hover:bg-red-700 text-white py-6 text-lg font-semibold"
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-danger-line bg-danger-surface text-danger">
+            <ShieldAlert className="size-5" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <h2
+              id="session-revoked-title"
+              className="text-base font-semibold text-foreground"
             >
-              <LogOut className="mr-2 h-5 w-5" />
-              Logout
-            </Button>
-          </motion.div>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="text-xs text-slate-500 mt-6"
-          >
-            This action was taken for security purposes
-          </motion.p>
+              Session revoked
+            </h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Your session has been revoked by a super administrator. You have
+              been logged out and must sign in again to continue.
+            </p>
+          </div>
         </div>
+
+        <Button onClick={onLogout} className="mt-5 h-10 w-full">
+          <LogOut className="size-4" strokeWidth={2} />
+          <span>Log out</span>
+        </Button>
+
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          This action was taken for security purposes
+        </p>
       </motion.div>
     </motion.div>
   );

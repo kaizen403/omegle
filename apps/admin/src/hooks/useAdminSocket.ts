@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
 import { SystemService } from "@/lib/services/systemService";
 import { storage, STORAGE_KEYS } from "@/lib/storage";
 import { useToast } from "@/contexts/ToastProvider";
+import { sortRooms, sortUsers } from "@/lib/ordering";
 import type {
   User,
   Room,
@@ -1106,10 +1107,15 @@ export function useAdminSocket(token: string | null) {
     };
   }, [isConnected, isAuthenticated]);
 
+  // Order is applied once, here, so every page renders the same stable list
+  // no matter which socket event last touched the state.
+  const orderedUsers = useMemo(() => sortUsers(users), [users]);
+  const orderedRooms = useMemo(() => sortRooms(rooms), [rooms]);
+
   return {
     socket,
-    users,
-    rooms,
+    users: orderedUsers,
+    rooms: orderedRooms,
     isConnected,
     isAuthenticated,
     error,

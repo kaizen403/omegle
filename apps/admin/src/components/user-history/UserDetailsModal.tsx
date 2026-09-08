@@ -6,12 +6,14 @@
 "use client";
 
 import React from "react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { IdChip, MetricRow, StatusPill } from "@/components/console";
 import { UserVisit, LocationData } from "@/types/user";
 import LocationMapView from "./LocationMapView";
 
@@ -44,44 +46,41 @@ export default function UserDetailsModal({
     >
       <SheetContent
         side="bottom"
-        className="h-[85vh] bg-white border-t border-sky-200 overflow-y-auto"
+        className="flex h-[85vh] flex-col gap-0 border-t border-border bg-background p-0"
       >
-        {user && (
-          <SheetHeader className="border-b border-sky-200 pb-6 mb-6">
-            <div className="flex items-center gap-4 w-full">
-              <div
-                className={`w-16 h-16 rounded-full flex items-center justify-center text-4xl ${
-                  user.gender.toLowerCase() === "male"
-                    ? "bg-blue-500/20"
-                    : user.gender.toLowerCase() === "female"
-                      ? "bg-pink-500/20"
-                      : "bg-purple-500/20"
-                }`}
-              >
-                {user.gender.toLowerCase() === "male"
-                  ? "👨"
-                  : user.gender.toLowerCase() === "female"
-                    ? "👩"
-                    : "🧑"}
-              </div>
-              <div>
-                <SheetTitle className="text-2xl font-bold text-slate-900">
-                  {user.name}
-                </SheetTitle>
-                <p className="text-slate-500">UID: {user.uid}</p>
+        <SheetHeader className="shrink-0 gap-0 border-b border-border bg-card px-4 py-3 pr-12 sm:px-5">
+          {user ? (
+            <div className="min-w-0">
+              <SheetTitle className="truncate text-base font-semibold">
+                {user.name}
+              </SheetTitle>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <IdChip value={user.uid} prefix="UID " />
+                <StatusPill tone="neutral" className="capitalize">
+                  {user.gender}
+                </StatusPill>
               </div>
             </div>
-          </SheetHeader>
-        )}
+          ) : (
+            <SheetTitle className="text-base font-semibold">
+              User details
+            </SheetTitle>
+          )}
+        </SheetHeader>
 
-        <div className="px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {loading ? (
-            <div className="py-16 text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-sky-200 border-t-blue-500"></div>
-              <p className="text-slate-500 mt-4">Loading details...</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Loader2
+                className="size-6 animate-spin text-muted-foreground"
+                strokeWidth={2}
+              />
+              <p className="mt-3 text-sm text-muted-foreground">
+                Loading details
+              </p>
             </div>
           ) : user ? (
-            <div className="space-y-6">
+            <div className="mx-auto min-w-0 max-w-[1100px] space-y-4">
               {/* Location Map - First for immediate visibility */}
               {user.location?.latitude && user.location?.longitude && (
                 <LocationMapView
@@ -92,10 +91,8 @@ export default function UserDetailsModal({
                 />
               )}
 
-              {/* Basic Info */}
               <BasicInfoSection user={user} formatTimestamp={formatTimestamp} />
 
-              {/* Detailed Location Info */}
               {user.location && (
                 <>
                   <LocationSummarySection location={user.location} />
@@ -115,7 +112,64 @@ export default function UserDetailsModal({
   );
 }
 
-// Sub-components for better organization
+/* ------------------------------------------------------------------------- */
+/* Layout helpers                                                            */
+/* ------------------------------------------------------------------------- */
+
+/** A labelled card. Facts inside it are MetricRows separated by hairlines. */
+function Group({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="border-b border-border px-4 py-3">
+        <h3 className="min-w-0 truncate text-[0.9375rem] font-semibold text-foreground">
+          {title}
+        </h3>
+      </header>
+      <div className="min-w-0 px-4 py-1">{children}</div>
+    </section>
+  );
+}
+
+/** A MetricRow whose value can be long: it truncates and keeps a title. */
+function Fact({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+}) {
+  const title = typeof value === "string" ? value : undefined;
+  return (
+    <MetricRow
+      className="border-b border-border last:border-b-0"
+      label={label}
+      value={
+        mono && typeof value === "string" ? (
+          <IdChip value={value} prefix="" className="max-w-[20rem]" />
+        ) : (
+          <span
+            className="block max-w-[20rem] truncate text-right"
+            title={title}
+          >
+            {value}
+          </span>
+        )
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Sections                                                                  */
+/* ------------------------------------------------------------------------- */
 
 function BasicInfoSection({
   user,
@@ -125,96 +179,85 @@ function BasicInfoSection({
   formatTimestamp: (timestamp: number) => string;
 }) {
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="text-xl">📋</span>
-        Basic Information
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <div className="text-slate-500 text-sm mb-1">Gender</div>
-          <span
-            className={`inline-block px-3 py-1 rounded font-semibold ${
-              user.gender.toLowerCase() === "male"
-                ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                : user.gender.toLowerCase() === "female"
-                  ? "bg-pink-500/20 text-pink-300 border border-pink-500/30"
-                  : "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-            }`}
-          >
+    <Group title="Basic information">
+      <MetricRow
+        className="border-b border-border"
+        label="Gender"
+        value={
+          <StatusPill tone="neutral" className="capitalize">
             {user.gender}
-          </span>
-        </div>
-        <div>
-          <div className="text-slate-500 text-sm mb-1">Timestamp</div>
-          <div className="text-slate-800 font-mono text-sm">
+          </StatusPill>
+        }
+      />
+      <MetricRow
+        className="border-b border-border"
+        label="Seen at"
+        value={
+          <span className="tabular-nums">
             {formatTimestamp(user.timestamp)}
-          </div>
-        </div>
-        <div>
-          <div className="text-slate-500 text-sm mb-1">IP Address</div>
-          <div className="text-slate-800 font-mono text-sm break-all">
-            {user.ipAddress || "N/A"}
-          </div>
-        </div>
-      </div>
-    </div>
+          </span>
+        }
+      />
+      <MetricRow
+        label="IP address"
+        value={
+          user.ipAddress ? (
+            <IdChip value={user.ipAddress} prefix="" />
+          ) : (
+            <span className="text-muted-foreground">Not recorded</span>
+          )
+        }
+      />
+    </Group>
   );
 }
 
 function LocationSummarySection({ location }: { location: LocationData }) {
+  const hasAny =
+    location.city ||
+    location.principalSubdivision ||
+    location.country?.name ||
+    location.continent ||
+    location.postcode ||
+    location.plusCode ||
+    location.timeZone?.displayName;
+
+  if (!hasAny) return null;
+
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="text-xl">🌍</span>
-        Location Summary
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {location.city && <InfoCard title="City" value={location.city} />}
-        {location.principalSubdivision && (
-          <InfoCard
-            title="State/Province"
-            value={location.principalSubdivision}
-          />
-        )}
-        {location.country?.name && (
-          <InfoCard
-            title="Country"
-            value={
-              <span className="flex items-center gap-2">
-                {location.country.countryFlagEmoji}
-                {location.country.name}
-              </span>
-            }
-          />
-        )}
-        {location.continent && (
-          <InfoCard title="Continent" value={location.continent} />
-        )}
-        {location.postcode && (
-          <InfoCard title="Postal Code" value={location.postcode} />
-        )}
-        {location.plusCode && (
-          <InfoCard title="Plus Code" value={location.plusCode} />
-        )}
-        {location.timeZone?.displayName && (
-          <div className="bg-white rounded-lg p-4 border border-sky-200 md:col-span-2 lg:col-span-3">
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              Time Zone
-            </div>
-            <div className="text-slate-900 text-sm">
-              {location.timeZone.displayName}
+    <Group title="Location summary">
+      {location.city && <Fact label="City" value={location.city} />}
+      {location.principalSubdivision && (
+        <Fact label="State or province" value={location.principalSubdivision} />
+      )}
+      {location.country?.name && (
+        <Fact label="Country" value={location.country.name} />
+      )}
+      {location.continent && (
+        <Fact label="Continent" value={location.continent} />
+      )}
+      {location.postcode && (
+        <Fact label="Postal code" value={location.postcode} mono />
+      )}
+      {location.plusCode && (
+        <Fact label="Plus code" value={location.plusCode} mono />
+      )}
+      {location.timeZone?.displayName && (
+        <Fact
+          label="Time zone"
+          value={
+            <span className="flex flex-wrap items-baseline justify-end gap-x-2">
+              <span>{location.timeZone.displayName}</span>
               {location.timeZone.localTime && (
-                <span className="text-slate-500 ml-2">
-                  (Local:{" "}
-                  {new Date(location.timeZone.localTime).toLocaleString()})
+                <span className="text-xs font-normal text-muted-foreground tabular-nums">
+                  local {new Date(location.timeZone.localTime).toLocaleString()}
                 </span>
               )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+            </span>
+          }
+        />
+      )}
+    </Group>
   );
 }
 
@@ -226,65 +269,44 @@ function NetworkInfoSection({
   if (!network) return null;
 
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="text-xl">🌐</span>
-        Network Information
-      </h3>
-      <div className="space-y-3">
-        {network.organisation && (
-          <div className="bg-white rounded-lg p-3 border border-sky-200">
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              ISP/Organization
-            </div>
-            <div className="text-slate-900 font-medium">
-              {network.organisation}
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {network.bgpPrefix && (
-            <div className="bg-white rounded-lg p-3 border border-sky-200">
-              <div className="text-slate-500 text-xs uppercase mb-1">
-                BGP Prefix
-              </div>
-              <div className="text-slate-900 font-mono text-xs break-all">
-                {network.bgpPrefix}
-              </div>
-            </div>
-          )}
-          {network.registry && (
-            <InfoCard title="Registry" value={network.registry} />
-          )}
-          {network.totalAddresses && (
-            <InfoCard
-              title="Total Addresses"
-              value={network.totalAddresses.toLocaleString()}
-            />
-          )}
+    <Group title="Network">
+      {network.organisation && (
+        <Fact label="ISP or organisation" value={network.organisation} />
+      )}
+      {network.bgpPrefix && (
+        <Fact label="BGP prefix" value={network.bgpPrefix} mono />
+      )}
+      {network.registry && <Fact label="Registry" value={network.registry} />}
+      {network.totalAddresses !== undefined && (
+        <Fact
+          label="Total addresses"
+          value={network.totalAddresses.toLocaleString()}
+        />
+      )}
+      {network.carriers && network.carriers.length > 0 && (
+        <div className="py-3">
+          <p className="text-sm text-muted-foreground">Carriers</p>
+          <ul className="mt-2 space-y-1.5">
+            {network.carriers.map((carrier, idx: number) => (
+              <li
+                key={idx}
+                className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm"
+              >
+                <span className="min-w-0 truncate font-medium text-foreground">
+                  {carrier.name}
+                </span>
+                <IdChip value={carrier.asn} prefix="AS " />
+                {carrier.rankText && (
+                  <span className="text-xs text-muted-foreground">
+                    {carrier.rankText}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
-        {network.carriers && network.carriers.length > 0 && (
-          <div className="bg-white rounded-lg p-3 border border-sky-200">
-            <div className="text-slate-500 text-xs uppercase mb-2">
-              Carriers
-            </div>
-            <div className="space-y-2">
-              {network.carriers.map((carrier, idx: number) => (
-                <div key={idx} className="text-sm text-slate-800">
-                  <span className="font-semibold">{carrier.name}</span>
-                  <span className="text-slate-500 ml-2">({carrier.asn})</span>
-                  {carrier.rankText && (
-                    <span className="text-slate-500 ml-2 text-xs">
-                      {carrier.rankText}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+    </Group>
   );
 }
 
@@ -296,37 +318,35 @@ function AdministrativeHierarchySection({
   if (!administrative || administrative.length === 0) return null;
 
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="text-xl">🏛️</span>
-        Administrative Hierarchy
-      </h3>
-      <div className="space-y-2">
+    <Group title="Administrative hierarchy">
+      <ul className="divide-y divide-border">
         {administrative.map((admin, idx: number) => (
-          <div
-            key={idx}
-            className="bg-white rounded-lg p-3 border border-sky-200 flex items-start gap-3"
-          >
-            <div className="bg-blue-600/20 text-blue-400 px-2 py-1 rounded text-xs font-semibold shrink-0">
-              Level {admin.adminLevel}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-slate-900 font-semibold">{admin.name}</div>
+          <li key={idx} className="flex min-w-0 items-start gap-3 py-2.5">
+            <StatusPill tone="neutral" className="mt-0.5">
+              Level <span className="tabular-nums">{admin.adminLevel}</span>
+            </StatusPill>
+            <div className="min-w-0 flex-1">
+              <p
+                className="truncate text-sm font-medium text-foreground"
+                title={admin.name}
+              >
+                {admin.name}
+              </p>
               {admin.description && (
-                <div className="text-slate-500 text-xs mt-1">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {admin.description}
-                </div>
+                </p>
               )}
               {admin.isoCode && (
-                <div className="text-slate-500 text-xs mt-1">
-                  Code: {admin.isoCode}
-                </div>
+                <p className="mt-1">
+                  <IdChip value={admin.isoCode} prefix="" />
+                </p>
               )}
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </Group>
   );
 }
 
@@ -338,95 +358,58 @@ function CountryDetailsSection({
   if (!country) return null;
 
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="text-xl">{country.countryFlagEmoji || "🏴"}</span>
-        Country Details
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {country.isoNameFull && (
-          <div className="bg-white rounded-lg p-3 border border-sky-200 md:col-span-2">
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              Full Name
-            </div>
-            <div className="text-slate-900 text-sm">{country.isoNameFull}</div>
-          </div>
-        )}
-        {country.isoAlpha2 && (
-          <InfoCard
-            title="ISO Code"
-            value={`${country.isoAlpha2} / ${country.isoAlpha3}`}
-            mono
-          />
-        )}
-        {country.callingCode && (
-          <InfoCard
-            title="Calling Code"
-            value={`+${country.callingCode}`}
-            mono
-          />
-        )}
-        {country.currency && (
-          <InfoCard
-            title="Currency"
-            value={`${country.currency.name} (${country.currency.code})`}
-          />
-        )}
-        {country.wbIncomeLevel?.value && (
-          <InfoCard title="Income Level" value={country.wbIncomeLevel.value} />
-        )}
-        {country.isoAdminLanguages && country.isoAdminLanguages.length > 0 && (
-          <div className="bg-white rounded-lg p-3 border border-sky-200 md:col-span-2">
-            <div className="text-slate-500 text-xs uppercase mb-1">
-              Official Languages
-            </div>
-            <div className="text-slate-900 text-sm">
-              {country.isoAdminLanguages.map((lang) => lang.isoName).join(", ")}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    <Group title="Country details">
+      {country.isoNameFull && (
+        <Fact label="Full name" value={country.isoNameFull} />
+      )}
+      {country.isoAlpha2 && (
+        <Fact
+          label="ISO code"
+          value={`${country.isoAlpha2} / ${country.isoAlpha3}`}
+          mono
+        />
+      )}
+      {country.callingCode && (
+        <Fact label="Calling code" value={`+${country.callingCode}`} mono />
+      )}
+      {country.currency && (
+        <Fact
+          label="Currency"
+          value={`${country.currency.name} (${country.currency.code})`}
+        />
+      )}
+      {country.wbIncomeLevel?.value && (
+        <Fact label="Income level" value={country.wbIncomeLevel.value} />
+      )}
+      {country.isoAdminLanguages && country.isoAdminLanguages.length > 0 && (
+        <Fact
+          label="Official languages"
+          value={country.isoAdminLanguages
+            .map((lang) => lang.isoName)
+            .join(", ")}
+        />
+      )}
+    </Group>
   );
 }
 
 function RawDataSection({ location }: { location: LocationData }) {
   return (
-    <div className="bg-sky-50 rounded-lg p-5">
+    <section className="min-w-0 rounded-xl border border-border bg-card">
       <details className="group">
-        <summary className="text-lg font-semibold mb-2 flex items-center gap-2 cursor-pointer hover:text-blue-400 transition-colors">
-          <span className="text-xl">🔍</span>
-          Raw Location Data
-          <span className="text-xs text-slate-500 ml-auto group-open:rotate-180 transition-transform">
-            ▼
-          </span>
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[0.9375rem] font-semibold text-foreground">
+          <span className="min-w-0 truncate">Raw location data</span>
+          <ChevronDown
+            className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+            strokeWidth={2}
+          />
         </summary>
-        <pre className="mt-4 text-xs overflow-x-auto bg-[#e8f4f8] p-4 rounded border border-sky-200 text-slate-600 max-h-96 overflow-y-auto">
-          {JSON.stringify(location, null, 2)}
-        </pre>
+        <div className="border-t border-border p-4">
+          <pre className="max-h-96 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs leading-5 text-muted-foreground">
+            {JSON.stringify(location, null, 2)}
+          </pre>
+        </div>
       </details>
-    </div>
-  );
-}
-
-// Reusable Info Card Component
-function InfoCard({
-  title,
-  value,
-  mono = false,
-}: {
-  title: string;
-  value: React.ReactNode;
-  mono?: boolean;
-}) {
-  return (
-    <div className="bg-white rounded-lg p-4 border border-sky-200">
-      <div className="text-slate-500 text-xs uppercase mb-1">{title}</div>
-      <div
-        className={`text-slate-900 text-sm ${mono ? "font-mono" : "font-medium"}`}
-      >
-        {value}
-      </div>
-    </div>
+    </section>
   );
 }

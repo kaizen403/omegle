@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { Section } from "@/components/console";
+import { cn } from "@/lib/utils";
 
 interface CloudRunData {
   service?: string;
@@ -17,60 +18,68 @@ interface CloudRunInfoProps {
   nodeVersion?: string;
 }
 
-export function CloudRunInfo({ cloudRun, nodeVersion }: CloudRunInfoProps) {
+/**
+ * A label/value detail row.
+ *
+ * The label is fixed width and the value is the growing child, so a long
+ * revision name truncates inside its own cell instead of shoving the label
+ * off the card. The full value is always available on hover.
+ */
+function DetailRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.05 }}
-      className="bg-white border border-sky-100 rounded-lg p-4 sm:p-6"
-    >
-      <h2 className="text-base sm:text-xl font-semibold mb-3 sm:mb-4">
-        ☁️ Cloud Run Deployment
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-          <div className="text-slate-500 text-sm mb-2">Service</div>
-          <div className="text-lg font-mono text-blue-400">
-            {cloudRun.service || cloudRun.serviceName || "N/A"}
-          </div>
-        </div>
+    <div className="flex items-center justify-between gap-4 border-b border-border py-2.5 text-sm last:border-b-0">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "min-w-0 truncate text-right font-medium text-foreground",
+          mono && "font-mono text-[0.8125rem] tabular-nums",
+        )}
+        title={value}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
 
-        <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-          <div className="text-slate-500 text-sm mb-2">Revision</div>
-          <div className="text-lg font-mono text-green-400 truncate">
-            {cloudRun.revision || "N/A"}
-          </div>
-        </div>
+export function CloudRunInfo({ cloudRun, nodeVersion }: CloudRunInfoProps) {
+  const rows: Array<{ label: string; value: string; mono?: boolean }> = [
+    {
+      label: "Service",
+      value: cloudRun.service || cloudRun.serviceName || "N/A",
+      mono: true,
+    },
+    { label: "Revision", value: cloudRun.revision || "N/A", mono: true },
+    { label: "Region", value: cloudRun.region || "N/A", mono: true },
+    {
+      label: "Configuration",
+      value: cloudRun.configuration || "N/A",
+      mono: true,
+    },
+    { label: "Port", value: String(cloudRun.port ?? "N/A"), mono: true },
+    { label: "Node version", value: nodeVersion || "N/A", mono: true },
+  ];
 
-        <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-          <div className="text-slate-500 text-sm mb-2">Region</div>
-          <div className="text-lg font-mono text-purple-400">
-            {cloudRun.region || "N/A"}
-          </div>
-        </div>
-
-        <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-          <div className="text-slate-500 text-sm mb-2">Configuration</div>
-          <div className="text-sm font-mono text-cyan-400 truncate">
-            {cloudRun.configuration || "N/A"}
-          </div>
-        </div>
-
-        <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-          <div className="text-slate-500 text-sm mb-2">Port</div>
-          <div className="text-lg font-mono text-yellow-400">
-            {cloudRun.port || "N/A"}
-          </div>
-        </div>
-
-        <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-          <div className="text-slate-500 text-sm mb-2">Node Version</div>
-          <div className="text-lg font-mono text-pink-400">
-            {nodeVersion || "N/A"}
-          </div>
-        </div>
-      </div>
-    </motion.div>
+  return (
+    <Section title="Cloud Run deployment">
+      <dl className="min-w-0">
+        {rows.map((row) => (
+          <DetailRow
+            key={row.label}
+            label={row.label}
+            value={row.value}
+            mono={row.mono}
+          />
+        ))}
+      </dl>
+    </Section>
   );
 }

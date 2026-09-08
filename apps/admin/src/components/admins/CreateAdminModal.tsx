@@ -1,9 +1,12 @@
+"use client";
+
 import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -44,6 +47,14 @@ export function CreateAdminModal({
   const [role, setRole] = useState<"super-admin" | "admin">("admin");
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(false);
+  // Mirrors whatever went to the page-level banner so the message is also
+  // visible next to the fields it is about.
+  const [formError, setFormError] = useState("");
+
+  const fail = (message: string) => {
+    setFormError(message);
+    setError(message);
+  };
 
   const resetForm = () => {
     setEmail("");
@@ -51,43 +62,45 @@ export function CreateAdminModal({
     setName("");
     setRole("admin");
     setCreated(false);
+    setFormError("");
   };
 
   const handleCreate = async () => {
     if (!email) {
-      setError("Please enter an email address first");
+      fail("Please enter an email address first");
       return;
     }
 
     if (!validateEmail(email).valid) {
-      setError("Please enter a valid email address");
+      fail("Please enter a valid email address");
       return;
     }
 
     if (!password) {
-      setError("Please enter a password first");
+      fail("Please enter a password first");
       return;
     }
 
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
-      setError(passwordValidation.error || "Invalid password");
+      fail(passwordValidation.error || "Invalid password");
       return;
     }
 
     if (!name) {
-      setError("Please enter a name first");
+      fail("Please enter a name first");
       return;
     }
 
     if (!token) {
-      setError("Authentication required");
+      fail("Authentication required");
       return;
     }
 
     try {
       setCreating(true);
       setError("");
+      setFormError("");
 
       const adminData: CreateAdminData = {
         email,
@@ -103,7 +116,10 @@ export function CreateAdminModal({
         `Admin created for ${email}. They can sign in with this password, then set up TOTP.`,
       );
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create admin");
+      const message =
+        err instanceof Error ? err.message : "Failed to create admin";
+      setFormError(message);
+      setError(message);
     } finally {
       setCreating(false);
     }
@@ -111,7 +127,7 @@ export function CreateAdminModal({
 
   const handleDone = () => {
     if (!created) {
-      setError("Create the admin first");
+      fail("Create the admin first");
       return;
     }
 
@@ -122,16 +138,24 @@ export function CreateAdminModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create New Admin</DialogTitle>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-md">
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4 pr-12 text-left">
+          <DialogTitle className="text-base font-semibold">
+            Create admin
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            The new admin signs in with this password, then enrols an
+            authenticator app.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
+              className="h-9"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -142,29 +166,31 @@ export function CreateAdminModal({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="password">Password</Label>
             <Input
               id="password"
               type="password"
+              className="h-9"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
                 setCreated(false);
               }}
-              placeholder="Enter password (min 8 characters)"
+              placeholder="At least 8 characters"
               minLength={8}
               disabled={created}
             />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Minimum 8 characters. Share this password with the new admin.
             </p>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
+              className="h-9"
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
@@ -175,7 +201,7 @@ export function CreateAdminModal({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="role">Role</Label>
             <Select
               value={role}
@@ -185,50 +211,68 @@ export function CreateAdminModal({
               }}
               disabled={created}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select role" />
+              <SelectTrigger id="role" className="h-9 w-full">
+                <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="super-admin">Super Admin</SelectItem>
+                <SelectItem value="super-admin">Super admin</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="pt-2">
-            <Button
-              type="button"
-              variant={created ? "outline" : "default"}
-              className={`w-full ${created ? "bg-green-50 border-green-500 text-green-700 hover:bg-green-100" : ""}`}
-              onClick={handleCreate}
-              disabled={creating || created}
+          {formError && (
+            <p
+              role="alert"
+              className="min-w-0 rounded-lg border border-danger-line bg-danger-surface px-3 py-2 text-sm text-danger"
             >
-              {creating ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : created ? (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Admin created
-                </>
-              ) : (
-                "Create admin"
-              )}
-            </Button>
-            {created && (
-              <p className="text-xs text-green-600 mt-2 text-center">
-                They must enroll an authenticator app on first login.
-              </p>
+              {formError}
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant={created ? "outline" : "default"}
+            className={
+              created
+                ? "h-9 w-full border-success-line bg-success-surface text-success hover:bg-success-surface hover:text-success"
+                : "h-9 w-full"
+            }
+            onClick={handleCreate}
+            disabled={creating || created}
+          >
+            {creating ? (
+              <>
+                <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                Creating
+              </>
+            ) : created ? (
+              <>
+                <Check className="size-4" strokeWidth={2} />
+                Admin created
+              </>
+            ) : (
+              "Create admin"
             )}
-          </div>
+          </Button>
+
+          {created && (
+            <p className="text-center text-xs text-success">
+              They must enrol an authenticator app on first login.
+            </p>
+          )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={creating}>
+
+        <DialogFooter className="shrink-0 flex-wrap justify-end gap-2 border-t border-border px-5 py-3">
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={onClose}
+            disabled={creating}
+          >
             Cancel
           </Button>
-          <Button onClick={handleDone} disabled={!created}>
+          <Button className="h-9" onClick={handleDone} disabled={!created}>
             Done
           </Button>
         </DialogFooter>

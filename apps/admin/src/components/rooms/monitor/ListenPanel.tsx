@@ -2,12 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { Room } from "@/contexts/AdminSocketContext";
-import {
-  highlightIncidents,
-  severityColor,
-  typeLabel,
-} from "@/lib/incidentDetector";
+import { highlightIncidents, typeLabel } from "@/lib/incidentDetector";
 import { detectIncidents } from "@/lib/incidentDetector";
+import type { IncidentSeverity } from "@/types/socket";
+import { EmptyState, StatusPill, type Tone } from "@/components/console";
 
 interface ListenPanelProps {
   messages: Array<{
@@ -15,6 +13,14 @@ interface ListenPanelProps {
     timestamp: number;
   }>;
   currentRoom?: Room;
+}
+
+/** Severity mapped onto the console's five tones, so nothing needs a raw colour. */
+function severityTone(severity: IncidentSeverity): Tone {
+  if (severity === "critical") return "danger";
+  if (severity === "high") return "warning";
+  if (severity === "medium") return "warning";
+  return "neutral";
 }
 
 export function ListenPanel({ messages, currentRoom }: ListenPanelProps) {
@@ -26,27 +32,22 @@ export function ListenPanel({ messages, currentRoom }: ListenPanelProps) {
 
   if (messages.length === 0) {
     return (
-      <div className="flex h-[42vh] items-center justify-center text-slate-500">
-        <div className="text-center">
-          <p className="font-medium">Listening… no messages yet</p>
-          <p className="text-sm text-slate-400">
-            Messages appear here in real-time. Admin is invisible to users in
-            listen mode.
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        title="Listening — no messages yet"
+        description="Messages appear here in real time. Listen mode is invisible to participants."
+      />
     );
   }
 
   return (
     <div className="space-y-3 py-2">
-      <div className="flex items-center gap-2 text-xs text-slate-500 px-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-700">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{" "}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <StatusPill tone="success" dot>
           Listen mode — invisible
-        </span>
-        <span className="ml-auto">{messages.length} messages</span>
+        </StatusPill>
+        <span className="ml-auto tabular-nums">{messages.length} messages</span>
       </div>
+
       {messages.map((msg, idx) => {
         const senderUid = msg.message?.sender ? String(msg.message.sender) : "";
         const isUser1 = currentRoom
@@ -64,38 +65,41 @@ export function ListenPanel({ messages, currentRoom }: ListenPanelProps) {
         return (
           <div
             key={idx}
-            className={`flex ${isUser1 ? "justify-start" : "justify-end"} px-2`}
+            className={`flex ${isUser1 ? "justify-start" : "justify-end"}`}
           >
-            <div
-              className={`max-w-[68%] ${isUser1 ? "items-start" : "items-end"}`}
-            >
+            <div className="min-w-0 max-w-[min(34rem,80%)]">
               <div
-                className={`mb-1 flex items-center gap-2 text-xs ${isUser1 ? "ml-1" : "mr-1 flex-row-reverse"}`}
+                className={`mb-1 flex items-center gap-2 text-xs text-muted-foreground ${
+                  isUser1 ? "" : "flex-row-reverse"
+                }`}
               >
-                <span className="font-semibold text-slate-700">
+                <span className="truncate font-medium text-foreground">
                   {senderName}
                 </span>
-                <span className="text-slate-400">
-                  {new Date(msg.timestamp).toLocaleTimeString()}
+                <span className="shrink-0 tabular-nums">
+                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
-                <span className="font-mono text-slate-400">
+                <span className="shrink-0 font-mono">
                   #{senderUid.slice(-6) || "—"}
                 </span>
               </div>
 
               <div
-                className={`rounded-2xl border px-4 py-3 text-sm leading-relaxed break-words backdrop-blur-sm ${
+                className={`rounded-xl border px-3.5 py-2.5 ${
                   isUser1
-                    ? "rounded-tl-sm border-blue-200 bg-blue-50"
-                    : "rounded-tr-sm border-purple-200 bg-purple-50"
+                    ? "rounded-tl-sm border-border bg-muted"
+                    : "rounded-tr-sm border-info-line bg-info-surface"
                 }`}
               >
-                <p className="whitespace-pre-wrap text-slate-800">
+                <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
                   {parts.map((p, i) =>
                     p.isIncident ? (
                       <mark
                         key={i}
-                        className="rounded bg-amber-200 px-1 py-0.5 font-medium text-amber-900"
+                        className="rounded bg-warning-surface px-1 py-0.5 font-medium text-warning"
                         title={p.type ? typeLabel(p.type) : "incident"}
                       >
                         {p.text}
@@ -108,14 +112,15 @@ export function ListenPanel({ messages, currentRoom }: ListenPanelProps) {
               </div>
 
               {hits.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <div
+                  className={`mt-1.5 flex flex-wrap gap-1.5 ${
+                    isUser1 ? "" : "justify-end"
+                  }`}
+                >
                   {hits.map((h, i) => (
-                    <span
-                      key={i}
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${severityColor(h.severity)}`}
-                    >
-                      {typeLabel(h.type)} • {h.matchedValue.slice(0, 20)}
-                    </span>
+                    <StatusPill key={i} tone={severityTone(h.severity)}>
+                      {typeLabel(h.type)} · {h.matchedValue.slice(0, 20)}
+                    </StatusPill>
                   ))}
                 </div>
               )}

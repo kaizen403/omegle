@@ -1,6 +1,8 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IdChip, StatusPill } from "@/components/console";
 
 interface MonitorHeaderProps {
   roomId: string;
@@ -9,6 +11,12 @@ interface MonitorHeaderProps {
   children?: React.ReactNode;
 }
 
+/**
+ * The fixed top bar of the monitor workspace.
+ *
+ * Nothing in here moves when a message arrives: the row wraps instead of
+ * squeezing, the title group truncates, and the action group is `shrink-0`.
+ */
 export function MonitorHeader({
   roomId,
   isRoomActive,
@@ -16,39 +24,41 @@ export function MonitorHeader({
   children,
 }: MonitorHeaderProps) {
   return (
-    <div className="border-b border-sky-100 bg-[#e8f4f8] p-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={onBack}
-            variant="ghost"
-            size="sm"
-            className="text-slate-500 hover:text-[#0084d1]"
-          >
-            ← Back
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${isRoomActive ? "bg-green-500 animate-pulse" : "bg-gray-500"}`}
-              ></div>
-              <h2 className="text-lg font-semibold">
-                {isRoomActive ? "Live Monitoring" : "Chat Ended"}
-              </h2>
-            </div>
-            <p className="text-sm text-slate-500">
-              Room: <span className="font-mono text-purple-400">{roomId}</span>
-              {!isRoomActive && (
-                <span className="ml-2 text-amber-500/70">
-                  (History preserved)
-                </span>
-              )}
-            </p>
-          </div>
+    <header className="shrink-0 border-b border-border bg-card">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
+        <Button
+          onClick={onBack}
+          variant="ghost"
+          size="sm"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" strokeWidth={2} />
+          Back
+        </Button>
+
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <h2 className="truncate text-[0.9375rem] font-semibold text-foreground">
+            {isRoomActive ? "Live monitoring" : "Chat ended"}
+          </h2>
+          <StatusPill tone={isRoomActive ? "success" : "neutral"} dot>
+            {isRoomActive ? "Live" : "Closed"}
+          </StatusPill>
+          <IdChip
+            value={roomId}
+            title={roomId}
+            className="max-w-[14rem] shrink-0"
+          />
+          {!isRoomActive && (
+            <span className="text-xs text-muted-foreground">
+              History preserved
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">{children}</div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {children}
+        </div>
       </div>
-    </div>
+    </header>
   );
 }

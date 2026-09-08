@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Room } from "@/contexts/AdminSocketContext";
 import PageHeader from "@/components/layout/PageHeader";
+import { PageBody } from "@/components/console";
 import RoomStats from "./RoomStats";
 import SearchBar from "./SearchBar";
 import RoomTable from "./RoomTable";
@@ -35,45 +35,31 @@ export default function RoomListView({
     <>
       <PageHeader title="Rooms" showConnectionStatus={true} />
 
-      <div className="p-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <RoomStats
-            totalRooms={rooms.length}
-            totalParticipants={rooms.length * 2}
-            averageDuration={averageDuration}
-          />
-        </motion.div>
+      {/* PageBody owns the gutter, the max width and the scroll. No page-level
+          padding here, and no staggered entrance animations — the rooms list
+          re-renders every second, and animating it made the whole page shuffle. */}
+      <PageBody>
+        <RoomStats
+          totalRooms={rooms.length}
+          totalParticipants={rooms.length * 2}
+          averageDuration={averageDuration}
+        />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
-          <SearchBar
-            searchQuery={searchQuery}
-            onSearchChange={onSearchChange}
-            onRefresh={onRefresh}
-          />
-        </motion.div>
+        <SearchBar
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          onRefresh={onRefresh}
+        />
 
         {error && <ErrorBanner error={error} />}
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <RoomTable
-            rooms={filteredRooms}
-            onCloseRoom={onCloseRoom}
-            searchQuery={searchQuery}
-            currentTime={currentTime}
-          />
-        </motion.div>
-      </div>
+        <RoomTable
+          rooms={filteredRooms}
+          onCloseRoom={onCloseRoom}
+          searchQuery={searchQuery}
+          currentTime={currentTime}
+        />
+      </PageBody>
     </>
   );
 }

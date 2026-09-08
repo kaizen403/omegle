@@ -5,12 +5,12 @@ import {
   LayoutDashboard,
   Users,
   History,
-  MessageSquare,
+  MessagesSquare,
   Activity,
-  FileText,
+  Archive,
   LogOut,
-  ChevronUp,
-  User2,
+  ChevronsUpDown,
+  UserCog,
   Bot,
   ShieldAlert,
 } from "lucide-react";
@@ -34,65 +34,56 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthProvider";
 
-// Menu items
-const items = [
+type Role = "admin" | "super-admin";
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: Role[];
+}
+
+/**
+ * Navigation, grouped by what an admin is actually doing.
+ *
+ * Two corrections to the old list: "Logs" pointed at /home/logs, which has no
+ * page and 404'd, and the Archives page existed with no way to reach it.
+ */
+const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
-    title: "Dashboard",
-    url: "/home",
-    icon: LayoutDashboard,
-    roles: ["admin", "super-admin"],
+    label: "Live",
+    items: [
+      { title: "Dashboard", url: "/home", icon: LayoutDashboard },
+      { title: "Users", url: "/home/users", icon: Users },
+      { title: "Rooms", url: "/home/rooms", icon: MessagesSquare },
+    ],
   },
   {
-    title: "Users",
-    url: "/home/users",
-    icon: Users,
-    roles: ["admin", "super-admin"],
+    label: "Review",
+    items: [
+      { title: "Moderation", url: "/home/moderation", icon: ShieldAlert },
+      { title: "Archives", url: "/home/archives", icon: Archive },
+      { title: "User history", url: "/home/user-history", icon: History },
+    ],
   },
   {
-    title: "User History",
-    url: "/home/user-history",
-    icon: History,
-    roles: ["admin", "super-admin"],
-  },
-  {
-    title: "Rooms",
-    url: "/home/rooms",
-    icon: MessageSquare,
-    roles: ["admin", "super-admin"],
-  },
-  {
-    title: "Moderation",
-    url: "/home/moderation",
-    icon: ShieldAlert,
-    roles: ["admin", "super-admin"],
-  },
-  {
-    title: "Bots",
-    url: "/home/bots",
-    icon: Bot,
-    roles: ["super-admin"], // Only super-admin can access
-  },
-  {
-    title: "Health",
-    url: "/home/health",
-    icon: Activity,
-    roles: ["admin", "super-admin"],
-  },
-  {
-    title: "Logs",
-    url: "/home/logs",
-    icon: FileText,
-    roles: ["admin", "super-admin"],
-  },
-  {
-    title: "Admins",
-    url: "/home/admins",
-    icon: User2,
-    roles: ["super-admin"], // Only super-admin can access
+    label: "System",
+    items: [
+      { title: "Health", url: "/home/health", icon: Activity },
+      { title: "Bots", url: "/home/bots", icon: Bot, roles: ["super-admin"] },
+      {
+        title: "Admins",
+        url: "/home/admins",
+        icon: UserCog,
+        roles: ["super-admin"],
+      },
+    ],
   },
 ];
 
@@ -103,82 +94,107 @@ interface AppSidebarProps {
 export function AppSidebar({ onLogout }: AppSidebarProps) {
   const pathname = usePathname();
   const { admin } = useAuth();
+  const role = admin?.role ?? "";
+
+  // /home must match exactly or it stays highlighted on every child route.
+  const isActive = (url: string) =>
+    url === "/home" ? pathname === "/home" : pathname.startsWith(url);
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
-      <SidebarHeader>
+      {/* Wordmark only — no icon tile. The whole header is hidden when the
+          sidebar collapses to the icon rail, since there is no glyph left to
+          stand in for it at 3rem wide. */}
+      <SidebarHeader className="border-b border-sidebar-border group-data-[collapsible=icon]:hidden">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <div className="flex items-center gap-2">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <LayoutDashboard className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Admin Portal</span>
-                  <span className="truncate text-xs">Omegle</span>
-                </div>
-              </div>
+              <Link href="/home">
+                <span className="grid min-w-0 flex-1 text-left leading-tight">
+                  <span className="truncate text-sm font-semibold text-foreground">
+                    Omegle
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    Admin console
+                  </span>
+                </span>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items
-                .filter(
-                  (item) =>
-                    !item.roles || item.roles.includes(admin?.role || ""),
-                )
-                .map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={pathname === item.url}>
-                      <Link href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {NAV_GROUPS.map((group) => {
+          const items = group.items.filter(
+            (item) => !item.roles || item.roles.includes(role as Role),
+          );
+          if (items.length === 0) return null;
+
+          return (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground">
+                {group.label}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {items.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.url)}
+                        tooltip={item.title}
+                      >
+                        <Link href={item.url}>
+                          <item.icon className="size-4" />
+                          <span className="truncate">{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton
                   size="lg"
-                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  className="data-[state=open]:bg-sidebar-accent"
                 >
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-400 to-[#0084d1] text-white font-semibold text-sm">
-                    {admin?.email?.charAt(0).toUpperCase() || "A"}
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">
+                  <span className="grid min-w-0 flex-1 text-left leading-tight">
+                    <span className="truncate text-sm font-medium text-foreground">
                       {admin?.name || "Admin"}
                     </span>
-                    <span className="truncate text-xs">
-                      {admin?.email || "admin@example.com"}
+                    <span className="truncate text-xs text-muted-foreground">
+                      {admin?.role === "super-admin" ? "Super admin" : "Admin"}
                     </span>
-                  </div>
-                  <ChevronUp className="ml-auto size-4" />
+                  </span>
+                  <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" className="w-56">
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <span className="block truncate text-sm font-medium">
+                    {admin?.name || "Admin"}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {admin?.email || "—"}
+                  </span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-red-600 focus:text-red-600 cursor-pointer"
+                  className="cursor-pointer text-danger focus:text-danger"
                   onClick={onLogout}
                 >
                   <LogOut className="mr-2 size-4" />
-                  Logout
+                  Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

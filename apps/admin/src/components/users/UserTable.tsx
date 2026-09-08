@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, memo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, Fingerprint, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Pagination,
@@ -12,8 +13,19 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { User, isUserInSameRoomAsPrevious } from "./utils";
-import { shortHash, riskBadge } from "@/lib/fingerprint";
+import {
+  Section,
+  TableShell,
+  Th,
+  Td,
+  Tr,
+  EmptyState,
+  StatusPill,
+  IdChip,
+  type Tone,
+} from "@/components/console";
+import { User } from "./utils";
+import { shortHash } from "@/lib/fingerprint";
 import { UserFingerprintSheet } from "./UserFingerprintSheet";
 
 interface UserTableProps {
@@ -24,26 +36,53 @@ interface UserTableProps {
   isSuperAdmin?: boolean;
 }
 
-// Memoized row component to prevent re-renders when other users update
+const STATE_TONE: Record<User["state"], Tone> = {
+  active: "success",
+  queue: "warning",
+  idle: "neutral",
+};
+
+const STATE_LABEL: Record<User["state"], string> = {
+  active: "Active",
+  queue: "In queue",
+  idle: "Idle",
+};
+
+/**
+ * Fingerprint risk as a console tone rather than the raw palette classes from
+ * `lib/fingerprint` — those were dark-theme values that read as washed out on
+ * the light surface.
+ */
+function riskInfo(score?: number | null): { label: string; tone: Tone } {
+  if (score === undefined || score === null)
+    return { label: "Unrated", tone: "neutral" };
+  if (score >= 80) return { label: `High ${score}`, tone: "danger" };
+  if (score >= 50) return { label: `Medium ${score}`, tone: "warning" };
+  return { label: `Low ${score}`, tone: "success" };
+}
+
+const checkboxClass =
+  "size-4 shrink-0 cursor-pointer rounded border-input accent-primary";
+
 interface UserRowProps {
   user: User;
   isSelected: boolean;
-  isSameRoomAsPrev: boolean;
-  partnerInList: User | null;
+  partner: User | null;
   onToggleSelection: (uid: number) => void;
   onKickUser: (uid: number) => void;
   onMonitorRoom: (roomId: string) => void;
+  onOpenFingerprint: (user: User) => void;
   isSuperAdmin: boolean;
 }
 
 const UserRow = memo(function UserRow({
   user,
   isSelected,
-  isSameRoomAsPrev,
-  partnerInList,
+  partner,
   onToggleSelection,
   onKickUser,
   onMonitorRoom,
+  onOpenFingerprint,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isSuperAdmin,
 }: UserRowProps) {
@@ -61,198 +100,131 @@ const UserRow = memo(function UserRow({
     }
   }, [onMonitorRoom, user.roomId]);
 
-  const fpHash =
-    (
-      user as unknown as {
-        fingerprintHash?: string | null;
-        fingerprint?: { hash?: string; riskScore?: number } | null;
-      }
-    ).fingerprintHash ??
-    (user as unknown as { fingerprint?: { hash?: string } | null }).fingerprint
-      ?.hash ??
-    null;
-  const risk = riskBadge(
-    (user as unknown as { fingerprint?: { riskScore?: number } | null })
-      .fingerprint?.riskScore,
-  );
-  const incidentCount =
-    (user as unknown as { incidentCount?: number }).incidentCount ?? 0;
+  const handleFingerprint = useCallback(() => {
+    onOpenFingerprint(user);
+  }, [onOpenFingerprint, user]);
+
+  const fpHash = user.fingerprintHash ?? user.fingerprint?.hash ?? null;
+  const risk = riskInfo(user.fingerprint?.riskScore);
+  const incidentCount = user.incidentCount ?? 0;
 
   return (
-    <div
-      className={`grid grid-cols-[48px_minmax(220px,1fr)_110px_100px_150px_170px_170px_150px] gap-3 px-4 py-3 border-b border-sky-100 hover:bg-sky-50/50 group ${isSelected ? "bg-sky-50" : ""}`}
-    >
-      {/* Checkbox */}
-      <div className="flex items-center">
+    <Tr selected={isSelected}>
+      <Td className="w-11">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={handleCheckbox}
-          className="w-4 h-4 rounded bg-sky-50 border-sky-200 text-blue-600 focus:ring-blue-500"
+          aria-label={`Select ${user.name}`}
+          className={checkboxClass}
         />
-      </div>
+      </Td>
 
       {/* User */}
-      <div className="flex items-center gap-2 min-w-0">
-        {user.roomId && partnerInList && (
-          <div className="flex flex-col items-center flex-shrink-0">
-            {isSameRoomAsPrev ? (
-              <div className="text-purple-400 text-xs">└─</div>
-            ) : (
-              <div className="text-purple-400 text-xs">┌─</div>
-            )}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold text-slate-900 group-hover:text-[#0084d1] transition-colors flex items-center gap-2">
-            <span className="truncate">{user.name}</span>
-            {user.roomId && partnerInList && (
-              <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full whitespace-nowrap flex-shrink-0">
-                🔗 Paired
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 flex-wrap">
-            ID: {user.uid}
-            {fpHash && (
-              <span
-                className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-700"
-                title={fpHash}
-              >
-                {shortHash(fpHash, 7)}
-              </span>
-            )}
+      <Td>
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium text-foreground">
+              {user.name}
+            </span>
             {incidentCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-bold text-white">
-                {incidentCount}⚠
-              </span>
+              <StatusPill tone="danger" className="tabular-nums">
+                {incidentCount} flag{incidentCount === 1 ? "" : "s"}
+              </StatusPill>
             )}
           </div>
-          {fpHash && (
-            <div
-              className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${risk.className}`}
-            >
-              fp {shortHash(fpHash, 6)} · {risk.label}
-            </div>
-          )}
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            <IdChip value={user.uid} />
+            <span className="truncate text-xs text-muted-foreground capitalize">
+              {user.gender}
+            </span>
+          </div>
         </div>
-      </div>
+      </Td>
 
       {/* Status */}
-      <div className="flex items-center">
-        <span
-          className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wide whitespace-nowrap ${
-            user.state === "active"
-              ? "bg-green-500/20 text-green-400 border border-green-500/30"
-              : user.state === "queue"
-                ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-                : "bg-slate-100 text-slate-600 border border-sky-200"
-          }`}
-        >
-          {user.state === "active" && (
-            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
-          )}
-          {user.state}
-        </span>
-      </div>
+      <Td>
+        <StatusPill tone={STATE_TONE[user.state]} dot>
+          {STATE_LABEL[user.state]}
+        </StatusPill>
+      </Td>
 
-      {/* Gender */}
-      <div className="flex items-center">
-        <span
-          className={`inline-flex items-center gap-1 text-xs px-2 sm:px-3 py-1 rounded-full font-semibold whitespace-nowrap ${
-            user.gender === "male"
-              ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-              : "bg-pink-500/20 text-pink-400 border border-pink-500/30"
-          }`}
-        >
-          {user.gender === "male" ? "♂" : "♀"} {user.gender}
-        </span>
-      </div>
-
-      {/* IP Address */}
-      <div className="flex items-center">
-        <span className="text-sm font-mono text-slate-600">
-          {user.clientIP || "N/A"}
-        </span>
-      </div>
-
-      {/* Fingerprint */}
-      <div className="flex items-center">
-        {fpHash ? (
-          <span
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-xs text-slate-700"
-            title={fpHash}
-          >
-            {shortHash(fpHash, 8)}
-            <span
-              className={`ml-1 rounded-full border px-1 py-0.5 text-[10px] ${risk.className}`}
-            >
-              {risk.label.split(" ")[0]}
-            </span>
-          </span>
-        ) : (
-          <span className="text-xs text-slate-400">— no fp</span>
-        )}
-      </div>
-
-      {/* Room Info */}
-      <div className="flex items-center">
+      {/* Paired with */}
+      <Td className="hidden md:table-cell">
         {user.roomId ? (
-          <div className="space-y-1">
-            <div className="text-xs text-slate-500">
-              Room:{" "}
-              <span className="text-purple-400 font-mono">
-                {user.roomId.slice(0, 8)}...
-              </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm text-foreground">
+              {partner ? partner.name : `Partner #${user.partnerId ?? "—"}`}
             </div>
-            <div className="text-xs text-slate-500">
-              Partner: <span className="text-slate-800">#{user.partnerId}</span>
-            </div>
+            <IdChip
+              value={user.roomId.slice(0, 8)}
+              prefix="room "
+              title={user.roomId}
+              className="mt-0.5"
+            />
           </div>
         ) : (
-          <span className="text-xs text-slate-500">-</span>
+          <span className="text-sm text-muted-foreground">Not paired</span>
         )}
-      </div>
+      </Td>
+
+      {/* Fingerprint */}
+      <Td className="hidden xl:table-cell">
+        {fpHash ? (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <IdChip value={shortHash(fpHash, 8)} prefix="" title={fpHash} />
+            <StatusPill tone={risk.tone}>{risk.label}</StatusPill>
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">None</span>
+        )}
+      </Td>
+
+      {/* IP address */}
+      <Td className="hidden lg:table-cell">
+        <span className="font-mono text-xs text-muted-foreground">
+          {user.clientIP || "Unknown"}
+        </span>
+      </Td>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-slate-600 hover:bg-slate-100 text-[10px] sm:text-xs px-1.5 py-1 h-6 whitespace-nowrap"
-          onClick={() => {
-            // open fingerprint sheet via custom event — row owns no sheet state; bubble via callback would re-render all rows
-            // Instead we dispatch and let the table handle it (see below)
-            const ev = new CustomEvent("open-fp-sheet", { detail: user });
-            window.dispatchEvent(ev);
-          }}
-          title="View fingerprint"
-        >
-          FP
-        </Button>
-        {user.roomId && (
+      <Td align="right">
+        <div className="flex items-center justify-end gap-1">
           <Button
             variant="ghost"
-            size="sm"
-            className="text-purple-400 hover:bg-purple-900/20 text-[10px] sm:text-xs px-1.5 py-1 h-6 whitespace-nowrap"
-            onClick={handleMonitor}
+            size="icon-sm"
+            onClick={handleFingerprint}
+            title="View fingerprint"
+            aria-label={`View fingerprint for ${user.name}`}
           >
-            Monitor
+            <Fingerprint className="size-4" strokeWidth={2} />
           </Button>
-        )}
-        {user.state === "active" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-red-400 hover:bg-red-900/20 text-[10px] sm:text-xs px-1.5 py-1 h-6 whitespace-nowrap"
-            onClick={handleKick}
-            title="Kick user from room"
-          >
-            Kick
-          </Button>
-        )}
-      </div>
-    </div>
+          {user.roomId && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleMonitor}
+              title="Monitor room"
+              aria-label={`Monitor room for ${user.name}`}
+            >
+              <Eye className="size-4" strokeWidth={2} />
+            </Button>
+          )}
+          {user.state === "active" && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleKick}
+              title="Kick user from room"
+              aria-label={`Kick ${user.name}`}
+              className="text-danger hover:bg-danger-surface hover:text-danger"
+            >
+              <LogOut className="size-4" strokeWidth={2} />
+            </Button>
+          )}
+        </div>
+      </Td>
+    </Tr>
   );
 });
 
@@ -268,7 +240,6 @@ export default function UserTable({
   const [fpUser, setFpUser] = useState<User | null>(null);
   const itemsPerPage = 50;
 
-  // Pagination calculations
   const totalPages = Math.ceil(users.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -277,15 +248,12 @@ export default function UserTable({
     [users, startIndex, endIndex],
   );
 
-  // Reset to page 1 when users list changes significantly
-
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(1);
     }
   }, [totalPages, currentPage]);
 
-  // Memoized monitor room handler
   const handleMonitorRoom = useCallback(
     (roomId: string) => {
       router.push(`/home/rooms?monitor=${roomId}`);
@@ -293,7 +261,10 @@ export default function UserTable({
     [router],
   );
 
-  // Memoized header checkbox handler
+  const handleOpenFingerprint = useCallback((user: User) => {
+    setFpUser(user);
+  }, []);
+
   const handleSelectAllOnPage = useCallback(
     (checked: boolean) => {
       if (checked) {
@@ -313,7 +284,6 @@ export default function UserTable({
     [currentUsers, selectedUsers, onToggleSelection],
   );
 
-  // Memoize "all selected" check to prevent recalculation on every render
   const allCurrentUsersSelected = useMemo(() => {
     return (
       currentUsers.length > 0 &&
@@ -321,88 +291,78 @@ export default function UserTable({
     );
   }, [currentUsers, selectedUsers]);
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as User;
-      setFpUser(detail);
-    };
-    window.addEventListener("open-fp-sheet", handler as EventListener);
-    return () =>
-      window.removeEventListener("open-fp-sheet", handler as EventListener);
-  }, []);
+  /**
+   * Rows are ordered by state then uid, so a pair is rarely adjacent any more.
+   * One index keeps the per-row partner lookup O(1) instead of scanning the
+   * whole list once per row.
+   */
+  const byUid = useMemo(() => {
+    const map = new Map<number, User>();
+    users.forEach((u) => map.set(u.uid, u));
+    return map;
+  }, [users]);
 
   if (users.length === 0) {
     return (
-      <div className="bg-white border border-sky-100 rounded-lg p-12 text-center">
-        <div className="text-6xl mb-4">👥</div>
-        <h3 className="text-xl font-semibold mb-2">No Users Found</h3>
-        <p className="text-slate-500">No users are currently connected</p>
-      </div>
+      <Section className="overflow-hidden" contentClassName="p-0 sm:p-0">
+        <EmptyState
+          title="No users found"
+          description="Nobody matches this filter right now. Clear the search or switch tabs to see everyone who is connected."
+        />
+      </Section>
     );
   }
 
   return (
-    <div className="bg-white border border-sky-100 rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <div className="min-w-[1250px]">
-          {/* Header */}
-          <div className="grid grid-cols-[48px_minmax(220px,1fr)_110px_100px_150px_170px_170px_150px] gap-3 px-4 py-3 bg-[#e8f4f8] border-b border-sky-100">
-            <div className="flex items-center">
+    <Section className="overflow-hidden" contentClassName="p-0 sm:p-0">
+      <TableShell>
+        <thead>
+          <tr>
+            <Th width="44px">
               <input
                 type="checkbox"
                 checked={allCurrentUsersSelected}
                 onChange={(e) => handleSelectAllOnPage(e.target.checked)}
-                className="w-4 h-4 rounded bg-sky-50 border-sky-200 text-blue-600 focus:ring-blue-500"
+                aria-label="Select every user on this page"
+                className={checkboxClass}
               />
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              USER
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              STATUS
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              GENDER
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              IP ADDRESS
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              FINGERPRINT
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              ROOM INFO
-            </div>
-            <div className="text-xs font-semibold text-slate-500 uppercase text-right">
-              ACTIONS
-            </div>
-          </div>
-
-          {/* Body */}
-          <div>
-            {currentUsers.map((user, index) => {
-              const isSameRoomAsPrev = isUserInSameRoomAsPrevious(users, index);
-              const partnerInList = user.roomId
-                ? (users.find((u) => u.uid === user.partnerId) ?? null)
-                : null;
-
-              return (
-                <UserRow
-                  key={user.uid}
-                  user={user}
-                  isSelected={selectedUsers.has(user.uid)}
-                  isSameRoomAsPrev={isSameRoomAsPrev}
-                  partnerInList={partnerInList}
-                  onToggleSelection={onToggleSelection}
-                  onKickUser={onKickUser}
-                  onMonitorRoom={handleMonitorRoom}
-                  isSuperAdmin={isSuperAdmin}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
+            </Th>
+            <Th>User</Th>
+            <Th width="120px">Status</Th>
+            <Th width="190px" className="hidden md:table-cell">
+              Paired with
+            </Th>
+            <Th width="230px" className="hidden xl:table-cell">
+              Fingerprint
+            </Th>
+            <Th width="140px" className="hidden lg:table-cell">
+              IP address
+            </Th>
+            <Th width="124px" align="right">
+              Actions
+            </Th>
+          </tr>
+        </thead>
+        <tbody>
+          {currentUsers.map((user) => (
+            <UserRow
+              key={user.uid}
+              user={user}
+              isSelected={selectedUsers.has(user.uid)}
+              partner={
+                user.partnerId !== undefined
+                  ? (byUid.get(user.partnerId) ?? null)
+                  : null
+              }
+              onToggleSelection={onToggleSelection}
+              onKickUser={onKickUser}
+              onMonitorRoom={handleMonitorRoom}
+              onOpenFingerprint={handleOpenFingerprint}
+              isSuperAdmin={isSuperAdmin}
+            />
+          ))}
+        </tbody>
+      </TableShell>
 
       <UserFingerprintSheet
         user={fpUser}
@@ -410,14 +370,13 @@ export default function UserTable({
         onOpenChange={(o) => !o && setFpUser(null)}
       />
 
-      {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-4 pb-3 sm:pb-4">
-          <div className="text-xs sm:text-sm text-slate-500">
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-border px-4 py-3 sm:flex-row">
+          <p className="text-sm text-muted-foreground tabular-nums">
             Showing {startIndex + 1} to {Math.min(endIndex, users.length)} of{" "}
             {users.length} users
-          </div>
-          <Pagination>
+          </p>
+          <Pagination className="mx-0 w-auto justify-end">
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
@@ -432,7 +391,6 @@ export default function UserTable({
 
               {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                 (pageNum) => {
-                  // Show first page, last page, current page, and pages around current
                   const showPage =
                     pageNum === 1 ||
                     pageNum === totalPages ||
@@ -458,7 +416,7 @@ export default function UserTable({
                       <PaginationLink
                         onClick={() => setCurrentPage(pageNum)}
                         isActive={currentPage === pageNum}
-                        className="cursor-pointer"
+                        className="cursor-pointer tabular-nums"
                       >
                         {pageNum}
                       </PaginationLink>
@@ -483,6 +441,6 @@ export default function UserTable({
           </Pagination>
         </div>
       )}
-    </div>
+    </Section>
   );
 }

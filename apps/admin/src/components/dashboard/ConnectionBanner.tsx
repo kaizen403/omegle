@@ -8,18 +8,12 @@ export function ConnectionBanner({ isConnected }: ConnectionBannerProps) {
   if (isConnected) return null;
 
   return (
-    <div className="mb-4 p-3 sm:p-4 bg-red-900/20 border border-red-900/50 rounded-lg">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-        <div>
-          <div className="font-semibold text-red-400 text-sm sm:text-base">
-            Connection Lost
-          </div>
-          <div className="text-xs sm:text-sm text-slate-500">
-            Attempting to reconnect...
-          </div>
-        </div>
-      </div>
+    <div className="min-w-0 rounded-xl border border-danger-line bg-danger-surface p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <p className="text-sm font-semibold text-danger">Connection lost</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">
+        Attempting to reconnect. Numbers on this page are frozen until the
+        socket comes back.
+      </p>
     </div>
   );
 }

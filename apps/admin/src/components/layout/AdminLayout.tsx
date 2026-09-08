@@ -50,7 +50,12 @@ export default function AdminLayout({ children, onLogout }: AdminLayoutProps) {
     <SidebarProvider>
       <AppSidebar onLogout={onLogout} />
       <SidebarInset>
-        <div className="flex h-full flex-col">{children}</div>
+        {/* Fixed-height flex column: the header stays put and PageBody owns
+            the scroll. Previously the whole inset scrolled, so the sticky
+            header and the page content fought over the same scroll box. */}
+        <div className="flex h-svh min-w-0 flex-col overflow-hidden">
+          {children}
+        </div>
       </SidebarInset>
       {showRevokedOverlay && <SessionRevokedOverlay onLogout={onLogout} />}
     </SidebarProvider>

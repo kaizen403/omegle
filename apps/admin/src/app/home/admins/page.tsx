@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Plus, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useAdminSocketContext } from "@/contexts/AdminSocketContext";
@@ -13,7 +12,14 @@ import { AdminList } from "@/components/admins/AdminList";
 import { CreateAdminModal } from "@/components/admins/CreateAdminModal";
 import { EditAdminModal } from "@/components/admins/EditAdminModal";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  EmptyState,
+  PageBody,
+  Section,
+  Toolbar,
+  ToolbarActions,
+  ToolbarMain,
+} from "@/components/console";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -113,76 +119,79 @@ export default function AdminsPage() {
   if (!isSuperAdmin) {
     return (
       <AdminLayout onLogout={logout}>
-        <PageHeader title="Admin Management" />
-        <div className="p-6">
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-center text-gray-500">
-                You don&apos;t have permission to access this page. Only super
-                admins can manage other administrators.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <PageHeader title="Admin management" />
+        <PageBody>
+          <Section contentClassName="p-0">
+            <EmptyState
+              title="You cannot manage admins"
+              description="Only super admins can create, edit, or remove other administrators."
+            />
+          </Section>
+        </PageBody>
       </AdminLayout>
     );
   }
 
   return (
     <AdminLayout onLogout={logout}>
-      <PageHeader title="Admin Management" />
+      <PageHeader
+        title="Admin management"
+        description="Accounts and live sessions for this console"
+      />
 
-      <div className="p-4 sm:p-6">
-        {/* Success/Error Messages */}
+      <PageBody>
         {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-4 bg-emerald-900/30 border border-emerald-700/50 rounded-lg text-emerald-300"
+          <p
+            role="status"
+            className="min-w-0 rounded-lg border border-success-line bg-success-surface px-3 py-2.5 text-sm text-success"
           >
             {success}
-          </motion.div>
+          </p>
         )}
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-4 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300"
+          <p
+            role="alert"
+            className="min-w-0 rounded-lg border border-danger-line bg-danger-surface px-3 py-2.5 text-sm text-danger"
           >
             {error}
-          </motion.div>
+          </p>
         )}
 
-        {/* Action Buttons */}
-        <div className="mb-6 flex gap-3">
-          <Button
-            onClick={handleOpenCreateModal}
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create New Admin
-          </Button>
-          <Button
-            variant="outline"
-            onClick={fetchSessions}
-            disabled={sessionsLoading}
-            className="border-sky-200 text-slate-600 hover:bg-sky-50"
-          >
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${sessionsLoading ? "animate-spin" : ""}`}
-            />
-            Refresh Sessions
-          </Button>
-        </div>
+        <Toolbar>
+          <ToolbarMain>
+            <p className="text-sm text-muted-foreground">
+              <span className="tabular-nums">{admins.length}</span>{" "}
+              {admins.length === 1 ? "admin" : "admins"} ·{" "}
+              <span className="tabular-nums">{sessions.length}</span> active{" "}
+              {sessions.length === 1 ? "session" : "sessions"}
+            </p>
+          </ToolbarMain>
+          <ToolbarActions>
+            <Button
+              variant="outline"
+              className="h-9"
+              onClick={fetchSessions}
+              disabled={sessionsLoading}
+            >
+              <RefreshCw
+                className={`size-4 ${sessionsLoading ? "animate-spin" : ""}`}
+                strokeWidth={2}
+              />
+              Refresh sessions
+            </Button>
+            <Button className="h-9" onClick={handleOpenCreateModal}>
+              <Plus className="size-4" strokeWidth={2} />
+              Create admin
+            </Button>
+          </ToolbarActions>
+        </Toolbar>
 
-        {/* Active Sessions */}
         <AdminSessions
           sessions={sessions}
           loading={sessionsLoading}
           onRevokeSession={handleRevokeClick}
         />
 
-        {/* Admins List */}
         <AdminList
           admins={admins}
           sessions={sessions}
@@ -191,7 +200,7 @@ export default function AdminsPage() {
           onDelete={handleDeleteClick}
           onRevokeSession={handleRevokeClick}
         />
-      </div>
+      </PageBody>
 
       {/* Modals */}
       <CreateAdminModal
@@ -217,21 +226,23 @@ export default function AdminsPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Admin</AlertDialogTitle>
+            <AlertDialogTitle>Delete this admin?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this admin? This action cannot be
-              undone. The admin will be permanently removed from the system.
+              The account is removed permanently and cannot be restored.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>
+          <AlertDialogFooter className="flex-wrap gap-2">
+            <AlertDialogCancel
+              className="h-9"
+              onClick={() => setPendingDeleteId(null)}
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="h-9 bg-destructive text-white hover:bg-destructive/90"
             >
-              Delete
+              Delete admin
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -241,35 +252,25 @@ export default function AdminsPage() {
       <AlertDialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Sessions</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <span className="block">
-                Are you sure you want to revoke all active sessions for{" "}
-                <strong className="text-slate-900">
-                  {pendingRevokeAdmin?.name}
-                </strong>
-                ?
-              </span>
-              <span className="block mt-2">They will be:</span>
-              <ul className="list-disc list-inside mt-1 space-y-1">
-                <li>Immediately disconnected</li>
-                <li>Logged out from all devices</li>
-                <li>Shown a notification explaining the revocation</li>
-              </ul>
-              <span className="block mt-2 text-orange-400">
-                This action cannot be undone.
-              </span>
+            <AlertDialogTitle>Revoke all sessions?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRevokeAdmin?.name ?? "This admin"} is disconnected
+              immediately, signed out on every device, and shown a notice
+              explaining why. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingRevokeAdmin(null)}>
+          <AlertDialogFooter className="flex-wrap gap-2">
+            <AlertDialogCancel
+              className="h-9"
+              onClick={() => setPendingRevokeAdmin(null)}
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmRevoke}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
+              className="h-9 bg-destructive text-white hover:bg-destructive/90"
             >
-              Revoke Sessions
+              Revoke sessions
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

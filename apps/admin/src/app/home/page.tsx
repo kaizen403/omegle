@@ -6,6 +6,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useState, useMemo, useCallback } from "react";
 import { formatUptime } from "@/components/health/utils";
+import { PageBody } from "@/components/console";
 import {
   SystemStatusToggle,
   ConnectionBanner,
@@ -121,7 +122,11 @@ export default function HomePage() {
     <AdminLayout onLogout={logout}>
       <PageHeader title="Dashboard" showConnectionStatus={true} />
 
-      <div className="p-4 md:p-6">
+      <PageBody>
+        {/* Connection first: if the socket is down, every number below it is
+            stale and the admin needs to know that before reading any of them. */}
+        <ConnectionBanner isConnected={isConnected} />
+
         {/* Maintenance control - live state comes from the `system_status`
             event, so another admin's toggle shows up here immediately. */}
         <SystemStatusToggle
@@ -133,22 +138,12 @@ export default function HomePage() {
           onToggle={handleSystemToggle}
         />
 
-        {/* Connection Status Banner */}
-        <ConnectionBanner isConnected={isConnected} />
-
-        {/* System Info Card */}
-        <SystemInfoCard
-          isConnected={isConnected}
-          uptime={uptimeLabel}
-          eventsCount={events.length}
-          queueTotal={queueTotal}
-        />
-
-        {/* Real-time analytics */}
+        {/* Real-time analytics: headline figures, then live / totals /
+            throughput / health. */}
         <AnalyticsOverview analytics={analytics} live={live} />
 
-        {/* Visual Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* Distribution charts */}
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
           <UserDistributionChart
             idleUsers={live.idle}
             queueUsers={live.queued}
@@ -162,13 +157,20 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Gender Distribution */}
         <GenderDistribution
           maleUsers={genderSplit.male}
           femaleUsers={genderSplit.female}
           totalUsers={live.connectedUsers}
         />
-      </div>
+
+        {/* This tab's socket and the server behind it. */}
+        <SystemInfoCard
+          isConnected={isConnected}
+          uptime={uptimeLabel}
+          eventsCount={events.length}
+          queueTotal={queueTotal}
+        />
+      </PageBody>
 
       {/* Maintenance confirmation */}
       <SystemStatusModal

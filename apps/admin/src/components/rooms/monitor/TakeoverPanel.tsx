@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Room } from "@/contexts/AdminSocketContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { IdChip, StatusPill } from "@/components/console";
 import { useToast } from "@/contexts/ToastProvider";
 
 interface TakeoverPanelProps {
@@ -56,39 +57,43 @@ export function TakeoverPanel({
     <div className="space-y-4">
       {/* Mode banner */}
       <div
-        className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${
+        className={`flex flex-wrap items-start justify-between gap-3 rounded-xl border p-3 ${
           mode === "takeover"
-            ? "border-amber-200 bg-amber-50"
-            : "border-sky-200 bg-sky-50"
+            ? "border-warning-line bg-warning-surface"
+            : "border-info-line bg-info-surface"
         }`}
       >
-        <div>
-          <div className="text-sm font-semibold text-slate-800">
-            {mode === "takeover"
-              ? "Takeover active — you are now a participant"
-              : "Listen only — users cannot see you"}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill tone={mode === "takeover" ? "warning" : "info"} dot>
+              {mode === "takeover" ? "Takeover" : "Listen only"}
+            </StatusPill>
+            <span className="text-sm font-semibold text-foreground">
+              {mode === "takeover"
+                ? "You are now a participant"
+                : "Users cannot see you"}
+            </span>
           </div>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="mt-1 text-xs text-muted-foreground">
             {mode === "takeover"
-              ? "Messages you send appear as “Moderator”. Users will see a system notice when you join."
+              ? "Messages you send appear as “Moderator”. Users see a system notice when you join."
               : "Switch to takeover to warn, redirect or speak on behalf of moderation. This is audited."}
           </p>
           {currentRoom && (
-            <p className="text-xs font-mono text-slate-500 mt-1">
-              {currentRoom.user1.name} (#
-              {String(currentRoom.user1.uid).slice(-6)}) ↔{" "}
-              {currentRoom.user2.name} (#
-              {String(currentRoom.user2.uid).slice(-6)}) • {roomId.slice(0, 8)}
-            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="truncate">{currentRoom.user1.name}</span>
+              <IdChip value={String(currentRoom.user1.uid).slice(-6)} />
+              <span>↔</span>
+              <span className="truncate">{currentRoom.user2.name}</span>
+              <IdChip value={String(currentRoom.user2.uid).slice(-6)} />
+              <span>·</span>
+              <IdChip value={roomId.slice(0, 8)} title={roomId} />
+            </div>
           )}
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex shrink-0 gap-2">
           {mode === "listen" ? (
-            <Button
-              size="sm"
-              onClick={onEnterTakeover}
-              className="bg-amber-600 hover:bg-amber-700 text-white"
-            >
+            <Button size="sm" onClick={onEnterTakeover}>
               Enter takeover
             </Button>
           ) : (
@@ -100,23 +105,22 @@ export function TakeoverPanel({
       </div>
 
       {/* Quick warnings */}
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Quick warning
-        </div>
-        <div className="mt-2 flex gap-2">
+      <div className="rounded-xl border border-border bg-card p-3">
+        <div className="text-sm font-medium text-foreground">Quick warning</div>
+        <div className="mt-2 flex flex-wrap items-start gap-2">
           <Textarea
             value={warnDraft}
             onChange={(e) => setWarnDraft(e.target.value)}
             rows={2}
-            className="text-sm"
-            placeholder="Warning text shown as system message"
+            className="min-w-0 flex-1 text-sm"
+            placeholder="Warning text shown as a system message"
           />
           <Button
             size="sm"
             variant="secondary"
             onClick={handleWarn}
             disabled={!warnDraft.trim()}
+            className="shrink-0"
           >
             Send warning
           </Button>
@@ -130,7 +134,7 @@ export function TakeoverPanel({
             <button
               key={t}
               onClick={() => setWarnDraft(t)}
-              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 hover:bg-white"
+              className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
             >
               {t.slice(0, 28)}…
             </button>
@@ -139,14 +143,14 @@ export function TakeoverPanel({
       </div>
 
       {/* Send as moderator */}
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Speak as Moderator
+      <div className="rounded-xl border border-border bg-card p-3">
+        <div className="text-sm font-medium text-foreground">
+          Speak as moderator
         </div>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="mt-1 text-xs text-muted-foreground">
           Only available in takeover mode. All sends are audit-logged.
         </p>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex flex-wrap items-start gap-2">
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -158,9 +162,9 @@ export function TakeoverPanel({
                 ? "Type a message users will see as Moderator…"
                 : "Enter takeover to send"
             }
-            className="text-sm"
+            className="min-w-0 flex-1 text-sm"
           />
-          <div className="flex flex-col gap-2 shrink-0">
+          <div className="flex shrink-0 flex-col gap-2">
             <Button
               size="sm"
               onClick={handleSend}
@@ -168,7 +172,7 @@ export function TakeoverPanel({
             >
               Send
             </Button>
-            <span className="text-[11px] text-slate-400 text-right">
+            <span className="text-right text-[11px] tabular-nums text-muted-foreground">
               {draft.length}/800
             </span>
           </div>
@@ -176,17 +180,22 @@ export function TakeoverPanel({
       </div>
 
       {/* Danger */}
-      <div className="rounded-xl border border-red-200 bg-red-50 p-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-red-700">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger-line bg-danger-surface p-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-danger">
             End conversation
           </div>
-          <p className="text-xs text-red-600/80">
-            Disconnects both users and closes the room. Use for harassment / PII
-            leaks.
+          <p className="text-xs text-danger/80">
+            Disconnects both users and closes the room. Use for harassment or
+            personal-detail leaks.
           </p>
         </div>
-        <Button size="sm" variant="destructive" onClick={onForceEnd}>
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={onForceEnd}
+          className="shrink-0"
+        >
           Force end room
         </Button>
       </div>

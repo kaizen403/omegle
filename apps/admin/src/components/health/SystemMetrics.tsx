@@ -1,6 +1,13 @@
 "use client";
 
-import { motion } from "framer-motion";
+import {
+  Section,
+  CardGrid,
+  StatCard,
+  MetricRow,
+  BarMeter,
+  type Tone,
+} from "@/components/console";
 import { formatUptime, formatBytes } from "./utils";
 
 interface MemoryData {
@@ -26,6 +33,16 @@ interface SystemMetricsProps {
   cpu?: CpuData;
 }
 
+const MB = 1024 * 1024;
+/** Cloud Run default instance size; the bar is meaningless without a ceiling. */
+const RSS_BUDGET_MB = 512;
+
+function loadTone(pct: number): Tone {
+  if (pct >= 90) return "danger";
+  if (pct >= 75) return "warning";
+  return "success";
+}
+
 export function SystemMetrics({
   uptime,
   totalUsers,
@@ -35,140 +52,103 @@ export function SystemMetrics({
   memory,
   cpu,
 }: SystemMetricsProps) {
+  const rssMb = memory ? Math.round(memory.rss / MB) : 0;
+  const heapUsedMb = memory ? Math.round(memory.heapUsed / MB) : 0;
+  const heapTotalMb = memory
+    ? Math.max(Math.round(memory.heapTotal / MB), 1)
+    : 1;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-      className="bg-white border border-sky-100 rounded-lg p-4 sm:p-6"
-    >
-      <h2 className="text-base sm:text-xl font-semibold mb-3 sm:mb-4">
-        System Metrics
-      </h2>
-      <div className="space-y-4 sm:space-y-6">
-        {/* Basic Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bg-[#e8f4f8] rounded-lg p-3 sm:p-4 border border-sky-100">
-            <div className="text-slate-500 text-xs sm:text-sm mb-1 sm:mb-2">
-              Uptime
-            </div>
-            <div className="text-lg sm:text-2xl font-bold text-blue-400">
-              {formatUptime(uptime || 0)}
-            </div>
-          </div>
+    <div className="min-w-0 space-y-6">
+      <CardGrid min="13rem">
+        <StatCard
+          label="Uptime"
+          value={formatUptime(uptime || 0)}
+          tone="info"
+        />
+        <StatCard
+          label="Total users"
+          value={(totalUsers || 0).toLocaleString()}
+          hint={`Active now: ${(activeUsers || 0).toLocaleString()}`}
+          tone="success"
+        />
+        <StatCard
+          label="Active rooms"
+          value={(activeRooms || 0).toLocaleString()}
+          tone="info"
+        />
+        <StatCard
+          label="Queue size"
+          value={(queuedUsers || 0).toLocaleString()}
+          hint="Users waiting for a match"
+          tone={queuedUsers > 0 ? "warning" : "neutral"}
+        />
+      </CardGrid>
 
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">Total Users</div>
-            <div className="text-2xl font-bold text-green-400">
-              {totalUsers || 0}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              Active: {activeUsers || 0}
-            </div>
-          </div>
-
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">Active Rooms</div>
-            <div className="text-2xl font-bold text-purple-400">
-              {activeRooms || 0}
-            </div>
-          </div>
-
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">Queue Size</div>
-            <div className="text-2xl font-bold text-yellow-400">
-              {queuedUsers || 0}
-            </div>
-          </div>
-        </div>
-
-        {/* Memory Usage */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">Memory RSS</div>
-            {memory ? (
-              <>
-                <div className="text-xl font-bold text-cyan-400">
-                  {formatBytes(memory.rss)}
-                </div>
-                <div className="w-full bg-sky-50 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-cyan-400 h-2 rounded-full"
-                    style={{
-                      width: `${Math.min((memory.rss / (512 * 1024 * 1024)) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="text-slate-500 text-sm">No data</div>
-            )}
-          </div>
-
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">Heap Total</div>
-            {memory ? (
-              <>
-                <div className="text-xl font-bold text-blue-400">
-                  {formatBytes(memory.heapTotal)}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Used: {formatBytes(memory.heapUsed)}
-                </div>
-              </>
-            ) : (
-              <div className="text-slate-500 text-sm">No data</div>
-            )}
-          </div>
-
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">External Memory</div>
-            {memory ? (
-              <div className="text-xl font-bold text-purple-400">
-                {formatBytes(memory.external)}
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+        <Section title="Memory">
+          {memory ? (
+            <div className="min-w-0 space-y-4">
+              <BarMeter
+                label={`Resident set (MB of ${RSS_BUDGET_MB})`}
+                value={rssMb}
+                total={RSS_BUDGET_MB}
+                tone={loadTone((rssMb / RSS_BUDGET_MB) * 100)}
+              />
+              <BarMeter
+                label={`Heap used (MB of ${heapTotalMb})`}
+                value={heapUsedMb}
+                total={heapTotalMb}
+                tone={loadTone((heapUsedMb / heapTotalMb) * 100)}
+              />
+              <div className="min-w-0 divide-y divide-border border-t border-border pt-1">
+                <MetricRow
+                  label="Heap total"
+                  value={formatBytes(memory.heapTotal)}
+                />
+                <MetricRow
+                  label="External"
+                  value={formatBytes(memory.external)}
+                />
+                <MetricRow
+                  label="Array buffers"
+                  value={formatBytes(memory.arrayBuffers || 0)}
+                />
               </div>
-            ) : (
-              <div className="text-slate-500 text-sm">No data</div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No memory data yet.
+            </p>
+          )}
+        </Section>
 
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">Array Buffers</div>
-            {memory ? (
-              <div className="text-xl font-bold text-green-400">
-                {formatBytes(memory.arrayBuffers || 0)}
-              </div>
-            ) : (
-              <div className="text-slate-500 text-sm">No data</div>
-            )}
+        <Section title="CPU time">
+          <div className="min-w-0 divide-y divide-border">
+            <MetricRow
+              label="User time"
+              value={cpu?.user ? `${(cpu.user / 1_000_000).toFixed(2)}s` : "—"}
+            />
+            <MetricRow
+              label="System time"
+              value={
+                cpu?.system ? `${(cpu.system / 1_000_000).toFixed(2)}s` : "—"
+              }
+            />
+            <MetricRow
+              label="Total"
+              value={
+                cpu?.user || cpu?.system
+                  ? `${(((cpu.user || 0) + (cpu.system || 0)) / 1_000_000).toFixed(2)}s`
+                  : "—"
+              }
+            />
           </div>
-        </div>
-
-        {/* CPU Usage */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">CPU User Time</div>
-            {cpu?.user ? (
-              <div className="text-xl font-bold text-orange-400">
-                {(cpu.user / 1000000).toFixed(2)}s
-              </div>
-            ) : (
-              <div className="text-slate-500 text-sm">No data</div>
-            )}
-          </div>
-
-          <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-            <div className="text-slate-500 text-sm mb-2">CPU System Time</div>
-            {cpu?.system ? (
-              <div className="text-xl font-bold text-red-400">
-                {(cpu.system / 1000000).toFixed(2)}s
-              </div>
-            ) : (
-              <div className="text-slate-500 text-sm">No data</div>
-            )}
-          </div>
-        </div>
+          <p className="mt-3 truncate text-xs text-muted-foreground">
+            Cumulative process CPU since start
+          </p>
+        </Section>
       </div>
-    </motion.div>
+    </div>
   );
 }

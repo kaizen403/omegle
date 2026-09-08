@@ -67,7 +67,7 @@ export default function RoomsPage() {
     refreshData();
   }, [refreshData]);
 
-  // Monitor view — now tabbed (Listen / Incidents / Takeover / Fingerprints)
+  // Monitor view — fixed header + tabbed workspace (Listen / Incidents)
   if (monitorRoomId) {
     const currentRoom = rooms.find((r) => r.roomId === monitorRoomId);
     const messages = monitoredRooms.get(monitorRoomId) || [];

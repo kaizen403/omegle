@@ -1,42 +1,48 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { StatusPill, type Tone } from "@/components/console";
 
 interface OverallStatusCardProps {
   status: string;
-  color: string;
+  /** Semantic tone for the status, from the console design system. */
+  color: Tone;
   isConnected: boolean;
 }
 
+/**
+ * The single "is it healthy?" answer, pinned to the top of the page.
+ *
+ * One sentence-case status pill and one connection pill — no giant uppercase
+ * word in a raw Tailwind colour.
+ */
 export function OverallStatusCard({
   status,
   color,
   isConnected,
 }: OverallStatusCardProps) {
+  const label = status
+    ? status.charAt(0).toUpperCase() + status.slice(1)
+    : "Unknown";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white border border-sky-100 rounded-lg p-4 sm:p-6"
-    >
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-        <div>
-          <h2 className="text-lg sm:text-xl font-semibold mb-1 sm:mb-2">
-            Overall Status
-          </h2>
-          <p className="text-slate-500 text-xs sm:text-sm">
-            Real-time system health monitoring
-          </p>
-        </div>
-        <div className="text-left sm:text-right">
-          <div className={`text-2xl sm:text-3xl font-bold ${color} uppercase`}>
-            {status}
-          </div>
-          <div className="text-[10px] sm:text-xs text-slate-500 mt-1">
-            {isConnected ? "Connected" : "Disconnected"}
-          </div>
-        </div>
+    <section className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:px-5">
+      <div className="min-w-0">
+        <h2 className="truncate text-[0.9375rem] font-semibold text-foreground">
+          Overall status
+        </h2>
+        <p className="truncate text-sm text-muted-foreground">
+          Real-time system health monitoring
+        </p>
       </div>
-    </motion.div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <StatusPill tone={color} dot>
+          {label}
+        </StatusPill>
+        <StatusPill tone={isConnected ? "success" : "danger"} dot>
+          {isConnected ? "Connected" : "Disconnected"}
+        </StatusPill>
+      </div>
+    </section>
   );
 }

@@ -1,16 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { MessageSquare, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Section } from "@/components/console";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +23,16 @@ interface SystemPromptEditorProps {
   onReset: () => void;
 }
 
+const PLACEHOLDERS = [
+  "{name}",
+  "{age}",
+  "{year}",
+  "{branch}",
+  "{college}",
+  "{personality}",
+  "{hobbies}",
+];
+
 export function SystemPromptEditor({
   value,
   onChange,
@@ -39,82 +42,69 @@ export function SystemPromptEditor({
 }: SystemPromptEditorProps) {
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
+      <Section
+        title="System prompt"
+        description="The personality and rules every bot is given before it replies."
+        className="h-full"
       >
-        <Card className="bg-white/50 border-sky-100 h-full">
-          <CardHeader className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                  <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
-                  System Prompt
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">
-                  Configure the AI personality and behavior
-                </CardDescription>
-              </div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="self-end sm:self-auto"
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onResetDialogChange(true)}
-                  className="border-sky-200"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Reset
-                </Button>
-              </motion.div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <Textarea
+            id="system-prompt"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Describe how the bots should behave…"
+            spellCheck={false}
+            className="h-[22rem] min-h-[16rem] w-full resize-y overflow-y-auto bg-card font-mono text-sm leading-6 field-sizing-fixed"
+          />
+
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-sm font-medium text-foreground">
+              Available placeholders
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {PLACEHOLDERS.map((token) => (
+                <span key={token} className="id-chip">
+                  {token}
+                </span>
+              ))}
             </div>
-          </CardHeader>
-          <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0 sm:pt-0">
-            <Textarea
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              className="min-h-[200px] sm:min-h-[300px] bg-sky-50 border-sky-200 font-mono text-xs sm:text-sm transition-all focus:border-purple-500/50"
-              placeholder="Enter the system prompt for the AI bots..."
-            />
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-[10px] sm:text-xs text-slate-500 space-y-1"
+            <p className="text-xs text-muted-foreground">
+              These are replaced with the bot&apos;s own details when the prompt
+              is sent.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-4">
+            <span className="min-w-0 text-xs text-muted-foreground tabular-nums">
+              {value.length} characters
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onResetDialogChange(true)}
+              className="shrink-0"
             >
-              <p>
-                <strong>Available placeholders:</strong>
-              </p>
-              <p className="font-mono break-all">
-                {"{name}"} {"{age}"} {"{year}"} {"{branch}"} {"{college}"}{" "}
-                {"{personality}"} {"{hobbies}"}
-              </p>
-            </motion.div>
-          </CardContent>
-        </Card>
-      </motion.div>
+              <RotateCcw className="size-4" strokeWidth={2} />
+              Reset to default
+            </Button>
+          </div>
+        </div>
+      </Section>
 
       {/* Reset Prompt Confirmation */}
       <AlertDialog open={resetDialogOpen} onOpenChange={onResetDialogChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reset System Prompt</AlertDialogTitle>
+            <AlertDialogTitle>Reset system prompt</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to reset the system prompt to the default?
-              This will overwrite your current custom prompt.
+              This replaces the current prompt with the default one. Your custom
+              prompt cannot be recovered afterwards.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onReset}
-              className="bg-orange-600 hover:bg-orange-700"
-            >
-              Reset to Default
+            <AlertDialogAction onClick={onReset}>
+              Reset to default
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

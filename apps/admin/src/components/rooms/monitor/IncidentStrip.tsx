@@ -2,9 +2,15 @@
 
 import { useMemo, useState } from "react";
 import type { Incident, IncidentSeverity, IncidentType } from "@/types/socket";
-import { severityColor, typeLabel } from "@/lib/incidentDetector";
+import { typeLabel } from "@/lib/incidentDetector";
 import { incidentsFromMessage } from "@/lib/incidentDetector";
 import { Button } from "@/components/ui/button";
+import {
+  EmptyState,
+  IdChip,
+  StatusPill,
+  type Tone,
+} from "@/components/console";
 import {
   Select,
   SelectContent,
@@ -24,6 +30,33 @@ interface IncidentStripProps {
     incidentId: string,
     action: "reviewed" | "dismissed" | "actioned",
   ) => void;
+}
+
+/** Severity and status mapped onto the console's five tones. */
+function severityTone(severity: IncidentSeverity): Tone {
+  if (severity === "critical") return "danger";
+  if (severity === "high" || severity === "medium") return "warning";
+  return "neutral";
+}
+
+const SEVERITY_LABEL: Record<string, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  open: "Open",
+  reviewed: "Reviewed",
+  dismissed: "Dismissed",
+  actioned: "Actioned",
+};
+
+function statusToneOf(status: Incident["status"]): Tone {
+  if (status === "open") return "warning";
+  if (status === "actioned") return "success";
+  return "neutral";
 }
 
 export function IncidentStrip({
@@ -81,31 +114,31 @@ export function IncidentStrip({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Summary */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-slate-800">Incidents</span>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
-          {counts.total} total
-        </span>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Summary — fixed, never moves as incidents stream in */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-foreground">Incidents</span>
+        <StatusPill tone="neutral">
+          <span className="tabular-nums">{counts.total}</span> total
+        </StatusPill>
         {counts.critical > 0 && (
-          <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
-            {counts.critical} critical
-          </span>
+          <StatusPill tone="danger">
+            <span className="tabular-nums">{counts.critical}</span> critical
+          </StatusPill>
         )}
         {counts.high > 0 && (
-          <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">
-            {counts.high} high
-          </span>
+          <StatusPill tone="warning">
+            <span className="tabular-nums">{counts.high}</span> high
+          </StatusPill>
         )}
-        <span className="ml-auto text-xs text-slate-500">
+        <span className="ml-auto text-xs text-muted-foreground">
           Auto-detected: Instagram handles, phone numbers, emails, harassment
           phrases
         </span>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap gap-2">
         <Select
           value={typeFilter}
           onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}
@@ -155,51 +188,52 @@ export function IncidentStrip({
         </Select>
       </div>
 
-      {/* List */}
+      {/* List — the only scrolling part */}
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          No incidents match. Clean chat — or no PII/harassment patterns
-          detected yet.
+        <div className="min-h-0 flex-1 rounded-xl border border-border bg-muted/40">
+          <EmptyState
+            title="No incidents match"
+            description="Clean chat, or no personal details and harassment patterns detected yet."
+          />
         </div>
       ) : (
-        <div className="space-y-2 max-h-[52vh] overflow-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {filtered.map((inc) => (
             <div
               key={inc.id}
-              className="rounded-xl border border-slate-200 bg-white p-3 flex gap-3"
+              className="flex gap-3 rounded-xl border border-border bg-card p-3"
             >
-              <div className="shrink-0 flex flex-col gap-1.5">
-                <span
-                  className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${severityColor(inc.severity)}`}
-                >
-                  {inc.severity}
-                </span>
-                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
-                  {typeLabel(inc.type)}
-                </span>
+              <div className="flex shrink-0 flex-col items-start gap-1.5">
+                <StatusPill tone={severityTone(inc.severity)}>
+                  {SEVERITY_LABEL[inc.severity] ?? inc.severity}
+                </StatusPill>
+                <StatusPill tone="neutral">{typeLabel(inc.type)}</StatusPill>
               </div>
+
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span className="font-mono text-slate-700">
-                    {inc.matchedValue}
-                  </span>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <IdChip value={inc.matchedValue} prefix="" />
                   <span>·</span>
-                  <span>
-                    {inc.userName} (#{String(inc.uid).slice(-6)})
-                  </span>
+                  <span className="truncate">{inc.userName}</span>
+                  <IdChip value={String(inc.uid).slice(-6)} />
                   <span>·</span>
-                  <span>{new Date(inc.timestamp).toLocaleString()}</span>
-                  <span
-                    className={`ml-auto rounded-full border px-2 py-0.5 text-[11px] font-medium ${inc.status === "open" ? "border-amber-200 bg-amber-50 text-amber-700" : inc.status === "actioned" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}
+                  <span className="tabular-nums">
+                    {new Date(inc.timestamp).toLocaleString()}
+                  </span>
+                  <StatusPill
+                    tone={statusToneOf(inc.status)}
+                    className="ml-auto"
                   >
-                    {inc.status}
-                  </span>
+                    {STATUS_LABEL[inc.status] ?? inc.status}
+                  </StatusPill>
                 </div>
-                <p className="mt-1 text-sm text-slate-800 break-words">
+
+                <p className="mt-1.5 text-sm break-words text-foreground">
                   “{inc.snippet}”
                 </p>
+
                 {onAction && inc.status === "open" && (
-                  <div className="mt-2 flex gap-1.5">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     <Button
                       size="sm"
                       variant="outline"
@@ -218,10 +252,11 @@ export function IncidentStrip({
                     </Button>
                     <Button
                       size="sm"
-                      className="h-7 text-xs bg-red-600 hover:bg-red-700 text-white"
+                      variant="destructive"
+                      className="h-7 text-xs"
                       onClick={() => onAction(inc.id, "actioned")}
                     >
-                      Action & end chat
+                      Action and end chat
                     </Button>
                   </div>
                 )}

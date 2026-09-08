@@ -1,78 +1,67 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { Section, StatusPill, EmptyState } from "@/components/console";
 import type { SystemHealth } from "@/types/socket";
+import { cn } from "@/lib/utils";
 
 interface KubernetesHealthProps {
   systemHealth: SystemHealth | null;
+}
+
+/** Same anti-collision rule as CloudRunInfo: the value truncates, not the label. */
+function DetailRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border py-2.5 text-sm last:border-b-0">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "min-w-0 truncate text-right font-medium text-foreground",
+          mono && "font-mono text-[0.8125rem] tabular-nums",
+        )}
+        title={value}
+      >
+        {value}
+      </dd>
+    </div>
+  );
 }
 
 export function KubernetesHealth({ systemHealth }: KubernetesHealthProps) {
   const k8s = systemHealth?.kubernetes;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3 }}
-      className="bg-white border border-sky-100 rounded-lg p-6"
+    <Section
+      title="Kubernetes deployment"
+      actions={
+        k8s ? (
+          <StatusPill tone={k8s.isKubernetes ? "success" : "neutral"} dot>
+            {k8s.isKubernetes ? "Kubernetes" : "Local"}
+          </StatusPill>
+        ) : undefined
+      }
     >
-      <h2 className="text-xl font-semibold mb-4">Kubernetes Deployment</h2>
       {k8s ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-              <div className="text-slate-500 text-sm mb-2">Environment</div>
-              <div
-                className={`text-lg font-bold ${k8s.isKubernetes ? "text-green-400" : "text-yellow-400"}`}
-              >
-                {k8s.isKubernetes ? "Kubernetes" : "Local"}
-              </div>
-            </div>
-
-            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-              <div className="text-slate-500 text-sm mb-2">Pod Name</div>
-              <div className="text-sm font-mono text-blue-400 truncate">
-                {k8s.podName}
-              </div>
-            </div>
-
-            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-              <div className="text-slate-500 text-sm mb-2">Namespace</div>
-              <div className="text-lg font-bold text-purple-400">
-                {k8s.namespace}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-              <div className="text-slate-500 text-sm mb-2">Cluster</div>
-              <div className="text-sm font-semibold text-slate-600">
-                {k8s.cluster}
-              </div>
-            </div>
-
-            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-              <div className="text-slate-500 text-sm mb-2">Node</div>
-              <div className="text-sm font-semibold text-slate-600 truncate">
-                {k8s.nodeName}
-              </div>
-            </div>
-
-            <div className="bg-[#e8f4f8] rounded-lg p-4 border border-sky-100">
-              <div className="text-slate-500 text-sm mb-2">Pod IP</div>
-              <div className="text-sm font-mono text-slate-600">
-                {k8s.podIP}
-              </div>
-            </div>
-          </div>
-        </div>
+        <dl className="min-w-0">
+          <DetailRow label="Pod name" value={k8s.podName} mono />
+          <DetailRow label="Namespace" value={k8s.namespace} mono />
+          <DetailRow label="Cluster" value={k8s.cluster} mono />
+          <DetailRow label="Node" value={k8s.nodeName} mono />
+          <DetailRow label="Pod IP" value={k8s.podIP} mono />
+        </dl>
       ) : (
-        <div className="text-slate-500 text-center py-8">
-          Loading Kubernetes info...
-        </div>
+        <EmptyState
+          title="Waiting for Kubernetes info"
+          description="The next health poll will fill this in."
+        />
       )}
-    </motion.div>
+    </Section>
   );
 }
