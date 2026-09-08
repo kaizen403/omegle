@@ -20,6 +20,7 @@ import type {
   RoomMessage,
   AnalyticsSnapshot,
   MaintenanceState,
+  Incident,
 } from "@/types/socket";
 
 // Re-export types for convenience
@@ -43,6 +44,8 @@ interface AdminSocketContextType {
   isAuthenticated: boolean;
   error: string | null;
   monitoredRooms: Map<string, RoomMessage[]>;
+  /** Global, server-persisted + live incidents for the Moderation dashboard. */
+  incidents: Incident[];
   queueStats: QueueStats | null;
   systemHealth: SystemHealth | null;
   redisMetrics: RedisMetrics | null;
@@ -68,6 +71,7 @@ interface AdminSocketContextType {
   refreshData: () => void;
   takeoverEnter: (roomId: string) => void;
   takeoverLeave: (roomId: string) => void;
+  takeoverImpersonate: (roomId: string, targetUid: number) => void;
   sendAdminMessage: (roomId: string, text: string) => void;
   sendAdminWarning: (roomId: string, text: string) => void;
   incidentAction: (

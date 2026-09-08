@@ -254,8 +254,17 @@ export class SocketIOManager {
       // Setup event listeners
       this.setupSocketEventListeners(socket);
 
-      // A resumed socket goes straight back into its room before anything else runs.
-      if (socket.isReconnection && socket.uid) {
+      // Takeover impersonation — joins as the kicked participant with full voice (normal participant UI in new tab)
+      if ((socket as any).takeoverRoomId && socket.uid) {
+        void this.handleTakeoverConnection(
+          socket as ExtendedSocket & {
+            takeoverRoomId: string;
+            takeoverTargetName: string;
+            takeoverAdminId: string;
+          }
+        );
+      } else if (socket.isReconnection && socket.uid) {
+        // A resumed socket goes straight back into its room before anything else runs.
         void this.restoreSession(socket);
       }
 
@@ -507,6 +516,88 @@ export class SocketIOManager {
 
     socketLogger.info(
       `[SESSION RESTORED] UID: ${uid} back in room ${room.roomId} after ${Date.now() - held.droppedAt}ms`
+    );
+  }
+
+  private async handleTakeoverConnection(
+    socket: ExtendedSocket & {
+      takeoverRoomId: string;
+      takeoverTargetName?: string;
+      takeoverAdminId: string;
+    }
+  ): Promise<void> {
+    const roomId = socket.takeoverRoomId;
+    const uid = socket.uid;
+    if (!uid || !roomId) return;
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) {
+      socket.emit('error', { message: 'Takeover room not found' });
+      return;
+    }
+    const isUser1 = room.user1.uid === uid;
+    const isUser2 = room.user2.uid === uid;
+    if (!isUser1 && !isUser2) {
+      socket.emit('error', { message: 'Not a participant of this room' });
+      return;
+    }
+    const self = isUser1 ? room.user1 : room.user2;
+    const partner = isUser1 ? room.user2 : room.user1;
+
+    // Become the impersonated participant — full active state, joins the Socket.IO room, hears voice
+    socket.name = self.name;
+    socket.gender = self.gender as any;
+    socket.state = 'active' as any;
+    socket.roomId = roomId;
+    socket.partnerId = partner.uid;
+    this.connections.set(uid, socket);
+    socket.join(roomId);
+
+    const partnerIsBot = botManager.isBot(partner.uid);
+    const rtcEnabled = !partnerIsBot;
+    const ice = rtcEnabled
+      ? await this.turnService.mintIceConfig(uid, 3600)
+      : { iceServers: [], expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+    const rtcEpoch = Date.now();
+
+    // Normal participant UI expects 'matched' — reuse same payload, so voice works immediately
+    socket.emit('matched', {
+      status: 'matched',
+      roomId: room.roomId,
+      channelName: room.channelName,
+      isOfferer: isOffererUid(uid, partner.uid),
+      iceServers: ice.iceServers,
+      rtcEnabled,
+      expiresAt: ice.expiresAt,
+      rtcEpoch,
+      partnerUid: partner.uid,
+      partnerName: partner.name,
+      partnerGender: partner.gender,
+      takeover: true,
+      message: `Takeover as ${self.name} — you are now in the call with full voice`,
+    });
+    // Also emit 'match' for older clients
+    socket.emit('match', {
+      status: 'matched',
+      roomId: room.roomId,
+      channelName: room.channelName,
+      isOfferer: isOffererUid(uid, partner.uid),
+      iceServers: ice.iceServers,
+      rtcEnabled,
+      expiresAt: ice.expiresAt,
+      rtcEpoch,
+      partnerUid: partner.uid,
+      partnerName: partner.name,
+      partnerGender: partner.gender,
+      takeover: true,
+    });
+
+    const partnerSocket = this.connections.get(partner.uid);
+    if (partnerSocket?.connected) {
+      partnerSocket.emit('partner_reconnected', { partnerUid: uid, rtcEpoch });
+    }
+
+    socketLogger.info(
+      `[TAKEOVER] Admin ${socket.takeoverAdminId} now active as uid ${uid} (${self.name}) in room ${roomId} — voice enabled`
     );
   }
 

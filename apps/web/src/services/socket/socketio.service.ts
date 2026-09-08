@@ -135,12 +135,27 @@ export class SocketIOService implements ISocketService {
     this.isIntentionalClose = false;
     this.isConnecting = true;
 
+    // Takeover token from URL (admin impersonating a participant) — short-lived JWT
+    let takeoverToken: string | null = null;
     try {
+      if (typeof window !== 'undefined') {
+        const p = new URLSearchParams(window.location.search);
+        takeoverToken = p.get('takeover') || p.get('takeoverToken');
+        if (!takeoverToken) {
+          // also check hash
+          const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+          takeoverToken = h.get('takeover');
+        }
+      }
+    } catch {}
+
+    try {
+      const auth: Record<string, string> = { apiKey: this.apiKey };
+      if (this.resumeToken) auth.resumeToken = this.resumeToken;
+      if (takeoverToken) auth.takeoverToken = takeoverToken;
       this.socket = io(this.url, {
         transports: ['websocket', 'polling'],
-        auth: this.resumeToken
-          ? { apiKey: this.apiKey, resumeToken: this.resumeToken }
-          : { apiKey: this.apiKey },
+        auth,
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: 1000,

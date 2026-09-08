@@ -14,6 +14,7 @@ import type {
   AnalyticsSnapshot,
   SystemStatusEvent,
   MaintenanceState,
+  Incident,
 } from "@/types/socket";
 
 // Re-export types for backward compatibility
@@ -48,6 +49,47 @@ const formatUidList = (uids: number[]): string => {
 const pluralizeUsers = (count: number): string =>
   `${count} user${count === 1 ? "" : "s"}`;
 
+/**
+ * Normalize a persisted incident row from the server into the camelCase
+ * `Incident` shape the moderation UI expects.
+ *
+ * `incidents_new` (live broadcast from chat handler) already arrives camelCase,
+ * but `incidents_list` / `incidents_batch` / `incident_updated` carry raw DB
+ * rows (snake_case columns). This maps both so the global Incidents dashboard
+ * can render them uniformly regardless of source.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toClientIncident = (row: any): Incident | null => {
+  if (!row || typeof row !== "object") return null;
+  const created = row.timestamp ?? row.createdAt ?? row.created_at;
+  const ts =
+    typeof created === "number"
+      ? created
+      : typeof created === "string"
+        ? new Date(created).getTime()
+        : created instanceof Date
+          ? created.getTime()
+          : Date.now();
+  const id = String(row.id ?? row.id ?? "");
+  return {
+    id:
+      id ||
+      `local-${row.roomId ?? row.room_id}-${row.uid ?? ""}-${ts}-${row.matchedValue ?? row.matched_value ?? ""}`,
+    roomId: row.roomId ?? row.room_id ?? "",
+    messageId: row.messageId ?? row.message_id ?? undefined,
+    uid: Number(row.uid ?? 0) || 0,
+    userName: row.userName ?? row.user_name ?? "Unknown",
+    type: row.type ?? "spam",
+    severity: row.severity ?? "low",
+    snippet: row.snippet ?? "",
+    matchedValue: row.matchedValue ?? row.matched_value ?? "",
+    timestamp: ts,
+    status: row.status ?? "open",
+  };
+};
+
+const MAX_INCIDENTS = 300;
+
 export function useAdminSocket(token: string | null) {
   const { toast } = useToast();
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -59,6 +101,27 @@ export function useAdminSocket(token: string | null) {
   const [monitoredRooms, setMonitoredRooms] = useState<
     Map<string, RoomMessage[]>
   >(new Map());
+  // Global (server-persisted) incidents for the Moderation → Incidents view.
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  // Local dedupe key set so live `incidents_new` broadcasts don't duplicate
+  // rows that are also delivered canonical in `incidents_batch`/`incidents_list`.
+  const incidentsSeenRef = useRef<Set<string>>(new Set());
+
+  /** Append normalized incidents, de-duplicating against already-seen rows. */
+  const addIncidents = (incoming: Incident[]): void => {
+    if (!incoming.length) return;
+    const seen = incidentsSeenRef.current;
+    const added: Incident[] = [];
+    for (const inc of incoming) {
+      if (!inc.roomId) continue;
+      const key = `${inc.roomId}|${inc.uid}|${inc.type}|${inc.matchedValue}|${inc.timestamp}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      added.push(inc);
+    }
+    if (!added.length) return;
+    setIncidents((prev) => added.concat(prev).slice(0, MAX_INCIDENTS));
+  };
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [redisMetrics, setRedisMetrics] = useState<RedisMetrics | null>(null);
@@ -718,6 +781,10 @@ export function useAdminSocket(token: string | null) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     socket.on("incidents_new", (data: { incidents?: any[] }) => {
       if (!isMountedRef.current || !data?.incidents?.length) return;
+      const normalized = data.incidents
+        .map(toClientIncident)
+        .filter((i) => i !== null) as Incident[];
+      addIncidents(normalized);
       // surface as system events so they appear in the events feed too
       setEvents((prev) =>
         [
@@ -733,6 +800,10 @@ export function useAdminSocket(token: string | null) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     socket.on("incidents_batch", (data: { incidents?: any[] }) => {
       if (!isMountedRef.current || !data?.incidents?.length) return;
+      const normalized = data.incidents
+        .map(toClientIncident)
+        .filter((i) => i !== null) as Incident[];
+      addIncidents(normalized);
       setEvents((prev) =>
         [
           ...prev,
@@ -747,10 +818,16 @@ export function useAdminSocket(token: string | null) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     socket.on("incident_updated", (row: any) => {
       if (!isMountedRef.current) return;
+      const inc = toClientIncident(row);
+      if (inc) {
+        setIncidents((prev) =>
+          prev.map((i) => (i.id === inc.id ? { ...i, status: inc.status } : i)),
+        );
+      }
       toast({
         variant: "info",
         title: `Incident ${row.status}`,
-        description: `${row.type} · ${String(row.matched_value).slice(0, 30)}`,
+        description: `${row.type} · ${String(row.matchedValue ?? row.matched_value).slice(0, 30)}`,
       });
     });
     socket.on("takeover_entered", (data: { roomId?: string }) => {
@@ -773,6 +850,21 @@ export function useAdminSocket(token: string | null) {
           : undefined,
       });
     });
+    socket.on(
+      "takeover_ready",
+      (data: { url?: string; targetName?: string; roomId?: string }) => {
+        if (!isMountedRef.current) return;
+        const url = data?.url;
+        if (url) {
+          toast({
+            variant: "success",
+            title: `Takeover as ${data.targetName || "participant"}`,
+            description: "Opening normal UI in new tab with voice",
+          });
+          window.open(url, "_blank", "noopener");
+        }
+      },
+    );
     socket.on("admin_message_sent", () => {
       if (!isMountedRef.current) return;
       toast({ variant: "success", title: "Moderator message sent" });
@@ -785,6 +877,11 @@ export function useAdminSocket(token: string | null) {
     socket.on("incidents_list", (data: { incidents?: any[] }) => {
       if (!isMountedRef.current) return;
       if (Array.isArray(data?.incidents)) {
+        // Global, server-persisted incidents → populate the moderation dashboard.
+        const normalized = data.incidents
+          .map(toClientIncident)
+          .filter((i) => i !== null) as Incident[];
+        setIncidents(normalized);
         // expose via events so moderation page can consume without extra state
         setEvents((prev) =>
           [
@@ -792,7 +889,7 @@ export function useAdminSocket(token: string | null) {
             {
               type: "incidents_list",
               timestamp: Date.now(),
-              data: { incidents: data.incidents },
+              data: { count: normalized.length },
             },
           ].slice(-100),
         );
@@ -861,6 +958,8 @@ export function useAdminSocket(token: string | null) {
       // Clear state to prevent memory leaks
       setMonitoredRooms(new Map());
       setEvents([]);
+      setIncidents([]);
+      incidentsSeenRef.current = new Set();
       // Drop the last analytics snapshot too: once the socket is gone those
       // numbers are history, and showing them as live is what this dashboard
       // was doing wrong before.
@@ -968,6 +1067,16 @@ export function useAdminSocket(token: string | null) {
     if (socketRef.current?.connected)
       socketRef.current.emit("admin:takeover:leave", { roomId });
   }, []);
+  const takeoverImpersonate = useCallback(
+    (roomId: string, targetUid: number) => {
+      if (socketRef.current?.connected)
+        socketRef.current.emit("admin:takeover:impersonate", {
+          roomId,
+          targetUid,
+        });
+    },
+    [],
+  );
   const sendAdminMessage = useCallback((roomId: string, text: string) => {
     if (socketRef.current?.connected)
       socketRef.current.emit("admin:message", { roomId, text });
@@ -1114,6 +1223,7 @@ export function useAdminSocket(token: string | null) {
     isAuthenticated,
     error,
     monitoredRooms,
+    incidents,
     queueStats,
     systemHealth,
     redisMetrics,
@@ -1136,6 +1246,7 @@ export function useAdminSocket(token: string | null) {
     refreshData,
     takeoverEnter,
     takeoverLeave,
+    takeoverImpersonate,
     sendAdminMessage,
     sendAdminWarning,
     incidentAction,

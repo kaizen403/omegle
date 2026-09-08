@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/layout/AdminLayout";
 import PageHeader from "@/components/layout/PageHeader";
@@ -23,11 +23,23 @@ export default function ModerationPage() {
     isAuthenticated,
     closeRoom,
     monitoredRooms,
+    incidents: serverIncidents,
+    incidentAction,
+    fetchIncidents,
   } = useAdminSocketContext();
   const [tab, setTab] = useState("live");
 
-  // Derive incidents from live monitored messages (client-side) — server incidents will merge here when wired
-  const incidents: Incident[] = useMemo(() => {
+  // Pull the global, server-persisted incident store each time the admin socket
+  // (re)connects so the Incidents tab reflects every recorded incident across
+  // all rooms/admins — not just ones this browser is currently monitoring.
+  useEffect(() => {
+    if (isConnected && isAuthenticated) {
+      fetchIncidents({ limit: 100 });
+    }
+  }, [isConnected, isAuthenticated, fetchIncidents]);
+
+  // Incidents derived live (client-side) from whatever this session is monitoring.
+  const liveIncidents: Incident[] = useMemo(() => {
     const out: Incident[] = [];
     for (const [roomId, msgs] of monitoredRooms.entries()) {
       for (const m of msgs) {
@@ -55,6 +67,25 @@ export default function ModerationPage() {
     // also flag users with fingerprint collisions (mock): if needed, inject synthetic incidents here
     return out.sort((a, b) => b.timestamp - a.timestamp);
   }, [monitoredRooms]);
+
+  // Global view = server-persisted incidents (+ live broadcasts) merged with
+  // any client-side derivations, de-duplicated so the same incident never
+  // appears twice. With the server recorder wired this is authoritative.
+  const incidents: Incident[] = useMemo(() => {
+    const byKey = new Map<string, Incident>();
+    // 1) Server-persisted / live-broadcast incidents (authoritative, real ids).
+    for (const i of serverIncidents)
+      byKey.set(
+        i.id || `${i.roomId}|${i.uid}|${i.timestamp}|${i.matchedValue}`,
+        i,
+      );
+    // 2) Client-side derivations only fill gaps detected locally but not yet persisted.
+    for (const i of liveIncidents) {
+      const key = `${i.roomId}|${i.uid}|${i.timestamp}|${i.matchedValue}`;
+      if (!byKey.has(key)) byKey.set(key, i);
+    }
+    return Array.from(byKey.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }, [serverIncidents, liveIncidents]);
 
   const handleCloseRoom = useCallback(
     (roomId: string) => {
@@ -133,7 +164,9 @@ export default function ModerationPage() {
               onOpenRoom={(roomId) =>
                 router.push(`/home/rooms?monitor=${roomId}`)
               }
-              onAction={(id) => console.log("incident action", id)}
+              onAction={(id, action) => {
+                if (action !== "open") incidentAction(id, action);
+              }}
             />
           </TabsContent>
 

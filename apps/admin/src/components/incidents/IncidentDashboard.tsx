@@ -89,9 +89,10 @@ export function IncidentDashboard({ incidents, onOpenRoom, onAction }: Props) {
 
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
-          No incidents match. When the backend is wired, incidents arrive over{" "}
-          <span className="font-mono">incident:new</span> and are persisted in{" "}
-          <span className="font-mono">chat_incidents</span>.
+          No incidents match. Incidents are recorded live from every room by the
+          server (<span className="font-mono">chat_incidents</span>) and pushed
+          to admin dashboards. Try clearing a filter, or send a test message
+          containing an Instagram handle / phone / email to verify detection.
         </div>
       ) : (
         <div className="grid gap-2">

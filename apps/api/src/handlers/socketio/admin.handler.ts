@@ -14,6 +14,7 @@ import { fingerprintService } from '../../services/fingerprint/fingerprint.servi
 import { incidentService } from '../../services/incident/incident.service';
 import { chatArchiveService } from '../../services/chat/chatArchive.service';
 import { MessageValidator } from '../../utils/messageValidator';
+import { mintTakeoverToken } from '../../services/takeover/takeover.service';
 
 /**
  * Admin sockets are unauthenticated until they present a valid session, and every `auth`
@@ -354,6 +355,10 @@ export class AdminHandler {
     socket.on(
       'get_fingerprints',
       async (data: any) => await this.handleGetFingerprints(socket, data)
+    );
+    socket.on(
+      'admin:takeover:impersonate',
+      async (data: any) => await this.handleTakeoverImpersonate(socket, data)
     );
     socket.on('ping', () => socket.emit('pong'));
 
@@ -1269,6 +1274,71 @@ export class AdminHandler {
     });
     socket.emit('takeover_left', { roomId });
     logger.info(`[ADMIN] ${socket.adminEmail} left takeover for room ${roomId}`);
+  }
+
+  private async handleTakeoverImpersonate(socket: AdminSocket, data: any): Promise<void> {
+    if (!socket.isAuthenticated || !socket.adminId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+    const roomId = data?.roomId;
+    const targetUid = Number(data?.targetUid);
+    if (!roomId || !Number.isFinite(targetUid)) {
+      socket.emit('error', { message: 'roomId and targetUid required' });
+      return;
+    }
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+    const isParticipant = room.user1.uid === targetUid || room.user2.uid === targetUid;
+    if (!isParticipant) {
+      socket.emit('error', { message: 'Target not in room' });
+      return;
+    }
+    if (!this.monitoredRooms.has(roomId) || !this.monitoredRooms.get(roomId)!.has(socket.adminId)) {
+      socket.emit('error', { message: 'Must be monitoring the room' });
+      return;
+    }
+    const targetName = room.user1.uid === targetUid ? room.user1.name : room.user2.name;
+    const otherUid = room.user1.uid === targetUid ? room.user2.uid : room.user1.uid;
+
+    // Mint short-lived token that lets a fresh user socket claim targetUid
+    const token = mintTakeoverToken({
+      roomId,
+      targetUid,
+      targetName,
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+    });
+
+    // Stealth kick the original participant — they get 'kicked' but no broadcast to the other side beyond reconnecting
+    const targetSocket = this.userConnectionsMap.get(targetUid) as any;
+    if (targetSocket) {
+      targetSocket.emit('kicked', { message: 'You have been disconnected (admin takeover)' });
+      targetSocket.disconnect(true);
+      logger.info(`[TAKEOVER] Kicked original uid ${targetUid} for impersonation by ${socket.adminEmail}`);
+    }
+
+    // Tell the remaining participant their partner will reconnect (holds room)
+    const otherSocket = this.userConnectionsMap.get(otherUid) as any;
+    if (otherSocket) {
+      otherSocket.emit('partner_reconnecting', { partnerUid: targetUid, graceMs: 120000 });
+    }
+
+    adminAuditService.track({
+      adminId: socket.adminId,
+      adminEmail: socket.adminEmail,
+      action: 'takeover_impersonate',
+      target: `${roomId}:${targetUid}`,
+      ipAddress: (socket as any).clientIp,
+      details: { targetName, otherUid },
+    });
+
+    const url = `https://vitap.in/omegle?takeover=${encodeURIComponent(token)}`;
+    socket.emit('takeover_ready', { roomId, targetUid, targetName, token, url });
+    logger.info(`[TAKEOVER] Admin ${socket.adminEmail} impersonating ${targetUid} in room ${roomId}`);
   }
 
   private async handleAdminMessage(socket: AdminSocket, data: any): Promise<void> {

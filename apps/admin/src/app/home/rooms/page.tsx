@@ -31,6 +31,7 @@ export default function RoomsPage() {
     refreshData,
     takeoverEnter,
     takeoverLeave,
+    takeoverImpersonate,
     sendAdminMessage,
     sendAdminWarning,
   } = useAdminSocketContext();
@@ -86,6 +87,7 @@ export default function RoomsPage() {
           onSendAsModerator={(text) => sendAdminMessage(monitorRoomId, text)}
           onSendWarning={(text) => sendAdminWarning(monitorRoomId, text)}
           onForceEnd={() => handleCloseRoom(monitorRoomId)}
+          onImpersonate={(uid) => takeoverImpersonate(monitorRoomId, uid)}
         />
       </AdminLayout>
     );

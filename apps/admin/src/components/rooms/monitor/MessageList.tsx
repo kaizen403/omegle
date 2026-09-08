@@ -2,6 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { Room } from "@/contexts/AdminSocketContext";
+import {
+  detectIncidents,
+  highlightIncidents,
+  severityColor,
+  typeLabel,
+} from "@/lib/incidentDetector";
 
 interface Message {
   message?: {
@@ -51,6 +57,13 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
 
   return (
     <div className="space-y-4 py-2">
+      <div className="flex items-center gap-2 text-xs text-slate-500 px-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-700">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{" "}
+          Listen mode — invisible
+        </span>
+        <span className="ml-auto">{messages.length} messages</span>
+      </div>
       {messages.map((msg, index) => {
         const senderUid = msg.message?.sender ? String(msg.message.sender) : "";
 
@@ -67,6 +80,10 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
             ? currentRoom.user1.gender
             : currentRoom.user2.gender;
         }
+
+        const text = msg.message?.content || "";
+        const hits = detectIncidents(text);
+        const parts = highlightIncidents(text);
 
         return (
           <div
@@ -93,6 +110,9 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                 <span className="text-xs text-slate-500">
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
+                <span className="font-mono text-[11px] text-slate-400">
+                  #{senderUid.slice(-6) || "—"}
+                </span>
               </div>
               <div
                 className={`rounded-2xl backdrop-blur-sm ${
@@ -102,9 +122,34 @@ export function MessageList({ messages, currentRoom }: MessageListProps) {
                 }`}
               >
                 <p className="text-sm text-slate-800 leading-relaxed break-words px-4 py-3">
-                  {msg.message?.content || "No content"}
+                  {parts.map((p, i) =>
+                    p.isIncident ? (
+                      <mark
+                        key={i}
+                        className="rounded bg-amber-200 px-1 py-0.5 font-medium text-amber-900"
+                        title={p.type ? typeLabel(p.type) : "incident"}
+                      >
+                        {p.text}
+                      </mark>
+                    ) : (
+                      <span key={i}>{p.text}</span>
+                    ),
+                  )}
                 </p>
               </div>
+
+              {hits.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {hits.map((h, i) => (
+                    <span
+                      key={i}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${severityColor(h.severity)}`}
+                    >
+                      {typeLabel(h.type)} • {h.matchedValue.slice(0, 20)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );

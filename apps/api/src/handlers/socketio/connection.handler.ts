@@ -9,6 +9,7 @@ import { safeEqual } from '../../middleware/apiKey';
 import { randomInt } from 'crypto';
 import { runtimeMetrics } from '../../services/admin/runtimeMetrics';
 import { mintResumeToken, verifyResumeToken } from '../../services/chat/sessionResume';
+import { verifyTakeoverToken } from '../../services/takeover/takeover.service';
 
 const MAX_NAME_LENGTH = 32;
 
@@ -129,20 +130,33 @@ export class ConnectionHandler {
     socket.state = 'idle';
     socket.joinedAt = Date.now();
 
-    // Identity is assigned by the server, never accepted from the client.
-    //
-    // A returning client may present a resume token from its previous connection. The token
-    // is an HMAC over the uid it restores, so it can only reclaim its own id — and it only
-    // matters at all if that session is still being held open by the grace window.
-    const resumedUid = verifyResumeToken(socket.handshake.auth?.resumeToken);
-    const canResume = resumedUid !== null && this.isResumable?.(resumedUid) === true;
-
-    if (canResume && resumedUid !== null) {
-      socket.uid = resumedUid;
-      socket.isReconnection = true;
-      socketLogger.info(`[SESSION RESUME] ${clientIP} - Reclaiming uid ${resumedUid}`);
+    // Takeover: admin impersonating a participant in a live room (silent). Handshake carries takeoverToken (JWT).
+    const takeover = verifyTakeoverToken(socket.handshake.auth?.takeoverToken);
+    if (takeover) {
+      // Allow reclaiming the targetUid even though the original just disconnected — takeover is intentional, not a collision.
+      const existing = this.connections.get(takeover.targetUid);
+      if (existing && existing.connected && existing !== socket) {
+        // Evict the old holder (should already be kicked, but be defensive)
+        existing.disconnect(true);
+        this.connections.delete(takeover.targetUid);
+      }
+      socket.uid = takeover.targetUid;
+      (socket as any).takeoverAdminId = takeover.adminId;
+      (socket as any).takeoverRoomId = takeover.roomId;
+      (socket as any).takeoverTargetName = takeover.targetName;
+      socketLogger.info(`[TAKEOVER] ${clientIP} - admin ${takeover.adminId} impersonating uid ${takeover.targetUid} in room ${takeover.roomId}`);
     } else {
-      socket.uid = this.allocateUid();
+      // Identity is assigned by the server, never accepted from the client.
+      const resumedUid = verifyResumeToken(socket.handshake.auth?.resumeToken);
+      const canResume = resumedUid !== null && this.isResumable?.(resumedUid) === true;
+
+      if (canResume && resumedUid !== null) {
+        socket.uid = resumedUid;
+        socket.isReconnection = true;
+        socketLogger.info(`[SESSION RESUME] ${clientIP} - Reclaiming uid ${resumedUid}`);
+      } else {
+        socket.uid = this.allocateUid();
+      }
     }
 
     socket.emit('connected', {
