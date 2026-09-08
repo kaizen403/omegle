@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { Loader2, Mail, Lock } from "lucide-react";
+import { Loader2, User, Lock } from "lucide-react";
 
 /**
  * Turnstile site key.
@@ -28,7 +28,7 @@ const TURNSTILE_SITE_KEY =
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAAEmaAWD98EH-DebI";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPasswordInput] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,8 +50,8 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email.trim()) {
-      setErrorMessage("Please enter your email");
+    if (!identifier.trim()) {
+      setErrorMessage("Please enter your username");
       return;
     }
 
@@ -68,14 +68,14 @@ export default function LoginPage() {
     setErrorMessage("");
     setIsSubmitting(true);
 
-    const result = await login(email, password, turnstileToken || undefined);
+    const result = await login(identifier, password, turnstileToken || undefined);
 
     setIsSubmitting(false);
 
     if (result.success) {
       router.push("/home");
     } else {
-      setErrorMessage(result.error || "Invalid email or password");
+      setErrorMessage(result.error || "Invalid username or password");
       // Turnstile tokens are single-use
       resetTurnstile();
     }
@@ -150,14 +150,14 @@ export default function LoginPage() {
             >
               <div className="space-y-4 sm:space-y-5">
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <Input
-                    type="email"
-                    placeholder="Email Address"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    aria-label="Email Address"
-                    autoComplete="email"
+                    type="text"
+                    placeholder="Username"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    aria-label="Username"
+                    autoComplete="username"
                     className="h-14 pl-11 bg-sky-50 border-sky-200 hover:border-sky-300 focus:border-[#0084d1] text-slate-900 placeholder:text-slate-400 text-base"
                   />
                 </div>

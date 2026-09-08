@@ -3,28 +3,43 @@
  */
 
 /**
- * Validate email format
+ * Validate email OR username format — login accepts either.
+ * Username: 3-30 chars, alphanumeric + . _ - ; email still valid for backwards compat.
  */
 export function validateEmail(email: string): {
   valid: boolean;
   error?: string;
 } {
   if (!email || typeof email !== "string") {
-    return { valid: false, error: "Email is required" };
+    return { valid: false, error: "Username is required" };
   }
 
-  const trimmedEmail = email.trim();
-  if (trimmedEmail.length === 0) {
-    return { valid: false, error: "Email is required" };
+  const trimmed = email.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, error: "Username is required" };
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(trimmedEmail)) {
-    return { valid: false, error: "Please enter a valid email address" };
+  if (trimmed.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      return { valid: false, error: "Please enter a valid username or email" };
+    }
+    return { valid: true };
+  }
+
+  const usernameRegex = /^[a-zA-Z0-9._-]{3,30}$/;
+  if (!usernameRegex.test(trimmed)) {
+    return {
+      valid: false,
+      error: "Username must be 3-30 chars (letters, numbers, . _ -)",
+    };
   }
 
   return { valid: true };
 }
+
+/** Alias — username validation is same as email-or-username now */
+export const validateUsername = validateEmail;
 
 /**
  * Validate password

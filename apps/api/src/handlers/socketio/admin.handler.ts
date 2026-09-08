@@ -1316,18 +1316,7 @@ export class AdminHandler {
       ipAddress: (socket as any).clientIp,
       details: { text: text.slice(0, 200) },
     });
-    // Deliver to both participants
-    for (const uid of [room.user1.uid, room.user2.uid]) {
-      const s = this.userConnectionsMap.get(uid) as any;
-      if (s)
-        s.emit('message', {
-          text,
-          from: 0,
-          fromName: 'Moderator',
-          timestamp: msg.timestamp,
-          moderator: true,
-        });
-    }
+    // Silent: stored for evidence + visible to monitoring admins only — NOT delivered to participants
     this.broadcastRoomMessage(roomId, { sender: 'Moderator', content: text, type: 'moderator' });
     socket.emit('admin_message_sent', { roomId });
   }
@@ -1373,10 +1362,7 @@ export class AdminHandler {
       ipAddress: (socket as any).clientIp,
       details: { text: text.slice(0, 200) },
     });
-    for (const uid of [room.user1.uid, room.user2.uid]) {
-      const s = this.userConnectionsMap.get(uid) as any;
-      if (s) s.emit('system', { roomId, text: sys.text, timestamp: sys.timestamp });
-    }
+    // Silent: stored + visible to monitoring admins only — NOT pushed to participants
     this.broadcastRoomMessage(roomId, { sender: 'System', content: sys.text, type: 'system' });
     socket.emit('admin_warning_sent', { roomId });
   }

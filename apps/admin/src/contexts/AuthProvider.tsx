@@ -327,6 +327,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   // Login using Better Auth email + password (Turnstile token attached)
+  // Accepts username OR email — username is mapped to synthetic email for Better Auth
+  const toEmail = (input: string) =>
+    input.includes("@") ? input.trim() : `${input.trim()}@vitap.in`;
+
   const login = useCallback(
     async (
       email: string,
@@ -335,9 +339,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<LoginResult> => {
       try {
         pendingPasswordRef.current = password;
+        const mappedEmail = toEmail(email);
         const { error } = await authClient.signIn.email(
           {
-            email,
+            email: mappedEmail,
             password,
             ...(captchaToken ? { captchaResponse: captchaToken } : {}),
           },
